@@ -1,5 +1,5 @@
 # BetMonitor
-Live bet monitor and feed for an online gambling website.
+Side project - live bet monitor and feed for an online gambling website.
 
 - Online gambling company had an outdated and errored monitoring program of bets coming through from their online website. 
 - When a customer places an online bet, a function within the system generates a text file with a summary of bet details.
