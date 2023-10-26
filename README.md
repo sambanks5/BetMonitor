@@ -39,3 +39,4 @@ Known issues to fix:
 - Bets placed at 'SP' are sometimes not being displayed. Easy fix.
 - Tkinter scrollbar not showing for Notebook elements (report)
 - Remove irrelevent information from knockbacks
+- Comment code
