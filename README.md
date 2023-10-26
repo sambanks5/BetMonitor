@@ -28,11 +28,20 @@ Using the dictionary of bet info:
 - 'Search' function allows users to lookup certain clients & display a feed of their bets
 - Create a daily 'report' of betting activity, returning important daily info such as total stakes, highest spenders, users with most bets, busiest times of the day & more. 
 
+Current UI display: 
+
 ![image](https://github.com/sambanks5/BetMonitor/assets/121309218/1521fb89-6bce-443d-bc13-7cc165d7b3e9)
 
+To note - 'report' is displaying test data. 
+
 Showing knockbacks in feed:
+
 ![image](https://github.com/sambanks5/BetMonitor/assets/121309218/8366744d-8f9f-4441-97a5-d24f7b9a5f99)
 
+
+Other functions:
+- ability to generate a 'temporary' user password for first account setup.
+- Settings to show/hide text bets, knockbacks and ability to display only high risk bets in the feed.
 
 Known issues to fix:
 - Currently program is refreshing for new data every 20s. At end of the day when there is a lot of data, it can be slow to update as its looping through 2000+ bets. Need to make this function more efficient by checking bets have not already been added to dictionary.
