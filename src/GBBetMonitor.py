@@ -247,8 +247,8 @@ def create_daily_report():
                     norisk_clients.add(bet_customer_reference)
                     total_norisk_clients = len(norisk_clients)
 
-                payment_value = float(payment[1:].replace(',', ''))  # Remove the '£' symbol, remove the comma, and convert to float
-                total_stakes += payment_value  # Add the unit stake to the total stakes
+                payment_value = float(payment[1:].replace(',', ''))
+                total_stakes += payment_value 
 
                 active_clients_set.add(bet_customer_reference)
                 total_clients = len(active_clients_set)
