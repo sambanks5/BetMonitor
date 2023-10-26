@@ -3,7 +3,7 @@ Side project - live bet monitor and feed for an online gambling website.
 
 - Online gambling company had an outdated and errored monitoring program of bets coming through from their online website. 
 - When a customer places an online bet, a function within the system generates a text file with a summary of bet details.
-- The old program used to display these files had become obsolete (was made in 2004), odds traders & support stadd in the office would not be able to quickly run through the betting feed - the 'tree' layout was limiting for users and would only display the bet number, time and username. For staff to be able to pick out betting patterns, and keep track of users' bets, the design of the old program made tasks much more difficult & tedious.
+- The old program used to display these files had become obsolete (was made in 2004), odds traders & support staff in the office would not be able to quickly run through the betting feed - the 'tree' layout was limiting for users and would only display the bet number, time and username. For staff to be able to pick out betting patterns, and keep track of users' bets, the design of the old program made tasks much more difficult & tedious.
 - The generated text files when bets are placed online were displaying a lot of unneeded information, meaning traders would struggle to 'at a glance' understand the wager.
 - Finally, the main limitation is that the company 'database' containing full user, bet and event information is fully encrypted. Unfortunately then it's not possible to retrieve bet information this way. 
 
