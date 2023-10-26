@@ -31,7 +31,7 @@ Using the dictionary of bet info:
 ![image](https://github.com/sambanks5/BetMonitor/assets/121309218/1521fb89-6bce-443d-bc13-7cc165d7b3e9)
 
 Showing knockbacks in feed:
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/d0d935e2-f6c5-4571-a57e-0e2b7965b755)
+![image](https://github.com/sambanks5/BetMonitor/assets/121309218/8366744d-8f9f-4441-97a5-d24f7b9a5f99)
 
 
 Known issues to fix:
