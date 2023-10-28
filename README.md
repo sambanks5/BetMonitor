@@ -45,7 +45,7 @@ Other functions:
 
 Known issues to fix:
 - Currently program is refreshing for new data every 20s. At end of the day when there is a lot of data, it can be slow to update as its looping through 2000+ bets. Need to make this function more efficient by checking bets have not already been added to dictionary.
-- Bets placed at 'SP' are sometimes not being displayed. Easy fix.
+- Bets placed at 'SP' are sometimes not being displayed.
 - Tkinter scrollbar not showing for Notebook elements (report)
 - Remove irrelevent information from knockbacks
 - Comment code
