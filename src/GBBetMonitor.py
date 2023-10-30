@@ -651,7 +651,6 @@ def get_custom_feed_users():
         custom_search(custom_feed_users)
 
 
-
 def get_feed_options():
     risk_value = default_state_risk.get()
     wageralert_value = default_state_wageralert.get()
