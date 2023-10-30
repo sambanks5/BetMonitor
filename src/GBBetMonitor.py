@@ -4,6 +4,7 @@ import threading
 import pyperclip
 import random
 import tkinter as tk
+import concurrent.futures
 from collections import defaultdict, Counter
 from tkinter import messagebox, filedialog, simpledialog
 from tkinter import ttk
@@ -23,6 +24,9 @@ bet_info = {}
 
 # List to hold current displayed bets
 displayed_bets = []
+
+# List to hold users displayed in custom feed
+custom_feed_users = []
 
 # Variable to hold generated temporary password 
 password_result_label = None
@@ -165,6 +169,7 @@ def bet_check_thread(num_recent_files):
     feed_text.config(state="disabled")
 
     # Update the display
+    custom_search(custom_feed_users)
     check_bet_runs()
     get_bets_with_risk_category()
 
@@ -192,15 +197,13 @@ def create_daily_report():
     
     # Clients Report
     active_clients = []
+    customer_payments = {}
     active_clients_set = set()
     total_clients = 0
-
     w_clients = set()
     total_w_clients = 0
-
     m_clients = set()
     total_m_clients = 0
-
     norisk_clients = set()
     total_norisk_clients = 0
 
@@ -216,8 +219,15 @@ def create_daily_report():
     total_sms = 0
     sms_clients = set()
 
-    for bet in files:
+    progress["maximum"] = len(files)
+    progress["value"] = 0
+    root.update_idletasks()
+
+    for i, bet in enumerate(files):
         file_path = os.path.join(BET_FOLDER_PATH, bet)
+
+        progress["value"] = i + 1
+        root.update_idletasks()
 
         with open(file_path, 'r') as file:
             bet_text = file.read()
@@ -249,6 +259,12 @@ def create_daily_report():
 
                 payment_value = float(payment[1:].replace(',', ''))
                 total_stakes += payment_value 
+                # Update the total payment for this customer
+                if bet_customer_reference in customer_payments:
+                    customer_payments[bet_customer_reference] += payment_value
+                else:
+                    customer_payments[bet_customer_reference] = payment_value
+
 
                 active_clients_set.add(bet_customer_reference)
                 total_clients = len(active_clients_set)
@@ -267,6 +283,11 @@ def create_daily_report():
                 sms_clients.add(sms_customer_reference)
                 total_sms += 1
 
+    highest_spend_customer = max(customer_payments, key=customer_payments.get)
+    highest_spend_amount = customer_payments[highest_spend_customer]
+    top_spenders = Counter(customer_payments).most_common(5)
+
+    
     timestamp_hours = [timestamp.split(':')[0] + ":00" for timestamp in timestamps]
     hour_counts = Counter(timestamp_hours)
 
@@ -274,7 +295,7 @@ def create_daily_report():
     top_wageralert_clients = wageralert_counter.most_common(3)
 
     client_bet_counter = Counter(active_clients)
-    top_client_bets = client_bet_counter.most_common(6)
+    top_client_bets = client_bet_counter.most_common(5)
 
     separator = "\n---------------------------------------------------------------------------------\n"
 
@@ -282,25 +303,24 @@ def create_daily_report():
     report_output += f"\tDAILY REPORT TICKET {date_string}\n\t        Generated at {formatted_time}"
     report_output += f"{separator}"
 
-    report_output += f"Total Stakes: £{total_stakes:.2f}\n\n"
+    report_output += f"TOTALS - Stakes: £{total_stakes:.2f} | "
+    report_output += f"Bets: {total_bets} | "
+    report_output += f"Clients: {total_clients}\n\n"
 
-    report_output += f"Total Active Clients: {total_clients}\n\n"
-    report_output += f"No Risk clients: {total_norisk_clients}\n"
-    report_output += f"M Clients: {total_m_clients}\n"
-    report_output += f"W Clients: {total_w_clients}\n"
 
-    report_output += f"{separator}"
-    report_output += f"\t\t    BETS"
-    report_output += f"{separator}"
+    report_output += f"CLIENTS BY RISK - No Risk: {total_norisk_clients} | "
+    report_output += f"M: {total_m_clients} | "
+    report_output += f"W: {total_w_clients}"
 
-    report_output += f"Total bets: {total_bets}\n"
-    report_output += f"\nMost Bets:\n"
-    for client, count in top_client_bets:
-        report_output += f"{client}, Bets: {count}\n"
+    report_output += "\n\nMOST SPEND:\n"
+    for rank, (customer, spend) in enumerate(top_spenders, start=1):
+        report_output += f"{rank}. {customer} - Stakes: £{spend:.2f}\n"
 
-    report_output += f"{separator}"
-    report_output += f"\t      HOURLY BREAKDOWN"
-    report_output += f"{separator}"
+    report_output += "\nMOST BETS:\n"
+    for rank, (client, count) in enumerate(top_client_bets, start=1):
+        report_output += f"{rank}. {client} - Bets: {count}\n"
+
+    report_output += f"\nBETS PER HOUR:\n"
 
     for hour, count in hour_counts.items():
         start_hour = hour
@@ -321,7 +341,7 @@ def create_daily_report():
     report_output += f"Total Knockbacks: {total_wageralerts}\n"
     report_output += f"\nMost Knockbacks:\n"
     for client, count in top_wageralert_clients:
-        report_output += f"Client: {client}, Total Knockbacks: {count}\n"
+        report_output += f"{client}, Total Knockbacks: {count}\n"
 
     report_output += f"{separator}"
     report_output += f"\t\t     SMS"
@@ -331,7 +351,7 @@ def create_daily_report():
 
     report_output += f"\n\nSMS Clients: \n"
     for client in sms_clients:
-        report_output += f"{client}  "
+        report_output += f"{client}, "
 
     report_output += f"{separator}"
     report_output += f"\t         ACTIVE CLIENTS"
@@ -623,7 +643,7 @@ def custom_search(custom_feed_users):
 
 ### GET THE LIST OF USERS TO SEARCH
 def get_custom_feed_users():
-    global custom_feed_users  # Make it a global variable to use in custom_search
+    global custom_feed_users
     custom_feed_users = simpledialog.askstring("Custom Search", "Enter usernames (comma-separated):")
     if custom_feed_users:
         custom_feed_users = custom_feed_users.split(',')
@@ -685,7 +705,7 @@ if __name__ == "__main__":
     ### WINDOW SETTINGS
     root = tk.Tk()
     root.title("GB Bet Monitor v4.3")
-    root.tk.call('source', 'Forest-ttk-theme-master\\forest-light.tcl')
+    root.tk.call('source', 'src\\Forest-ttk-theme-master\\forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
     width=900
@@ -696,7 +716,7 @@ if __name__ == "__main__":
     alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
     root.geometry(alignstr)
     root.resizable(width=False, height=False)
-    root.iconbitmap('splash.ico')
+    root.iconbitmap('src\\splash.ico')
 
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
@@ -719,7 +739,7 @@ if __name__ == "__main__":
     root.config(menu=menu_bar)
 
     ### IMPORT LOGO
-    logo_image = Image.open('splash.ico')
+    logo_image = Image.open('src\\splash.ico')
     logo_image.thumbnail((80, 80))
     company_logo = ImageTk.PhotoImage(logo_image)    
 
@@ -781,8 +801,12 @@ if __name__ == "__main__":
     report_ticket.config(state='disabled')
     report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    refresh_button = ttk.Button(tab_4, text="Refresh", command=create_daily_report)
+    progress = ttk.Progressbar(tab_4, mode="determinate")
+    progress.grid(row=1, column=0, pady=(0, 10), sticky="w")
+
+    refresh_button = ttk.Button(tab_4, text="Generate", command=create_daily_report)
     refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
+
 
     # Configure the row and column weights for the frame
     tab_4.grid_rowconfigure(0, weight=1)
