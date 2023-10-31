@@ -4,6 +4,7 @@ import threading
 import pyperclip
 import random
 import tkinter as tk
+import cProfile
 import concurrent.futures
 from collections import defaultdict, Counter
 from tkinter import messagebox, filedialog, simpledialog
@@ -34,8 +35,8 @@ password_result_label = None
 wageralerts_active = True
 
 # Path to BWW Export folder containing raw bet texts
-BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "c:\TESTING"
+BET_FOLDER_PATH = "F:\BWW\Export"
 
 
 
@@ -56,12 +57,14 @@ def refresh_display():
     print("Refreshed Bets")
 
 
+
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
     # Refresh the display
     refresh_display()
     # Schedule this function to be called again after 30000 milliseconds (30 seconds)
     root.after(30000, refresh_display_periodic)
+
 
 
 ### PASSWORD GENERATOR FUNCTIONS
@@ -75,6 +78,8 @@ def generate_random_string():
     return generated_string
 
 
+
+### COPY PASSWORD TO CLIPBOARD
 def copy_to_clipboard():
     global result_label  # Access the global result_label variable
     # Generate the string
@@ -87,8 +92,11 @@ def copy_to_clipboard():
     copy_button.config(state=tk.NORMAL)
 
 
+
+### RETURN 'DATE OF CREATION' FOR TEXT FILES
 def get_creation_date(file_path):
     return os.path.getctime(file_path)
+
 
 
 ### BET CHECK THREAD FUNCTIONS
@@ -96,6 +104,7 @@ def start_bet_check_thread(num_recent_files):
     bet_thread = threading.Thread(target=bet_check_thread, args=(num_recent_files,))
     bet_thread.daemon = True
     bet_thread.start()
+
 
 
 ### MAIN FUNCTION TO GET FILES
@@ -175,6 +184,7 @@ def bet_check_thread(num_recent_files):
 
 
 
+### CREATE REPORT ON DAILY ACTIVITY
 def create_daily_report():
     # Get a list of all text files in the folder
     files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
@@ -199,13 +209,9 @@ def create_daily_report():
     active_clients = []
     customer_payments = {}
     active_clients_set = set()
-    total_clients = 0
     w_clients = set()
-    total_w_clients = 0
     m_clients = set()
-    total_m_clients = 0
     norisk_clients = set()
-    total_norisk_clients = 0
 
     # List of timestamps to find busiest time of day
     timestamps = []
@@ -283,19 +289,20 @@ def create_daily_report():
                 sms_clients.add(sms_customer_reference)
                 total_sms += 1
 
-    highest_spend_customer = max(customer_payments, key=customer_payments.get)
-    highest_spend_amount = customer_payments[highest_spend_customer]
     top_spenders = Counter(customer_payments).most_common(5)
-
     
+    client_bet_counter = Counter(active_clients)
+    top_client_bets = client_bet_counter.most_common(5)
+
     timestamp_hours = [timestamp.split(':')[0] + ":00" for timestamp in timestamps]
     hour_counts = Counter(timestamp_hours)
 
     wageralert_counter = Counter(wageralert_clients)
     top_wageralert_clients = wageralert_counter.most_common(3)
 
-    client_bet_counter = Counter(active_clients)
-    top_client_bets = client_bet_counter.most_common(5)
+    sms_counter = Counter(sms_clients)
+    top_sms_clients = sms_counter.most_common(3)
+
 
     separator = "\n---------------------------------------------------------------------------------\n"
 
@@ -334,28 +341,21 @@ def create_daily_report():
     for hour_range, count in hour_ranges.items():
         report_output += f"{hour_range} - Bets {count}\n"
 
-    report_output += f"{separator}"
-    report_output += f"\t           KNOCKBACKS"
-    report_output += f"{separator}"
+    report_output += f"\nKNOCKBACKS: {total_wageralerts}\n"
+    report_output += f"\nMOST KNOCKBACKS:\n"
+    for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
+        report_output += f"{rank}. {client} - Knockbacks: {count}\n"
 
-    report_output += f"Total Knockbacks: {total_wageralerts}\n"
-    report_output += f"\nMost Knockbacks:\n"
-    for client, count in top_wageralert_clients:
-        report_output += f"{client}, Total Knockbacks: {count}\n"
 
-    report_output += f"{separator}"
-    report_output += f"\t\t     SMS"
-    report_output += f"{separator}"
+    report_output += f"\nTEXTBETS: {total_sms}"
 
-    report_output += f"Total SMS: {total_sms}"
+    report_output += f"\n\nMOST TEXTBETS: \n"
+    for rank, (client, count) in enumerate(top_sms_clients, start=1):
+        report_output += f"{rank}. {client} - TEXTS: {count}\n"
 
-    report_output += f"\n\nSMS Clients: \n"
-    for client in sms_clients:
-        report_output += f"{client}, "
+    report_output += f"\n{separator}"
+    report_output += f"\nALL ACTIVE CLIENTS BY RISK\n\n"
 
-    report_output += f"{separator}"
-    report_output += f"\t         ACTIVE CLIENTS"
-    report_output += f"{separator}"
 
     report_output += f"M Clients: \n"
     for client in m_clients:
@@ -363,7 +363,10 @@ def create_daily_report():
     report_output += f"\n\nW Clients: \n"
     for client in w_clients:
         report_output += f"{client}, "
-    report_output += f"\n\n\n"
+    report_output += f"\n\nNo Risk Clients: \n"
+    for client in norisk_clients:
+        report_output += f"{client}, "
+    report_output += f"\n\n"
 
 
     report_ticket.config(state="normal")
@@ -393,14 +396,6 @@ def parse_bet_details(bet_text):
     bet_type_match = re.search(bet_type_pattern, bet_text)
     odds = odds_match.group(1) if odds_match else "evs"
 
-    # print("Customer Reference:", customer_reference_match.group(1) if customer_reference_match else None)
-    # print("Customer Risk Category:", customer_risk_match.group(1) if customer_risk_match else None)
-    # print("Timestamp:", timestamp_match.group(1) if timestamp_match else None)
-    # print("Bet Number:", bet_number.group(1) if bet_number else None)
-    # print("Bet Details:", bet_details_match.group(1) if bet_details_match else None)
-    # print("Bet Type:", bet_type_match.group(1) if bet_type_match else None)
-    # print("Odds:", odds)
-
     if all(match is not None for match in [customer_reference_match, timestamp_match, bet_number, bet_details_match]):
         selections = re.findall(selection_pattern, bet_text)
         bet_type = None
@@ -425,6 +420,7 @@ def parse_bet_details(bet_text):
         bet_no = bet_number.group(1).strip()
         customer_reference = customer_reference_match.group(1).strip()
         timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
+
         if bet_details_match and bet_details_match.group(1):
             bet_details = bet_details_match.group(1).strip()
             if bet_details == 'Win Only':
@@ -482,6 +478,7 @@ def parse_wageralert_details(content):
 
 
 
+###  PARSE SMS BETS
 def parse_sms_details(bet_text):
     wager_number_pattern = r"Wager Number = (\d+)"
     customer_reference_pattern = r"Customer Reference: (\w+)"
@@ -554,6 +551,7 @@ def get_bets_with_risk_category():
     bets_with_risk_text.config(state="disabled")
 
 
+
 ### GET EP BETS, NOT BEING USED BUT MAY BE IN FUTURE
 def get_ep_bets():
     # Regular expression pattern to extract the time in the format "hh:mm"
@@ -582,6 +580,7 @@ def get_ep_bets():
     # ep_bets_text.delete('1.0', tk.END)
     # ep_bets_text.insert('1.0', formatted_message)
     # ep_bets_text.config(state="disabled")
+
 
 
 ### FUNCTION TO DISPLAY RUNS ON SELECTIONS
@@ -620,6 +619,7 @@ def check_bet_runs():
     runs_text.config(state=tk.DISABLED)
 
 
+
 ### CUSTOM SEARCH FUNCTION, USER ENTERS USERNAMES (CUSTOMER_REFS) AND IT OUTPUTS FEED OF THOSE USERS' BETS
 def custom_search(custom_feed_users):
     # Get the list of usernames from the UI
@@ -641,6 +641,7 @@ def custom_search(custom_feed_users):
     custom_feed_text.config(state="disabled")
 
 
+
 ### GET THE LIST OF USERS TO SEARCH
 def get_custom_feed_users():
     global custom_feed_users
@@ -651,6 +652,7 @@ def get_custom_feed_users():
         custom_search(custom_feed_users)
 
 
+
 def get_feed_options():
     risk_value = default_state_risk.get()
     wageralert_value = default_state_wageralert.get()
@@ -658,9 +660,10 @@ def get_feed_options():
     return risk_value, wageralert_value, textbets_value
 
 
+
 ### MENU BAR * OPTIONS ITEMS
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring V4.3")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring V4.4")
 
 
 
@@ -703,7 +706,7 @@ if __name__ == "__main__":
     
     ### WINDOW SETTINGS
     root = tk.Tk()
-    root.title("GB Bet Monitor v4.3")
+    root.title("GB Bet Monitor v4.4")
     root.tk.call('source', 'src\\Forest-ttk-theme-master\\forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
@@ -800,8 +803,8 @@ if __name__ == "__main__":
     report_ticket.config(state='disabled')
     report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    progress = ttk.Progressbar(tab_4, mode="determinate")
-    progress.grid(row=1, column=0, pady=(0, 10), sticky="w")
+    progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
+    progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
 
     refresh_button = ttk.Button(tab_4, text="Generate", command=create_daily_report)
     refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
@@ -897,7 +900,6 @@ if __name__ == "__main__":
 
     password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
     password_result_label.place(x=340, y=240)
-
 
 
     ### GUI LOOP
