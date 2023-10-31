@@ -2,10 +2,10 @@
 Improved live bet monitor & feed for online gambling site.
 
 - Online gambling website had an outdated and errored monitoring program of bets coming through. 
-- When a bet is placed, function within the system generates a text file with summary of bet details.
-- Old program used to display these files had become obsolete (was made in 2004), odds traders & support staff would not be able to run through bet feed - the 'tree' layout was limiting, and would only display the bet number, time and username. For staff to be able to pick out betting patterns, and keep track of users' bets, the design of the old program made tasks much more difficult & tedious.
-- Auto-generated text files were displaying a lot of unneeded information, traders would struggle to 'at a glance' understand the wager.
-- Finally, the main limitation is that the company 'database' containing full user, bet and event information is fully encrypted. Unfortunately then it's not possible to retrieve bet information this way. 
+- When a bet is placed, function within the system generates a file containing summary of bet details.
+- Old program used to display these files had become obsolete (was made in 2004), odds traders & support staff would not be able to run through bet feed - the 'tree' layout was limiting.
+- Auto-generated text files were displaying a lot of unneeded information, traders would struggle to 'at a glance' understand the wager info.
+- Finally, the main limitation is that the betting 'database' containing full user, bet and event information is fully encrypted.
 
 
 Below is the old program used (hidden customer refs):

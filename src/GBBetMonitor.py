@@ -4,8 +4,6 @@ import threading
 import pyperclip
 import random
 import tkinter as tk
-import cProfile
-import concurrent.futures
 from collections import defaultdict, Counter
 from tkinter import messagebox, filedialog, simpledialog
 from tkinter import ttk
@@ -35,8 +33,8 @@ password_result_label = None
 wageralerts_active = True
 
 # Path to BWW Export folder containing raw bet texts
-#BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "c:\TESTING"
+#BET_FOLDER_PATH = "F:\BWW\Export"
 
 
 
@@ -653,6 +651,7 @@ def get_custom_feed_users():
 
 
 
+### GET CURRENT OPTIONS SETUP FOR FEED
 def get_feed_options():
     risk_value = default_state_risk.get()
     wageralert_value = default_state_wageralert.get()
@@ -734,10 +733,6 @@ if __name__ == "__main__":
     help_menu.add_command(label="About", command=about, foreground="#000000", background="#ffffff")
     help_menu.add_separator(background="#ffffff")
     menu_bar.add_cascade(label="Help", menu=help_menu, foreground="#000000", background="#ffffff")
-    refresh_menu = tk.Menu(menu_bar, tearoff=0)
-    refresh_menu.add_command(label="Refresh Dictionary", command=refresh_display, foreground="#000000", background="#ffffff")
-    #refresh_menu.add_command(label="Stop Automatic Refresh", command=refresh_display, foreground="#000000", background="#ffffff")
-    menu_bar.add_cascade(label="Refresh", menu=refresh_menu)
     root.config(menu=menu_bar)
 
     ### IMPORT LOGO
@@ -827,13 +822,9 @@ if __name__ == "__main__":
 
 
     ### CHECK BOX OPTIONS
-    # default_show_bets = tk.IntVar(value=1)
     default_state_risk = tk.IntVar(value=0)
     default_state_wageralert = tk.IntVar(value=1)
     default_state_textbets = tk.IntVar(value=1)  # Default to checked
-
-    # show_bets = ttk.Checkbutton(options_frame, text='Bets',style="Switch", variable=default_show_bets)
-    # show_bets.place(x=140, y=40)
 
     show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Bets Only',style="Switch", variable=default_state_risk)
     show_risk_bets.place(x=60, y=50)
