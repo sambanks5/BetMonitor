@@ -59,9 +59,10 @@ def refresh_display():
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
     # Refresh the display
-    refresh_display()
+    #refresh_display()
     # Schedule this function to be called again after 30000 milliseconds (30 seconds)
-    root.after(30000, refresh_display_periodic)
+    #root.after(30000, refresh_display_periodic)
+    return
 
 
 
@@ -217,6 +218,10 @@ def create_daily_report():
 
     # Wageralert Report
     total_wageralerts = 0
+    price_change = 0
+    event_ended = 0
+    other_alert = 0
+    liability_exceeded = 0
     wageralert_clients = []
 
     # SMS Report
@@ -278,7 +283,23 @@ def create_daily_report():
                 total_bets += 1
 
             if is_wageralert:
-                wageralert_customer_reference, _, time = parse_wageralert_details(bet_text)
+                wageralert_customer_reference, knockback_details, time = parse_wageralert_details(bet_text)
+
+                is_alert = False
+
+                for key, value in knockback_details.items():
+                    if 'Price Has Changed' in key or 'Price Has Changed' in value:
+                        price_change += 1
+                        is_alert = True
+                    elif 'Liability Exceeded' in key and 'True' in value:
+                        liability_exceeded += 1
+                        is_alert = True
+                    elif 'Event Has Ended' in key or 'Event Has Ended' in value:
+                        event_ended += 1
+                        is_alert = True
+
+                if not is_alert:
+                    other_alert += 1
                 wageralert_clients.append(wageralert_customer_reference)
                 total_wageralerts += 1
 
@@ -344,6 +365,10 @@ def create_daily_report():
     for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
         report_output += f"{rank}. {client} - Knockbacks: {count}\n"
 
+    report_output += f"\nLiability Exceeded: {liability_exceeded}\n"
+    report_output += f"\nPrice Changes: {price_change}\n"
+    report_output += f"\nEvent Ended: {event_ended}\n"
+    report_output += f"\nOther: {other_alert}\n"
 
     report_output += f"\nTEXTBETS: {total_sms}"
 
@@ -844,7 +869,7 @@ if __name__ == "__main__":
     set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to Check", fg="#000000", bg="#ffffff")
     set_recent_bets_label.place(x=85,y=130)
 
-    set_recent_bets = ttk.Scale(options_frame, from_=20, to=350,cursor="hand2", command=set_recent_bets)
+    set_recent_bets = ttk.Scale(options_frame, from_=20, to=1500,cursor="hand2", command=set_recent_bets)
     set_recent_bets.set(DEFAULT_NUM_RECENT_FILES)
     set_recent_bets.pack()
     set_recent_bets.place(x=30, y=150, width=200)
