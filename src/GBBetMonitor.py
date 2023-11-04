@@ -33,8 +33,8 @@ password_result_label = None
 wageralerts_active = True
 
 # Path to BWW Export folder containing raw bet texts
-BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "c:\TESTING"
+BET_FOLDER_PATH = "F:\BWW\Export"
 
 
 
@@ -59,36 +59,8 @@ def refresh_display():
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
     # Refresh the display
-    #refresh_display()
-    # Schedule this function to be called again after 30000 milliseconds (30 seconds)
-    #root.after(30000, refresh_display_periodic)
-    return
-
-
-
-### PASSWORD GENERATOR FUNCTIONS
-def generate_random_string():
-    # Generate 6 random digits
-    random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    
-    # Combine 'GB' with the random numbers
-    generated_string = 'GB' + random_numbers
-    
-    return generated_string
-
-
-
-### COPY PASSWORD TO CLIPBOARD
-def copy_to_clipboard():
-    global result_label  # Access the global result_label variable
-    # Generate the string
-    generated_string = generate_random_string()
-    
-    # Copy the generated string to the clipboard
-    pyperclip.copy(generated_string)
-    
-    password_result_label.config(text=f"{generated_string}")
-    copy_button.config(state=tk.NORMAL)
+    refresh_display()
+    root.after(30000, refresh_display_periodic)
 
 
 
@@ -106,16 +78,24 @@ def start_bet_check_thread(num_recent_files):
 
 
 
+### GET FILES FROM FOLDER
+def get_files():
+    files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
+    
+    # Sort files by creation date in descending order
+    files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
+
+    return files
+
+
+
 ### MAIN FUNCTION TO GET FILES
 def bet_check_thread(num_recent_files):
     global BET_FOLDER_PATH
     global wageralerts_active
 
     # Get a list of all text files in the folder
-    files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-    
-    # Sort files by creation date in descending order
-    files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
+    files = get_files()
 
 
     recent_files = files[:num_recent_files]
@@ -152,7 +132,7 @@ def bet_check_thread(num_recent_files):
 
             elif is_sms:
                 if show_sms:
-                    wager_number, customer_reference, mobile_number, sms_wager_text = parse_sms_details(bet_text)
+                    wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
                     feed_content += f"{customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
                 else:
                     print("SMS ", filename, " not being displayed")
@@ -177,19 +157,164 @@ def bet_check_thread(num_recent_files):
     feed_text.config(state="disabled")
 
     # Update the display
-    custom_search(custom_feed_users)
+    # custom_search(custom_feed_users)
     check_bet_runs()
     get_bets_with_risk_category()
+
+
+
+### PARSE BET INFORMATION FROM RAW BET TEXT
+def parse_bet_details(bet_text):
+    bet_number_pattern = r"Wager Number - (\d+)"
+    customer_ref_pattern = r"Customer Reference - (\w+)"
+    customer_risk_pattern = r"Customer Risk Category - (\w+)"
+    time_pattern = r"Bet placed on (\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})"
+    selection_pattern = r"(.*?) at (\d+\.\d+)?"
+    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
+    bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
+    odds_pattern = r"(?:at|on)\s+(\d+\.\d+)"
+
+    customer_reference_match = re.search(customer_ref_pattern, bet_text)
+    customer_risk_match = re.search(customer_risk_pattern, bet_text)
+    timestamp_match = re.search(time_pattern, bet_text)
+    bet_number = re.search(bet_number_pattern, bet_text)
+    bet_details_match = re.search(bet_details_pattern, bet_text)
+    odds_match = re.search(odds_pattern, bet_text)
+    bet_type_match = re.search(bet_type_pattern, bet_text)
+    odds = odds_match.group(1) if odds_match else "evs"
+
+    if all(match is not None for match in [customer_reference_match, timestamp_match, bet_number, bet_details_match]):
+        selections = re.findall(selection_pattern, bet_text)
+        bet_type = None
+        parsed_selections = []
+        # Extract selections and odds
+        for selection, odds in selections:
+            # Check if unwanted data exists and remove it
+            if '-' in selection and ',' in selection.split('-')[1]:
+                unwanted_part = selection.split('-')[1].split(',')[0].strip()
+                selection = selection.replace(unwanted_part, '').replace('-', '').strip()
+                
+            # Remove any remaining commas
+            selection = selection.replace('  , ', ' - ').strip()
+
+            if odds:
+                odds = float(odds)
+            else:
+                odds = 'evs'
+            parsed_selections.append((selection.strip(), odds))
+
+        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match else "-"
+        bet_no = bet_number.group(1).strip()
+        customer_reference = customer_reference_match.group(1).strip()
+        timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
+
+        if bet_details_match and bet_details_match.group(1):
+            bet_details = bet_details_match.group(1).strip()
+            if bet_details == 'Win Only':
+                bet_details = 'Win'
+            elif bet_details == 'Each Way':
+                bet_details = 'ew'        
+        unit_stake = bet_details_match.group(3).strip()
+        payment = bet_details_match.group(4).strip()
+        if bet_type_match:
+            # Split by ':' and take the last part
+            bet_type_parts = bet_type_match.group(1).split(':')
+            if len(bet_type_parts) > 1:
+                bet_type = bet_type_parts[-1].strip()
+
+        return bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type
+    else:
+        return None, None, None, None, None, None, None, None, None
+
+
+
+### PARSE KNOCKBACK INFORMATION FROM WAGERALERT
+def parse_wageralert_details(content):
+    # Initialize variables to store extracted information
+    customer_ref = None
+    knockback_details = {}
+    time = None
+
+    # Regular expressions to extract relevant information
+    customer_ref_pattern = r'Customer Ref: (\w+)'
+    details_pattern = r'Knockback Details:([\s\S]*?)\n\nCustomer services reference no:'
+    time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
+
+    # Extract Customer Ref
+    customer_ref_match = re.search(customer_ref_pattern, content)
+    if customer_ref_match:
+        customer_ref = customer_ref_match.group(1)
+
+    # Extract Knockback Details
+    details_match = re.search(details_pattern, content)
+    if details_match:
+        details_content = details_match.group(1).strip()
+        # Split details content by lines
+        details_lines = details_content.split('\n')
+        for line in details_lines:
+            parts = line.split(':')
+            if len(parts) == 2:
+                knockback_details[parts[0].strip()] = parts[1].strip()
+
+    # Extract Time
+    time_match = re.search(time_pattern, content)
+    if time_match:
+        time = time_match.group(1)
+
+    return customer_ref, knockback_details, time
+
+
+
+###  PARSE SMS BETS
+def parse_sms_details(bet_text):
+    wager_number_pattern = r"Wager Number = (\d+)"
+    customer_reference_pattern = r"Customer Reference: (\w+)"
+    mobile_number_pattern = r"Mobile Number: (\d+)"
+    sms_wager_text_pattern = r"SMS Wager Text:((?:.*\n?)+)"
+
+    wager_number_match = re.search(wager_number_pattern, bet_text)
+    customer_reference_match = re.search(customer_reference_pattern, bet_text)
+    mobile_number_match = re.search(mobile_number_pattern, bet_text)
+    sms_wager_text_match = re.search(sms_wager_text_pattern, bet_text)
+
+    wager_number = wager_number_match.group(1) if wager_number_match else None
+    customer_reference = customer_reference_match.group(1) if customer_reference_match else None
+    mobile_number = mobile_number_match.group(1) if mobile_number_match else None
+    sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
+
+    return wager_number, customer_reference, mobile_number, sms_wager_text
+
+
+
+### ADD PARSED DATA TO SELECTION_BETS DICTIONARY
+def update_selection_bets(bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type):
+    # Check if any essential information is missing
+    if parsed_selections is None or customer_reference is None or bet_no is None or timestamp is None:
+        print("Skipping bet due to missing information")
+        return
+
+    # If bet_number not in selection_bets, create a new entry
+    if bet_no not in selection_bets:
+        selection_bets[bet_no] = []
+
+    # Append the bet details to the selections for the given bet_number
+    selection_bets[bet_no].append((
+        parsed_selections,
+        timestamp,
+        customer_reference,
+        customer_risk_category,
+        bet_details,
+        unit_stake,
+        payment,
+        bet_type
+    ))
 
 
 
 ### CREATE REPORT ON DAILY ACTIVITY
 def create_daily_report():
     # Get a list of all text files in the folder
-    files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-    
-    # Sort files by creation date in descending order
-    files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
+    files = get_files()
     
     report_output = ""
 
@@ -366,9 +491,9 @@ def create_daily_report():
         report_output += f"{rank}. {client} - Knockbacks: {count}\n"
 
     report_output += f"\nLiability Exceeded: {liability_exceeded}\n"
-    report_output += f"\nPrice Changes: {price_change}\n"
-    report_output += f"\nEvent Ended: {event_ended}\n"
-    report_output += f"\nOther: {other_alert}\n"
+    report_output += f"Price Changes: {price_change}\n"
+    report_output += f"Event Ended: {event_ended}\n"
+    report_output += f"Other: {other_alert}\n"
 
     report_output += f"\nTEXTBETS: {total_sms}"
 
@@ -399,151 +524,136 @@ def create_daily_report():
 
 
 
-### PARSE BET INFORMATION FROM RAW BET TEXT
-def parse_bet_details(bet_text):
-    bet_number_pattern = r"Wager Number - (\d+)"
-    customer_ref_pattern = r"Customer Reference - (\w+)"
-    customer_risk_pattern = r"Customer Risk Category - (\w+)"
-    time_pattern = r"Bet placed on (\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})"
-    selection_pattern = r"(.*?) at (\d+\.\d+)?"
-    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
-    bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
-    odds_pattern = r"(?:at|on)\s+(\d+\.\d+)"
-
-    customer_reference_match = re.search(customer_ref_pattern, bet_text)
-    customer_risk_match = re.search(customer_risk_pattern, bet_text)
-    timestamp_match = re.search(time_pattern, bet_text)
-    bet_number = re.search(bet_number_pattern, bet_text)
-    bet_details_match = re.search(bet_details_pattern, bet_text)
-    odds_match = re.search(odds_pattern, bet_text)
-    bet_type_match = re.search(bet_type_pattern, bet_text)
-    odds = odds_match.group(1) if odds_match else "evs"
-
-    if all(match is not None for match in [customer_reference_match, timestamp_match, bet_number, bet_details_match]):
-        selections = re.findall(selection_pattern, bet_text)
-        bet_type = None
-        parsed_selections = []
-        # Extract selections and odds
-        for selection, odds in selections:
-            # Check if unwanted data exists and remove it
-            if '-' in selection and ',' in selection.split('-')[1]:
-                unwanted_part = selection.split('-')[1].split(',')[0].strip()
-                selection = selection.replace(unwanted_part, '').replace('-', '').strip()
-                
-            # Remove any remaining commas
-            selection = selection.replace('  , ', ' - ').strip()
-
-            if odds:
-                odds = float(odds)
-            else:
-                odds = 'evs'
-            parsed_selections.append((selection.strip(), odds))
-
-        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match else "-"
-        bet_no = bet_number.group(1).strip()
-        customer_reference = customer_reference_match.group(1).strip()
-        timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
-
-        if bet_details_match and bet_details_match.group(1):
-            bet_details = bet_details_match.group(1).strip()
-            if bet_details == 'Win Only':
-                bet_details = 'Win'
-            elif bet_details == 'Each Way':
-                bet_details = 'ew'        
-        unit_stake = bet_details_match.group(3).strip()
-        payment = bet_details_match.group(4).strip()
-        if bet_type_match:
-            # Split by ':' and take the last part
-            bet_type_parts = bet_type_match.group(1).split(':')
-            if len(bet_type_parts) > 1:
-                bet_type = bet_type_parts[-1].strip()
-
-        return bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type
-    else:
-        return None, None, None, None, None, None, None, None, None
+def create_client_report(customer_ref):
+    # Get a list of all text files in the folder
+    files = get_files()
+    
+    report_output = ""
+    client_report_feed = ""
+    separator = "\n\n---------------------------------------------------------------------------------\n\n"
 
 
+    current_date = date.today()
+    date_string = current_date.strftime("%d-%m-%y")
 
-### PARSE KNOCKBACK INFORMATION FROM WAGERALERT
-def parse_wageralert_details(content):
-    # Initialize variables to store extracted information
-    customer_ref = None
-    knockback_details = {}
-    time = None
+    # Get the current time
+    time = datetime.now()
+    formatted_time = time.strftime("%H:%M:%S")
 
-    # Regular expressions to extract relevant information
-    customer_ref_pattern = r'Customer Ref: (\w+)'
-    details_pattern = r'Knockback Details:([\s\S]*?)\n\nCustomer services reference no:'
-    time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
+    # Bets Report for the specific client
+    total_bets = 0
+    total_stakes = 0.0
 
-    # Extract Customer Ref
-    customer_ref_match = re.search(customer_ref_pattern, content)
-    if customer_ref_match:
-        customer_ref = customer_ref_match.group(1)
+    # Wageralert Report for the specific client
+    total_wageralerts = 0
+    price_change = 0
+    event_ended = 0
+    other_alert = 0
 
-    # Extract Knockback Details
-    details_match = re.search(details_pattern, content)
-    if details_match:
-        details_content = details_match.group(1).strip()
-        # Split details content by lines
-        details_lines = details_content.split('\n')
-        for line in details_lines:
-            parts = line.split(':')
-            if len(parts) == 2:
-                knockback_details[parts[0].strip()] = parts[1].strip()
+    # SMS Report for the specific client
+    total_sms = 0
 
-    # Extract Time
-    time_match = re.search(time_pattern, content)
-    if time_match:
-        time = time_match.group(1)
+    
+    # List of timestamps for the client
+    timestamps = []
+    hour_ranges = {}
 
-    return customer_ref, knockback_details, time
+    client_progress["maximum"] = len(files)
+    client_progress["value"] = 0
+    root.update_idletasks()
 
+    for i, bet in enumerate(files):
+        file_path = os.path.join(BET_FOLDER_PATH, bet)
 
+        client_progress["value"] = i + 1
+        root.update_idletasks()
 
-###  PARSE SMS BETS
-def parse_sms_details(bet_text):
-    wager_number_pattern = r"Wager Number = (\d+)"
-    customer_reference_pattern = r"Customer Reference: (\w+)"
-    mobile_number_pattern = r"Mobile Number: (\d+)"
-    sms_wager_text_pattern = r"SMS Wager Text:((?:.*\n?)+)"
+        with open(file_path, 'r') as file:
+            bet_text = file.read()
 
-    wager_number_match = re.search(wager_number_pattern, bet_text)
-    customer_reference_match = re.search(customer_reference_pattern, bet_text)
-    mobile_number_match = re.search(mobile_number_pattern, bet_text)
-    sms_wager_text_match = re.search(sms_wager_text_pattern, bet_text)
-
-    wager_number = wager_number_match.group(1) if wager_number_match else None
-    customer_reference = customer_reference_match.group(1) if customer_reference_match else None
-    mobile_number = mobile_number_match.group(1) if mobile_number_match else None
-    sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
-
-    return wager_number, customer_reference, mobile_number, sms_wager_text
+            is_bet = 'website' in bet_text.lower()
+            is_wageralert = 'knockback' in bet_text.lower()
+            is_sms = 'sms' in bet_text.lower()
 
 
+            if is_bet:
+                bet_no, parsed_selections, timestamp, bet_customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
 
-### ADD PARSED DATA TO SELECTION_BETS DICTIONARY
-def update_selection_bets(bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type):
-    # Check if any essential information is missing
-    if parsed_selections is None or customer_reference is None or bet_no is None or timestamp is None:
-        print("Skipping bet due to missing information")
-        return
+                if bet_customer_reference == customer_ref:
+                    selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in parsed_selections])
+                    client_report_feed += f"{timestamp}-{bet_no} | {bet_customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                    
+                    timestamps.append(timestamp)
+                    payment_value = float(payment[1:].replace(',', ''))
+                    total_stakes += payment_value
+                    total_bets += 1
+            if is_wageralert:
+                wageralert_customer_reference, knockback_details, time = parse_wageralert_details(bet_text)
 
-    # If bet_number not in selection_bets, create a new entry
-    if bet_no not in selection_bets:
-        selection_bets[bet_no] = []
+                if wageralert_customer_reference == customer_ref:
+                    is_alert = False
 
-    # Append the bet details to the selections for the given bet_number
-    selection_bets[bet_no].append((
-        parsed_selections,
-        timestamp,
-        customer_reference,
-        customer_risk_category,
-        bet_details,
-        unit_stake,
-        payment,
-        bet_type
-    ))
+                    for key, value in knockback_details.items():
+                        if 'Price Has Changed' in key or 'Price Has Changed' in value:
+                            price_change += 1
+                            is_alert = True
+                        elif 'Liability Exceeded' in key and 'True' in value:
+                            liability_exceeded += 1
+                            is_alert = True
+                        elif 'Event Has Ended' in key or 'Event Has Ended' in value:
+                            event_ended += 1
+                            is_alert = True
+
+                    if not is_alert:
+                        other_alert += 1  
+                    total_wageralerts += 1
+                    formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
+                    client_report_feed += f"{time} - {wageralert_customer_reference} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator 
+
+            if is_sms:
+                wager_number, sms_customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
+
+                if sms_customer_reference == customer_ref:
+                    client_report_feed += f"{sms_customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
+                    total_sms += 1
+
+    timestamp_hours = [timestamp.split(':')[0] + ":00" for timestamp in timestamps]
+    hour_counts = Counter(timestamp_hours)
+
+    report_output += f"---------------------------------------------------------------------------------\n"
+    report_output += f"        CLIENT REPORT FOR {customer_ref} {date_string}\n\t        Generated at {formatted_time}"
+    report_output += f"\n---------------------------------------------------------------------------------\n"
+
+    report_output += f"TOTALS - Stakes: £{total_stakes:.2f} | Bets: {total_bets}\n\n"
+
+    report_output += f"BETS PER HOUR:\n"
+    for hour, count in hour_counts.items():
+        start_hour = hour
+        end_hour = f"{int(start_hour.split(':')[0]) + 1:02d}:00"
+        hour_range = f"{start_hour} - {end_hour}"
+        if hour_range in hour_ranges:
+            hour_ranges[hour_range] += count
+        else:
+            hour_ranges[hour_range] = count
+
+    for hour_range, count in hour_ranges.items():
+        report_output += f"{hour_range} - Bets {count}\n"
+
+    report_output += f"\nKNOCKBACKS: {total_wageralerts}\n\n"
+    report_output += f"Price Changes: {price_change}\n"
+    report_output += f"Event Ended: {event_ended}\n"
+    report_output += f"Other: {other_alert}\n"
+
+    report_output += f"\nTEXTBETS: {total_sms}\n"
+
+    report_output += f"\n\nFULL FEED FOR {customer_ref}:{separator}"
+
+
+    client_report_ticket.config(state="normal")
+    client_report_ticket.delete('1.0', tk.END)
+    client_report_ticket.insert('1.0', client_report_feed)
+    client_report_ticket.insert('1.0', report_output)
+    client_report_ticket.config(state="disabled")    
 
 
 
@@ -643,36 +753,14 @@ def check_bet_runs():
 
 
 
-### CUSTOM SEARCH FUNCTION, USER ENTERS USERNAMES (CUSTOMER_REFS) AND IT OUTPUTS FEED OF THOSE USERS' BETS
-def custom_search(custom_feed_users):
-    # Get the list of usernames from the UI
-    # Initialize a string to hold the feed
-    feed_content = ""
-
-    # Iterate over your bets and check if the username matches any of the custom_feed_users
-    for bet_number, bet_info in selection_bets.items():
-        for selections, timestamp, customer_reference, _, bet_details, unit_stake, payment, bet_type in bet_info:
-            if customer_reference in custom_feed_users:
-                selection_info = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in selections])
-                feed_content += f"{bet_number} - {timestamp} | {customer_reference} | {unit_stake} {bet_details}:\n{selection_info}\n\n"
-
-    # Display the feed in your UI
-    # Assuming you have a widget named feed_text to display the feed
-    custom_feed_text.config(state="normal")
-    custom_feed_text.delete('1.0', tk.END)
-    custom_feed_text.insert('1.0', feed_content)
-    custom_feed_text.config(state="disabled")
-
-
 
 ### GET THE LIST OF USERS TO SEARCH
-def get_custom_feed_users():
-    global custom_feed_users
-    custom_feed_users = simpledialog.askstring("Custom Search", "Enter usernames (comma-separated):")
-    if custom_feed_users:
-        custom_feed_users = custom_feed_users.split(',')
-        custom_feed_users = [user.strip() for user in custom_feed_users if user.strip()]
-        custom_search(custom_feed_users)
+def get_client_report_ref():
+    global client_report_user
+    client_report_user = simpledialog.askstring("Client Reporting", "Enter Client Username: ")
+    if client_report_user:
+        client_report_user = client_report_user.upper()
+        create_client_report(client_report_user)
 
 
 
@@ -682,6 +770,32 @@ def get_feed_options():
     wageralert_value = default_state_wageralert.get()
     textbets_value = default_state_textbets.get()
     return risk_value, wageralert_value, textbets_value
+
+
+
+### PASSWORD GENERATOR FUNCTIONS
+def generate_random_string():
+    # Generate 6 random digits
+    random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    
+    # Combine 'GB' with the random numbers
+    generated_string = 'GB' + random_numbers
+    
+    return generated_string
+
+
+
+### COPY PASSWORD TO CLIPBOARD
+def copy_to_clipboard():
+    global result_label  # Access the global result_label variable
+    # Generate the string
+    generated_string = generate_random_string()
+    
+    # Copy the generated string to the clipboard
+    pyperclip.copy(generated_string)
+    
+    password_result_label.config(text=f"{generated_string}")
+    copy_button.config(state=tk.NORMAL)
 
 
 
@@ -803,21 +917,31 @@ if __name__ == "__main__":
     bets_with_risk_text.pack(fill='both', expand=True)
 
     tab_2 = ttk.Frame(notebook)
-    notebook.add(tab_2, text="Search")
+    notebook.add(tab_2, text="Client Report")
 
     tab_2.grid_rowconfigure(0, weight=1)
     tab_2.grid_columnconfigure(0, weight=1)
 
-    custom_feed_text = tk.Text(tab_2, font=("Helvetica", 10), bd=0, wrap='word', padx=10, pady=10, fg="#000000", bg="#ffffff")
-    custom_feed_text.insert('1.0', "No users set for custom feed.\n\n- Filter bets for certain users by clicking the button below.\n- A new search will reset the current set.\n- Enter usernames in Uppercase.")
-    custom_feed_text.config(state='disabled')
-    custom_feed_text.grid(row=0, column=0, sticky="nsew")
+    client_report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    client_report_ticket.config(state='disabled')
+    client_report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    add_users_button = ttk.Button(tab_2, text="Set users to track", command=get_custom_feed_users)
-    add_users_button.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="ew")
+    client_progress = ttk.Progressbar(tab_2, mode="determinate", length=250)
+    client_progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
+
+    refresh_button = ttk.Button(tab_2, text="Generate", command=get_client_report_ref)
+    refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
+
+    # custom_feed_text = tk.Text(tab_2, font=("Helvetica", 10), bd=0, wrap='word', padx=10, pady=10, fg="#000000", bg="#ffffff")
+    # custom_feed_text.insert('1.0', "No users set for custom feed.\n\n- Filter bets for certain users by clicking the button below.\n- A new search will reset the current set.\n- Enter usernames in Uppercase.")
+    # custom_feed_text.config(state='disabled')
+    # custom_feed_text.grid(row=0, column=0, sticky="nsew")
+
+    # add_users_button = ttk.Button(tab_2, text="Set users to track", command=get_custom_feed_users)
+    # add_users_button.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="ew")
 
     tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Report")
+    notebook.add(tab_4, text="Daily Report")
 
     report_ticket = tk.Text(tab_4, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
     report_ticket.config(state='disabled')
