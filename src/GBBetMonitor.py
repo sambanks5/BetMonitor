@@ -3,8 +3,10 @@ import re
 import threading
 import pyperclip
 import random
+import gspread
 import tkinter as tk
 from collections import defaultdict, Counter
+from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import messagebox, filedialog, simpledialog
 from tkinter import ttk
 from tkinter.ttk import *
@@ -21,33 +23,27 @@ selection_bets = {}
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
 
-# List to hold current displayed bets
-displayed_bets = []
-
-# List to hold users displayed in custom feed
-custom_feed_users = []
-
 # Variable to hold generated temporary password 
 password_result_label = None
 
-wageralerts_active = True
-
 # Path to BWW Export folder containing raw bet texts
-#BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "c:\TESTING"
+#BET_FOLDER_PATH = "F:\BWW\Export"
 
-
+credentials_file = 'src\creds.json'
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
+gc = gspread.authorize(credentials)
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
-    global selection_bets, bet_info, displayed_bets
+    global selection_bets, bet_info
 
     # Get the number of recent files to check from the user input
     num_recent_files = DEFAULT_NUM_RECENT_FILES
     # Clear the dictionaries
     selection_bets = {}
     bet_info = {}
-    displayed_bets = []
 
     # Refresh the display
     start_bet_check_thread(num_recent_files)
@@ -89,15 +85,41 @@ def get_files():
 
 
 
+def get_freebets():
+
+    freebets = {}
+
+    tree.delete(*tree.get_children())
+    spreadsheet = gc.open('Reporting November')
+    print("Getting Reporting Sheet")
+    worksheet = spreadsheet.get_worksheet(6)  # 0 represents the first worksheet
+    data = worksheet.get_all_values()
+    print("Retrieving Free Bet data")
+
+    # Configure the progress bar
+    freebets_progress["value"] = 0  # Reset the progress bar to zero
+    freebets_progress["maximum"] = len(data) - 1  # Set the maximum value for the progress bar
+
+    # Insert data into the Treeview for the specified columns
+    for i, row in enumerate(data[1:], start=1):  # Skip the first row (header)
+        if row[4] and not row[8]:  # Check if column I (index 8) is empty
+            main_item = tree.insert("", "end", values=[row[1], row[4], row[5], row[6], row[7]])
+
+            # Add columns 2 and 3 as children for the main row
+            tree.insert(main_item, "end", values=["", row[2], [row[3]]])  # Child for column 2
+
+        # Update the progress bar
+        freebets_progress["value"] = i
+        tree.update_idletasks()  # Update the UI
+
+
+
 ### MAIN FUNCTION TO GET FILES
 def bet_check_thread(num_recent_files):
     global BET_FOLDER_PATH
-    global wageralerts_active
 
     # Get a list of all text files in the folder
     files = get_files()
-
-
     recent_files = files[:num_recent_files]
 
     feed_content = ""
@@ -157,10 +179,8 @@ def bet_check_thread(num_recent_files):
     feed_text.config(state="disabled")
 
     # Update the display
-    # custom_search(custom_feed_users)
     check_bet_runs()
     get_bets_with_risk_category()
-
 
 
 ### PARSE BET INFORMATION FROM RAW BET TEXT
@@ -524,6 +544,7 @@ def create_daily_report():
 
 
 
+### CREATE CLIENT REPORT ON DAILY ACTIVITY
 def create_client_report(customer_ref):
     # Get a list of all text files in the folder
     files = get_files()
@@ -546,6 +567,7 @@ def create_client_report(customer_ref):
 
     # Wageralert Report for the specific client
     total_wageralerts = 0
+    liability_exceeded = 0
     price_change = 0
     event_ended = 0
     other_alert = 0
@@ -753,7 +775,6 @@ def check_bet_runs():
 
 
 
-
 ### GET THE LIST OF USERS TO SEARCH
 def get_client_report_ref():
     global client_report_user
@@ -806,14 +827,13 @@ def about():
 
 
 def howTo():
-    messagebox.showinfo("How to use", "Runs on Selections - Recent selections with >3 bets\nRisk Client Bets - Feed of bets from clients of risk\nBet Feed - Feed of all bets placed online\nRisk Clients Active Today - All clients of risk active today\n\nUse above info to monitor bets and cut prices when needed.")
+    messagebox.showinfo("How to use", "ask Sam")
 
 
 
 def set_num_run_bets(value):
     global DEFAULT_NUM_BETS_TO_RUN, run_bets_label
     DEFAULT_NUM_BETS_TO_RUN = int(float(value))
-    #refresh_display()
     run_bets_label.config(text=f"{DEFAULT_NUM_BETS_TO_RUN+1}")
 
 
@@ -821,7 +841,6 @@ def set_num_run_bets(value):
 def set_recent_bets(value):
     global DEFAULT_NUM_RECENT_FILES
     new_recent_value = int(float(value))
-    #refresh_display()
     if new_recent_value is not None:
         DEFAULT_NUM_RECENT_FILES = new_recent_value
         recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
@@ -835,7 +854,6 @@ def set_bet_folder_path():
     new_folder_path = tk.filedialog.askdirectory()
     if new_folder_path is not None:
         BET_FOLDER_PATH = new_folder_path
-        #folder_path_label.config(text=f"{BET_FOLDER_PATH}")
     refresh_display()
 
 
@@ -917,7 +935,7 @@ if __name__ == "__main__":
     bets_with_risk_text.pack(fill='both', expand=True)
 
     tab_2 = ttk.Frame(notebook)
-    notebook.add(tab_2, text="Client Report")
+    notebook.add(tab_2, text="User Report")
 
     tab_2.grid_rowconfigure(0, weight=1)
     tab_2.grid_columnconfigure(0, weight=1)
@@ -932,31 +950,57 @@ if __name__ == "__main__":
     refresh_button = ttk.Button(tab_2, text="Generate", command=get_client_report_ref)
     refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
 
-    # custom_feed_text = tk.Text(tab_2, font=("Helvetica", 10), bd=0, wrap='word', padx=10, pady=10, fg="#000000", bg="#ffffff")
-    # custom_feed_text.insert('1.0', "No users set for custom feed.\n\n- Filter bets for certain users by clicking the button below.\n- A new search will reset the current set.\n- Enter usernames in Uppercase.")
-    # custom_feed_text.config(state='disabled')
-    # custom_feed_text.grid(row=0, column=0, sticky="nsew")
+    tab_3 = ttk.Frame(notebook)
+    notebook.add(tab_3, text="Daily Report")
 
-    # add_users_button = ttk.Button(tab_2, text="Set users to track", command=get_custom_feed_users)
-    # add_users_button.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="ew")
-
-    tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Daily Report")
-
-    report_ticket = tk.Text(tab_4, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    report_ticket = tk.Text(tab_3, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
     report_ticket.config(state='disabled')
     report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
+    progress = ttk.Progressbar(tab_3, mode="determinate", length=250)
     progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
 
-    refresh_button = ttk.Button(tab_4, text="Generate", command=create_daily_report)
+    refresh_button = ttk.Button(tab_3, text="Generate", command=create_daily_report)
     refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
 
-
     # Configure the row and column weights for the frame
+    tab_3.grid_rowconfigure(0, weight=1)
+    tab_3.grid_columnconfigure(0, weight=1)
+
+
+    tab_4 = ttk.Frame(notebook)
+    notebook.add(tab_4, text="Free Bets")
+
+    # Create a Treeview widget in the window
+    tree = ttk.Treeview(tab_4)
+
+    columns = ["B", "E", "F", "G", "H"]
+    headings = ["Date", "User", "Credit", "Next", "Time"]
+    tree["columns"] = columns
+    for col, heading in enumerate(headings):
+        tree.heading(columns[col], text=heading)
+        tree.column(columns[col], width=84, stretch=tk.NO)
+
+    tree.column("B", width=75, stretch=tk.NO)
+    tree.column("E", width=110, stretch=tk.NO)
+    tree.column("F", width=50, stretch=tk.NO)
+    tree.column("G", width=60, stretch=tk.NO)
+    tree.column("H", width=45, stretch=tk.NO)
+
+    tree.column("#0", width=10, stretch=tk.NO)
+    tree.heading("#0", text="", anchor="w")
+
+    tree.grid(row=0, column=0, sticky="nsew")
+
+    freebets_progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
+    freebets_progress.grid(row=1, column=0, pady=(15, 20), sticky="w")
+
+    refresh_freebets_button = ttk.Button(tab_4, text="Refresh", command=get_freebets)
+    refresh_freebets_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
+
     tab_4.grid_rowconfigure(0, weight=1)
     tab_4.grid_columnconfigure(0, weight=1)
+
 
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
@@ -973,7 +1017,7 @@ if __name__ == "__main__":
     ### CHECK BOX OPTIONS
     default_state_risk = tk.IntVar(value=0)
     default_state_wageralert = tk.IntVar(value=1)
-    default_state_textbets = tk.IntVar(value=1)  # Default to checked
+    default_state_textbets = tk.IntVar(value=1)
 
     show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Bets Only',style="Switch", variable=default_state_risk)
     show_risk_bets.place(x=60, y=50)
