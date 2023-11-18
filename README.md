@@ -25,12 +25,13 @@ Using the parsed bet info:
 - Format and display the relevant data in a 'Bet feed'. 
 - Find and display any 'runs' on selections - when you have multiple users within a given timeframe betting on one selection, usually an indicator for incorrect odds.
 - Display a feed of bets from 'risk' users.
-- 'Search' function allows users to lookup certain clients' activity
-- Create a 'report' of betting activity, returning important info such as total stakes, highest spenders, users with most bets, busiest times of the day & more. 
+- 'Search' function allows users to lookup certain clients' activity.
+- Create a 'report' of betting activity, returning important info such as total stakes, highest spenders, users with most bets, busiest times of the day etc.
+- Modify client account limits directly from the program.
 
-Current UI display: 
+Current UI display (updated 18/11/23: 
+![image](https://github.com/sambanks5/BetMonitor/assets/121309218/28c36a66-ecec-4bd6-a311-b8d35c049c92)
 
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/1521fb89-6bce-443d-bc13-7cc165d7b3e9)
 
 Showing knockbacks:
 
