@@ -4,6 +4,7 @@ import threading
 import pyperclip
 import random
 import gspread
+import datetime
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
@@ -27,8 +28,8 @@ bet_info = {}
 password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
-BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "c:\TESTING"
+BET_FOLDER_PATH = "F:\BWW\Export"
 
 credentials_file = 'src\creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -85,32 +86,33 @@ def get_files():
 
 
 
-def get_freebets():
 
-    freebets = {}
+# def get_freebets():
 
-    tree.delete(*tree.get_children())
-    spreadsheet = gc.open('Reporting November')
-    print("Getting Reporting Sheet")
-    worksheet = spreadsheet.get_worksheet(6)  # 0 represents the first worksheet
-    data = worksheet.get_all_values()
-    print("Retrieving Free Bet data")
+#     freebets = {}
 
-    # Configure the progress bar
-    freebets_progress["value"] = 0  # Reset the progress bar to zero
-    freebets_progress["maximum"] = len(data) - 1  # Set the maximum value for the progress bar
+#     tree.delete(*tree.get_children())
+#     spreadsheet = gc.open('Reporting November')
+#     print("Getting Reporting Sheet")
+#     worksheet = spreadsheet.get_worksheet(6)  # 0 represents the first worksheet
+#     data = worksheet.get_all_values()
+#     print("Retrieving Free Bet data")
 
-    # Insert data into the Treeview for the specified columns
-    for i, row in enumerate(data[1:], start=1):  # Skip the first row (header)
-        if row[4] and not row[8]:  # Check if column I (index 8) is empty
-            main_item = tree.insert("", "end", values=[row[1], row[4], row[5], row[6], row[7]])
+#     # Configure the progress bar
+#     freebets_progress["value"] = 0  # Reset the progress bar to zero
+#     freebets_progress["maximum"] = len(data) - 1  # Set the maximum value for the progress bar
 
-            # Add columns 2 and 3 as children for the main row
-            tree.insert(main_item, "end", values=["", row[2], [row[3]]])  # Child for column 2
+#     # Insert data into the Treeview for the specified columns
+#     for i, row in enumerate(data[1:], start=1):  # Skip the first row (header)
+#         if row[4] and not row[8]:  # Check if column I (index 8) is empty
+#             main_item = tree.insert("", "end", values=[row[1], row[4], row[5], row[6], row[7]])
 
-        # Update the progress bar
-        freebets_progress["value"] = i
-        tree.update_idletasks()  # Update the UI
+#             # Add columns 2 and 3 as children for the main row
+#             tree.insert(main_item, "end", values=["", row[2], [row[3]]])  # Child for column 2
+
+#         # Update the progress bar
+#         freebets_progress["value"] = i
+#         tree.update_idletasks()  # Update the UI
 
 
 
@@ -181,6 +183,7 @@ def bet_check_thread(num_recent_files):
     # Update the display
     check_bet_runs()
     get_bets_with_risk_category()
+
 
 
 ### PARSE BET INFORMATION FROM RAW BET TEXT
@@ -785,6 +788,79 @@ def get_client_report_ref():
 
 
 
+def factoring_sheet():
+    tree.delete(*tree.get_children())
+    spreadsheet = gc.open('Factoring Diary')
+    print("Getting Factoring Sheet")
+    worksheet = spreadsheet.get_worksheet(4)  # 0 represents the first worksheet
+    data = worksheet.get_all_values()
+    print("Retrieving factoring data")
+    print(data)
+    # Insert data into the Treeview for the specified columns
+    for row in data[2:]:  # Start from the 4th row (index 3) in your spreadsheet
+        tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
+
+
+def open_wizard():
+    def handle_submit():
+        # Insert the values into the corresponding columns in your Google Sheet
+        spreadsheet = gc.open('Factoring Diary')
+        worksheet = spreadsheet.get_worksheet(4)  # Adjust the worksheet index as needed
+
+        # Get the next available row
+        next_row = len(worksheet.col_values(1)) + 1
+
+        current_time = datetime.now().strftime("%H:%M:%S")
+
+        # Insert the values into the sheet
+        worksheet.update_cell(next_row, 1, current_time)
+        worksheet.update_cell(next_row, 2, entry1.get())
+        worksheet.update_cell(next_row, 3, entry2.get())
+        worksheet.update_cell(next_row, 4, entry3.get())
+        worksheet.update_cell(next_row, 5, entry4.get())
+
+        # Insert the new row into the Treeview
+        tree.insert("", "end", values=[current_time, entry1.get(), entry2.get(), entry3.get(), entry4.get()])
+
+        # Close the wizard window
+        wizard_window.destroy()
+
+    # Create a new Toplevel window for the wizard
+    wizard_window = tk.Toplevel(root)
+
+    # Create and pack three Entry widgets for user input
+    username = ttk.Label(wizard_window, text="Username")
+    username.pack(padx=5, pady=5)
+    entry1 = ttk.Entry(wizard_window)
+    entry1.pack(padx=5, pady=5)
+
+    riskcat = ttk.Label(wizard_window, text="Risk Category")
+    riskcat.pack(padx=5, pady=5)
+    # Options for the risk category
+    options = ["W", "M", "X", "S"]
+    entry2 = ttk.Combobox(wizard_window, values=options)
+    entry2.pack(padx=5, pady=5)
+    entry2.set(options[0])  # Set the default value, you can change this as needed
+    
+    assrating = ttk.Label(wizard_window, text="Assessment Rating")
+    assrating.pack(padx=5, pady=5)
+    entry3 = ttk.Entry(wizard_window)
+    entry3.pack(padx=5, pady=5)
+
+    initials = ttk.Label(wizard_window, text="Initials")
+    initials.pack(padx=5, pady=5)
+    entry4 = ttk.Entry(wizard_window)
+    entry4.pack(padx=5, pady=5)
+
+
+    # Bind the "Enter" key to the submit function
+    wizard_window.bind('<Return>', lambda event=None: handle_submit())
+
+    # Create a submit button that handles the submitted values
+    submit_button = ttk.Button(wizard_window, text="Submit", command=handle_submit)
+    submit_button.pack(padx=5, pady=5)
+
+
 ### GET CURRENT OPTIONS SETUP FOR FEED
 def get_feed_options():
     risk_value = default_state_risk.get()
@@ -968,38 +1044,72 @@ if __name__ == "__main__":
     tab_3.grid_columnconfigure(0, weight=1)
 
 
-    tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Free Bets")
+    # tab_4 = ttk.Frame(notebook)
+    # notebook.add(tab_4, text="Free Bets")
 
-    # Create a Treeview widget in the window
-    tree = ttk.Treeview(tab_4)
+    # # Create a Treeview widget in the window
+    # tree = ttk.Treeview(tab_4)
 
-    columns = ["B", "E", "F", "G", "H"]
-    headings = ["Date", "User", "Credit", "Next", "Time"]
+    # columns = ["B", "E", "F", "G", "H"]
+    # headings = ["Date", "User", "Credit", "Next", "Time"]
+    # tree["columns"] = columns
+    # for col, heading in enumerate(headings):
+    #     tree.heading(columns[col], text=heading)
+    #     tree.column(columns[col], width=84, stretch=tk.NO)
+
+    # tree.column("B", width=75, stretch=tk.NO)
+    # tree.column("E", width=110, stretch=tk.NO)
+    # tree.column("F", width=50, stretch=tk.NO)
+    # tree.column("G", width=60, stretch=tk.NO)
+    # tree.column("H", width=45, stretch=tk.NO)
+
+    # tree.column("#0", width=10, stretch=tk.NO)
+    # tree.heading("#0", text="", anchor="w")
+
+    # tree.grid(row=0, column=0, sticky="nsew")
+
+    # freebets_progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
+    # freebets_progress.grid(row=1, column=0, pady=(15, 20), sticky="w")
+
+    # refresh_freebets_button = ttk.Button(tab_4, text="Refresh", command=get_freebets)
+    # refresh_freebets_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
+
+    # tab_4.grid_rowconfigure(0, weight=1)
+    # tab_4.grid_columnconfigure(0, weight=1)
+
+
+    tab_5 = ttk.Frame(notebook)
+    notebook.add(tab_5, text="Factoring")
+
+    tree = ttk.Treeview(tab_5)
+
+    columns = ["A", "B", "C", "D", "E"]
+    headings = ["Time", "User", "Risk", "Rating", "Initials"]
     tree["columns"] = columns
     for col, heading in enumerate(headings):
         tree.heading(columns[col], text=heading)
         tree.column(columns[col], width=84, stretch=tk.NO)
-
-    tree.column("B", width=75, stretch=tk.NO)
-    tree.column("E", width=110, stretch=tk.NO)
-    tree.column("F", width=50, stretch=tk.NO)
-    tree.column("G", width=60, stretch=tk.NO)
-    tree.column("H", width=45, stretch=tk.NO)
+        
+    tree.column("A", width=70, stretch=tk.NO)
+    tree.column("B", width=80, stretch=tk.NO)
+    tree.column("C", width=50, stretch=tk.NO)
+    tree.column("D", width=67, stretch=tk.NO)
+    tree.column("E", width=70, stretch=tk.NO)
 
     tree.column("#0", width=10, stretch=tk.NO)
     tree.heading("#0", text="", anchor="w")
 
     tree.grid(row=0, column=0, sticky="nsew")
+    tab_5.grid_columnconfigure(0, weight=1)
 
-    freebets_progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
-    freebets_progress.grid(row=1, column=0, pady=(15, 20), sticky="w")
+    add_restriction_button = ttk.Button(tab_5, text="Add", command=open_wizard)
+    add_restriction_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
 
-    refresh_freebets_button = ttk.Button(tab_4, text="Refresh", command=get_freebets)
-    refresh_freebets_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
+    refresh_factoring_button = ttk.Button(tab_5, text="Refresh", command=factoring_sheet)
+    refresh_factoring_button.grid(row=1, column=0, pady=(5, 10), sticky="w")
 
-    tab_4.grid_rowconfigure(0, weight=1)
-    tab_4.grid_columnconfigure(0, weight=1)
+    factoring_label = ttk.Label(tab_5, text="Click 'Add' to report a new customer restriction.")
+    factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
 
 
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
@@ -1059,13 +1169,9 @@ if __name__ == "__main__":
     set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="Set BWW Folder")
     set_bet_folder_path_button.place(x=30, y=230, width=200)
 
-
-
     ### OPTIONS SEPARATOR
     separator = ttk.Separator(options_frame, orient='vertical')
     separator.place(x=270, y=5, height=255)
-
-
 
     ### LOGO DISPLAY
     logo_label = tk.Label(options_frame, image=company_logo, bd=0, cursor="hand2")
@@ -1085,6 +1191,7 @@ if __name__ == "__main__":
     password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
     password_result_label.place(x=340, y=240)
 
+    factoring_sheet()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
