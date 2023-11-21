@@ -28,8 +28,8 @@ bet_info = {}
 password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
-#BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "c:\TESTING"
+#BET_FOLDER_PATH = "F:\BWW\Export"
 
 credentials_file = 'src\creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -583,14 +583,14 @@ def create_client_report(customer_ref):
     timestamps = []
     hour_ranges = {}
 
-    client_progress["maximum"] = len(files)
-    client_progress["value"] = 0
+    progress["maximum"] = len(files)
+    progress["value"] = 0
     root.update_idletasks()
 
     for i, bet in enumerate(files):
         file_path = os.path.join(BET_FOLDER_PATH, bet)
 
-        client_progress["value"] = i + 1
+        progress["value"] = i + 1
         root.update_idletasks()
 
         with open(file_path, 'r') as file:
@@ -674,11 +674,11 @@ def create_client_report(customer_ref):
     report_output += f"\n\nFULL FEED FOR {customer_ref}:{separator}"
 
 
-    client_report_ticket.config(state="normal")
-    client_report_ticket.delete('1.0', tk.END)
-    client_report_ticket.insert('1.0', client_report_feed)
-    client_report_ticket.insert('1.0', report_output)
-    client_report_ticket.config(state="disabled")    
+    report_ticket.config(state="normal")
+    report_ticket.delete('1.0', tk.END)
+    report_ticket.insert('1.0', client_report_feed)
+    report_ticket.insert('1.0', report_output)
+    report_ticket.config(state="disabled")    
 
 
 
@@ -784,7 +784,7 @@ def get_client_report_ref():
     client_report_user = simpledialog.askstring("Client Reporting", "Enter Client Username: ")
     if client_report_user:
         client_report_user = client_report_user.upper()
-        create_client_report(client_report_user)
+        threading.Thread(target=create_client_report(client_report_user)).start()
 
 
 
@@ -841,7 +841,7 @@ def open_wizard():
     entry2 = ttk.Combobox(wizard_window, values=options)
     entry2.pack(padx=5, pady=5)
     entry2.set(options[0])  # Set the default value, you can change this as needed
-    
+     
     assrating = ttk.Label(wizard_window, text="Assessment Rating")
     assrating.pack(padx=5, pady=5)
     entry3 = ttk.Entry(wizard_window)
@@ -934,6 +934,13 @@ def set_bet_folder_path():
 
 
 
+def run_factoring_sheet():
+    threading.Thread(target=factoring_sheet).start()
+
+def run_create_daily_report():
+    threading.Thread(target=create_daily_report).start()
+
+
 if __name__ == "__main__":
     
     ### WINDOW SETTINGS
@@ -1011,37 +1018,42 @@ if __name__ == "__main__":
     bets_with_risk_text.pack(fill='both', expand=True)
 
     tab_2 = ttk.Frame(notebook)
-    notebook.add(tab_2, text="User Report")
+    notebook.add(tab_2, text="Report")
 
+    # Adjusting row and column weights
     tab_2.grid_rowconfigure(0, weight=1)
+    tab_2.grid_rowconfigure(1, weight=1)
     tab_2.grid_columnconfigure(0, weight=1)
 
-    client_report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
-    client_report_ticket.config(state='disabled')
-    client_report_ticket.grid(row=0, column=0, sticky="nsew")
-
-    client_progress = ttk.Progressbar(tab_2, mode="determinate", length=250)
-    client_progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
-
-    refresh_button = ttk.Button(tab_2, text="Generate", command=get_client_report_ref)
-    refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
-
-    tab_3 = ttk.Frame(notebook)
-    notebook.add(tab_3, text="Daily Report")
-
-    report_ticket = tk.Text(tab_3, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
     report_ticket.config(state='disabled')
     report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    progress = ttk.Progressbar(tab_3, mode="determinate", length=250)
-    progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
+    progress = ttk.Progressbar(tab_2, mode="determinate", length=250)
+    progress.grid(row=2, column=0, pady=(0, 0), sticky="nsew")
 
-    refresh_button = ttk.Button(tab_3, text="Generate", command=create_daily_report)
-    refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
+    client_refresh_button = ttk.Button(tab_2, text="User Report", command=get_client_report_ref)
+    client_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="w")
 
-    # Configure the row and column weights for the frame
-    tab_3.grid_rowconfigure(0, weight=1)
-    tab_3.grid_columnconfigure(0, weight=1)
+    daily_refresh_button = ttk.Button(tab_2, text="Daily Report", command=run_create_daily_report)
+    daily_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="e")
+
+    # tab_3 = ttk.Frame(notebook)
+    # notebook.add(tab_3, text="Daily Report")
+
+    # report_ticket = tk.Text(tab_3, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    # report_ticket.config(state='disabled')
+    # report_ticket.grid(row=0, column=0, sticky="nsew")
+
+    # progress = ttk.Progressbar(tab_3, mode="determinate", length=250)
+    # progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
+
+    # refresh_button = ttk.Button(tab_3, text="Generate", command=create_daily_report)
+    # refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
+
+    # # Configure the row and column weights for the frame
+    # tab_3.grid_rowconfigure(0, weight=1)
+    # tab_3.grid_columnconfigure(0, weight=1)
 
 
     # tab_4 = ttk.Frame(notebook)
@@ -1191,7 +1203,7 @@ if __name__ == "__main__":
     password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
     password_result_label.place(x=340, y=240)
 
-    factoring_sheet()
+    run_factoring_sheet()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
