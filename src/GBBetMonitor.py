@@ -861,6 +861,113 @@ def open_wizard():
     submit_button.pack(padx=5, pady=5)
 
 
+def set_recent_bets(value):
+    global DEFAULT_NUM_RECENT_FILES, recent_bets_label
+    new_recent_value = int(float(value))
+    if new_recent_value is not None:
+        DEFAULT_NUM_RECENT_FILES = new_recent_value
+        recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
+
+    #recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
+
+
+
+def set_bet_folder_path():
+    global BET_FOLDER_PATH
+    new_folder_path = tk.filedialog.askdirectory()
+    if new_folder_path is not None:
+        BET_FOLDER_PATH = new_folder_path
+    refresh_display()
+
+
+def open_settings():
+
+    ### IMPORT LOGO
+    logo_image = Image.open('src\\splash.ico')
+    logo_image.thumbnail((80, 80))
+    company_logo = ImageTk.PhotoImage(logo_image)  
+    settings_window = tk.Toplevel(root)
+    settings_window.title("Settings")
+
+    # Set window size to match frame size
+    settings_window.geometry("505x300")  # Width x Height
+
+    # Disable window resizing
+    settings_window.resizable(False, False)
+
+    # Position window on the right side of the screen
+    screen_width = settings_window.winfo_screenwidth()
+    settings_window.geometry(f"+{screen_width - 550}+50")  # "+X+Y"
+
+    # OPTIONS FRAME
+    options_frame = ttk.LabelFrame(settings_window, style='Card', text="Options", width=120, height=205)
+    options_frame.place(x=5, y=5, width=495, height=290)
+
+    ### OPTIONS FRAME
+    # options_frame = ttk.LabelFrame(root, style='Card', text="Options", width=120, height=205)
+    # options_frame.place(x=395, y=650, width=495, height=290)
+
+    options_label=tk.Label(options_frame, font=("Helvetica", 11), wraplength=140, text="Click logo to refresh", fg="#000000", bg="#ffffff")
+    options_label.place(x=60,y=10)
+
+
+    show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Bets Only',style="Switch", variable=default_state_risk)
+    show_risk_bets.place(x=60, y=50)
+
+    show_wageralert = ttk.Checkbutton(options_frame, text='Knockbacks',style="Switch", variable=default_state_wageralert)
+    show_wageralert.place(x=140, y=90)
+
+    show_textbets = ttk.Checkbutton(options_frame, text='Text Bets',style="Switch", variable=default_state_textbets)
+    show_textbets.place(x=20, y=90)
+
+    ### SLIDER OPTIONS
+    recent_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_RECENT_FILES}")
+    recent_bets_label.place(x=240, y=150)
+
+    set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to Check", fg="#000000", bg="#ffffff")
+    set_recent_bets_label.place(x=85,y=130)
+
+    set_recent_bets = ttk.Scale(options_frame, from_=20, to=1500,cursor="hand2", command=set_recent_bets)
+    set_recent_bets.set(DEFAULT_NUM_RECENT_FILES)
+    set_recent_bets.pack()
+    set_recent_bets.place(x=30, y=150, width=200)
+
+    run_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_BETS_TO_RUN}")
+    run_bets_label.place(x=240, y=200)
+
+    set_recent_runs_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to a Run", fg="#000000", bg="#ffffff")
+    set_recent_runs_label.place(x=85,y=175)
+
+    set_num_run_bets = ttk.Scale(options_frame, from_=2, to=7, cursor="hand2",command=set_num_run_bets)
+    set_num_run_bets.set(DEFAULT_NUM_BETS_TO_RUN)
+    set_num_run_bets.pack()
+    set_num_run_bets.place(x=30, y=195, width=200)
+
+    ### SET EXPORT PATH BUTTON
+    set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="Set BWW Folder")
+    set_bet_folder_path_button.place(x=30, y=230, width=200)
+
+    ### OPTIONS SEPARATOR
+    separator = ttk.Separator(options_frame, orient='vertical')
+    separator.place(x=270, y=5, height=255)
+
+    ### LOGO DISPLAY
+    logo_label = tk.Label(options_frame, image=company_logo, bd=0, cursor="hand2")
+    logo_label.place(x=343, y=10)
+    logo_label.bind("<Button-1>", lambda e: refresh_display())
+
+    ### TITLE TEXT
+    title_label=tk.Label(options_frame, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
+    title_label.place(x=320,y=100)
+
+    ### PASSWORD GENERATOR
+    copy_button = ttk.Button(options_frame, command=copy_to_clipboard, text="Generate & Copy Password")
+    copy_button.place(x=290, y=200)
+
+    password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
+    password_result_label.place(x=340, y=240)
+
+
 ### GET CURRENT OPTIONS SETUP FOR FEED
 def get_feed_options():
     risk_value = default_state_risk.get()
@@ -898,12 +1005,12 @@ def copy_to_clipboard():
 
 ### MENU BAR * OPTIONS ITEMS
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring V4.4")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring V5.0")
 
 
 
 def howTo():
-    messagebox.showinfo("How to use", "ask Sam")
+    messagebox.showinfo("How to use", "Ask Sam")
 
 
 
@@ -911,27 +1018,6 @@ def set_num_run_bets(value):
     global DEFAULT_NUM_BETS_TO_RUN, run_bets_label
     DEFAULT_NUM_BETS_TO_RUN = int(float(value))
     run_bets_label.config(text=f"{DEFAULT_NUM_BETS_TO_RUN+1}")
-
-
-
-def set_recent_bets(value):
-    global DEFAULT_NUM_RECENT_FILES
-    new_recent_value = int(float(value))
-    if new_recent_value is not None:
-        DEFAULT_NUM_RECENT_FILES = new_recent_value
-        recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
-
-    #recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
-
-
-
-def set_bet_folder_path():
-    global BET_FOLDER_PATH
-    new_folder_path = tk.filedialog.askdirectory()
-    if new_folder_path is not None:
-        BET_FOLDER_PATH = new_folder_path
-    refresh_display()
-
 
 
 def run_factoring_sheet():
@@ -945,7 +1031,7 @@ if __name__ == "__main__":
     
     ### WINDOW SETTINGS
     root = tk.Tk()
-    root.title("GB Bet Monitor v4.4")
+    root.title("GB Bet Monitor v5.0")
     root.tk.call('source', 'src\\Forest-ttk-theme-master\\forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
@@ -962,9 +1048,9 @@ if __name__ == "__main__":
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
     options_menu = tk.Menu(menu_bar, tearoff=0)
-    options_menu.add_command(label="Set Recent Bets", command=set_recent_bets, foreground="#000000", background="#ffffff")
+    #options_menu.add_command(label="Set Recent Bets", command=set_recent_bets, foreground="#000000", background="#ffffff")
     options_menu.add_command(label="Set Num of Bets to a Run", command=set_num_run_bets, foreground="#000000", background="#ffffff")
-    options_menu.add_command(label="Set BWW Export Folder", command=set_bet_folder_path, foreground="#000000", background="#ffffff")
+    #options_menu.add_command(label="Set BWW Export Folder", command=set_bet_folder_path, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
     menu_bar.add_cascade(label="Options", menu=options_menu)
@@ -975,10 +1061,12 @@ if __name__ == "__main__":
     menu_bar.add_cascade(label="Help", menu=help_menu, foreground="#000000", background="#ffffff")
     root.config(menu=menu_bar)
 
-    ### IMPORT LOGO
-    logo_image = Image.open('src\\splash.ico')
-    logo_image.thumbnail((80, 80))
-    company_logo = ImageTk.PhotoImage(logo_image)    
+  
+
+    ### CHECK BOX OPTIONS
+    default_state_risk = tk.IntVar(value=0)
+    default_state_wageralert = tk.IntVar(value=1)
+    default_state_textbets = tk.IntVar(value=1)
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
@@ -1122,86 +1210,11 @@ if __name__ == "__main__":
 
     factoring_label = ttk.Label(tab_5, text="Click 'Add' to report a new customer restriction.")
     factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
-
-
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
-
-    ### OPTIONS FRAME
-    options_frame = ttk.LabelFrame(root, style='Card', text="Options", width=120, height=205)
-    options_frame.place(x=395, y=650, width=495, height=290)
-
-    options_label=tk.Label(options_frame, font=("Helvetica", 11), wraplength=140, text="Click logo to refresh", fg="#000000", bg="#ffffff")
-    options_label.place(x=60,y=10)
-
-
-
-    ### CHECK BOX OPTIONS
-    default_state_risk = tk.IntVar(value=0)
-    default_state_wageralert = tk.IntVar(value=1)
-    default_state_textbets = tk.IntVar(value=1)
-
-    show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Bets Only',style="Switch", variable=default_state_risk)
-    show_risk_bets.place(x=60, y=50)
-
-    show_wageralert = ttk.Checkbutton(options_frame, text='Knockbacks',style="Switch", variable=default_state_wageralert)
-    show_wageralert.place(x=140, y=90)
-
-    show_textbets = ttk.Checkbutton(options_frame, text='Text Bets',style="Switch", variable=default_state_textbets)
-    show_textbets.place(x=20, y=90)
-
-
-
-    ### SLIDER OPTIONS
-    recent_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_RECENT_FILES}")
-    recent_bets_label.place(x=240, y=150)
-
-    set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to Check", fg="#000000", bg="#ffffff")
-    set_recent_bets_label.place(x=85,y=130)
-
-    set_recent_bets = ttk.Scale(options_frame, from_=20, to=1500,cursor="hand2", command=set_recent_bets)
-    set_recent_bets.set(DEFAULT_NUM_RECENT_FILES)
-    set_recent_bets.pack()
-    set_recent_bets.place(x=30, y=150, width=200)
-
-    run_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_BETS_TO_RUN}")
-    run_bets_label.place(x=240, y=200)
-
-    set_recent_runs_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to a Run", fg="#000000", bg="#ffffff")
-    set_recent_runs_label.place(x=85,y=175)
-
-    set_num_run_bets = ttk.Scale(options_frame, from_=2, to=7, cursor="hand2",command=set_num_run_bets)
-    set_num_run_bets.set(DEFAULT_NUM_BETS_TO_RUN)
-    set_num_run_bets.pack()
-    set_num_run_bets.place(x=30, y=195, width=200)
-
-
-
-    ### SET EXPORT PATH BUTTON
-    set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="Set BWW Folder")
-    set_bet_folder_path_button.place(x=30, y=230, width=200)
-
-    ### OPTIONS SEPARATOR
-    separator = ttk.Separator(options_frame, orient='vertical')
-    separator.place(x=270, y=5, height=255)
-
-    ### LOGO DISPLAY
-    logo_label = tk.Label(options_frame, image=company_logo, bd=0, cursor="hand2")
-    logo_label.place(x=343, y=10)
-    logo_label.bind("<Button-1>", lambda e: refresh_display())
-
-    ### TITLE TEXT
-    title_label=tk.Label(options_frame, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
-    title_label.place(x=320,y=100)
-
-
-
-    ### PASSWORD GENERATOR
-    copy_button = ttk.Button(options_frame, command=copy_to_clipboard, text="Generate & Copy Password")
-    copy_button.place(x=290, y=200)
-
-    password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
-    password_result_label.place(x=340, y=240)
+    # Create the 'settings' button
+    settings_button = ttk.Button(root, text="Settings", command=open_settings)
+    settings_button.pack()
 
     run_factoring_sheet()
 
