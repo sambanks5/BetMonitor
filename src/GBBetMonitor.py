@@ -2,6 +2,8 @@ import os
 import re
 import threading
 import pyperclip
+import json
+import requests
 import random
 import gspread
 import datetime
@@ -18,6 +20,8 @@ from PIL import Image, ImageTk
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
 
+user = ""
+
 # Main dictionary containing Selections
 selection_bets = {}
 
@@ -28,8 +32,8 @@ bet_info = {}
 password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
-BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "c:\TESTING"
+BET_FOLDER_PATH = "F:\BWW\Export"
 
 credentials_file = 'src\creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -48,15 +52,19 @@ def refresh_display():
 
     # Refresh the display
     start_bet_check_thread(num_recent_files)
-
+    display_courses(courses)
     print("Refreshed Bets")
 
 
 
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
-    # Refresh the display
-    refresh_display()
+    # Check if auto refresh is enabled
+    if auto_refresh_state.get():
+        # Refresh the display
+        refresh_display()
+
+    # Schedule the next refresh check
     root.after(30000, refresh_display_periodic)
 
 
@@ -77,15 +85,228 @@ def start_bet_check_thread(num_recent_files):
 
 ### GET FILES FROM FOLDER
 def get_files():
-    files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-    
-    # Sort files by creation date in descending order
-    files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
+    try:
+        files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
+        
+        # Sort files by creation date in descending order
+        files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
 
-    return files
+        return files
+    except FileNotFoundError:
+        error_message = f"Error: Could not find files in folder: {BET_FOLDER_PATH}. Please check the folder path in settings."
+        print(error_message)
+        messagebox.showerror("Error", error_message)
+        return []
+    except Exception as e:
+        error_message = f"An error occurred: {e}"
+        print(error_message)
+        messagebox.showerror("Error", error_message)
+        return []
 
 
+def get_courses():
+    # Load the credentials from the JSON file
+    with open('src/creds.json') as f:
+        creds = json.load(f)
 
+    # Get today's date
+    today = date.today()
+
+    url = "https://horse-racing.p.rapidapi.com/racecards"
+
+    querystring = {"date": today.strftime('%Y-%m-%d')}
+
+    headers = {
+        "X-RapidAPI-Key": creds['rapidapi_key'],
+        "X-RapidAPI-Host": "horse-racing.p.rapidapi.com"
+    }
+
+    response = requests.get(url, headers=headers, params=querystring)
+
+    data = response.json()
+
+    # Check if the response is a list
+    if not isinstance(data, list):
+        print("Error: The response from the API is not a list.", data)
+        return get_courses_from_file()
+
+    # Get a list of unique courses
+    courses = set()
+    for race in data:
+        try:
+            courses.add(race['course'])
+        except TypeError:
+            print("Error: The 'race' object is not a dictionary.")
+            return []
+
+    # Convert the set to a list
+    courses = list(courses)
+
+    return courses
+
+def display_courses(courses):
+    # Get today's date
+    today = date.today()
+
+    # Try to load the existing data from the file
+    try:
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        # If the file doesn't exist, create it with the initial data
+        data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+    # Check if the date in the file matches today's date
+    if data['date'] != today.strftime('%Y-%m-%d'):
+        # If not, update the file with the new date and courses
+        data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+    else:
+        # If the date is correct, compare the courses in the file with the courses list
+        for course in data['courses']:
+            if course not in courses:
+                # If a course in the file is not in the list, add it to the list
+                courses.append(course)
+
+    # Sort the courses in alphabetical order
+    courses.sort()
+
+    # Display the courses
+    for i, course in enumerate(courses):
+        # Create a label for the course
+        course_label = ttk.Label(bulletin_frame, text=course)
+        course_label.grid(row=i, column=0, padx=10, pady=2, sticky="w")  # Add padding
+
+        # Create a button to remove the course
+        remove_button = ttk.Button(bulletin_frame, text="X", command=lambda course=course: remove_course(course, courses), width=2)
+        remove_button.grid(row=i, column=1, padx=5, pady=2)  # Add padding
+
+        # Create a button for the course
+        course_button = ttk.Button(bulletin_frame, text="✔", command=lambda course=course: handle_button_click(course), width=2)
+        course_button.grid(row=i, column=2, padx=5, pady=2)  # Add padding
+
+        # Create a label for the last updated time
+        if course in data['courses']:
+            # Extract the time part from the string
+            last_updated_time = data['courses'][course].split(' ')[0]
+
+            # Convert the time string to a datetime object
+            last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+
+            # Get the current time
+            now = datetime.now().time()
+
+            # Calculate the time difference in minutes
+            time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+
+            # Set the color based on the time difference
+            if 20 <= time_diff < 30:
+                color = 'Orange'
+            elif time_diff >= 30:
+                color = 'red'
+            else:
+                color = 'black'
+
+            time_label = ttk.Label(bulletin_frame, text=data['courses'][course], foreground=color)
+            time_label.grid(row=i, column=3, padx=5, pady=2)  # Add padding
+
+
+def handle_button_click(course):
+    global user
+    # Check if user is empty
+    if not user:
+        user_login()
+
+    # Get the current time
+    now = datetime.now()
+
+    # Format the time as a string
+    time_string = now.strftime('%H:%M')
+
+    # Load the existing data from the file
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+
+    # Update the time for the course and add the user's initials
+    data['courses'][course] = f"{time_string} by {user}"
+
+    # Write the updated data back to the file
+    with open('update_times.json', 'w') as f:
+        json.dump(data, f)
+
+    print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
+
+    # Clear the existing labels and buttons
+    for widget in bulletin_frame.winfo_children():
+        widget.destroy()
+
+    # Display the courses again
+    display_courses(courses)
+
+def get_courses_from_file():
+    # Try to load the existing data from the file
+    try:
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        # If the file doesn't exist, return an empty list
+        return []
+
+    # Return the courses from the file
+    return list(data['courses'].keys())
+
+def add_course():
+    # Ask the user for the course name
+    course_name = simpledialog.askstring("Input", "Please enter the course name:")
+
+    # Add the course to the courses list
+    if course_name:
+        courses.append(course_name)
+
+        # Load the existing data from the file
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+
+        # Add the course to the data
+        if course_name not in data['courses']:
+            data['courses'][course_name] = ""
+
+        # Write the updated data back to the file
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+    # Clear the existing labels and buttons
+    for widget in bulletin_frame.winfo_children():
+        widget.destroy()
+
+    # Display the courses again
+    display_courses(courses)
+
+def remove_course(course, courses):
+    # Remove the course from the list
+    courses.remove(course)
+
+    # Load the existing data from the file
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+
+    # Remove the course from the data
+    if course in data['courses']:
+        del data['courses'][course]
+
+    # Write the updated data back to the file
+    with open('update_times.json', 'w') as f:
+        json.dump(data, f)
+
+    # Clear the existing labels and buttons
+    for widget in bulletin_frame.winfo_children():
+        widget.destroy()
+
+    # Display the courses again
+    display_courses(courses)
 
 # def get_freebets():
 
@@ -116,7 +337,7 @@ def get_files():
 
 
 
-### MAIN FUNCTION TO GET FILES
+# MAIN FUNCTION TO GET FILES
 def bet_check_thread(num_recent_files):
     global BET_FOLDER_PATH
 
@@ -126,54 +347,44 @@ def bet_check_thread(num_recent_files):
 
     feed_content = ""
 
+    # Define the separator
+    separator = '\n\n---------------------------------------------------------------------------------------\n\n'
+
+    # Get the feed options
+    risk_only, show_wageralert, show_sms = get_feed_options()
+
     # Process the selected recent files
     for filename in recent_files:
         file_path = os.path.join(BET_FOLDER_PATH, filename)
 
-        risk_only, show_wageralert, show_sms = get_feed_options()
-
-        separator = '\n\n---------------------------------------------------------------------------------------\n\n'
-
         with open(file_path, 'r') as file:
             bet_text = file.read()
 
-            is_sms =  'sms' in bet_text.lower()
+            # Check the type of the bet
+            bet_text_lower = bet_text.lower()
+            is_sms = 'sms' in bet_text_lower
+            is_bet = 'website' in bet_text_lower
+            is_wageralert = 'knockback' in bet_text_lower
 
-            is_bet = 'website' in bet_text.lower()
-
-            is_wageralert = 'knockback' in bet_text.lower()
-
-
-
-            if is_wageralert:
-                if show_wageralert:
-                    customer_ref, knockback_details, time = parse_wageralert_details(bet_text)
-                    formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-                    feed_content += f"{time} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
-                else:
-                    print("Wageralert ", filename, " not being displayed")
-
-
-            elif is_sms:
-                if show_sms:
-                    wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
-                    feed_content += f"{customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
-                else:
-                    print("SMS ", filename, " not being displayed")
-
-
-            elif is_bet:                    
+            # Process the bet based on its type
+            if is_wageralert and show_wageralert:
+                customer_ref, knockback_details, time = parse_wageralert_details(bet_text)
+                formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
+                feed_content += f"{time} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+            elif is_sms and show_sms:
+                wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
+                feed_content += f"{customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
+            elif is_bet:
                 bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
-                if risk_only:
-                    if customer_risk_category and customer_risk_category != '-':
-                        selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in parsed_selections])
-                        feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
-                else:        
+                if risk_only and customer_risk_category and customer_risk_category != '-':
+                    selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in parsed_selections])
+                    feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                elif not risk_only:
                     selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in parsed_selections])
                     feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
                 
                 update_selection_bets(bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type)
-
+    
     # Update the feed label with the latest bet or wageralert information
     feed_text.config(state="normal")
     feed_text.delete('1.0', tk.END)
@@ -777,15 +988,13 @@ def check_bet_runs():
     runs_text.config(state=tk.DISABLED)
 
 
-
 ### GET THE LIST OF USERS TO SEARCH
 def get_client_report_ref():
     global client_report_user
     client_report_user = simpledialog.askstring("Client Reporting", "Enter Client Username: ")
     if client_report_user:
         client_report_user = client_report_user.upper()
-        threading.Thread(target=create_client_report(client_report_user)).start()
-
+        threading.Thread(target=create_client_report, args=(client_report_user,)).start()
 
 
 def factoring_sheet():
@@ -795,13 +1004,17 @@ def factoring_sheet():
     worksheet = spreadsheet.get_worksheet(4)  # 0 represents the first worksheet
     data = worksheet.get_all_values()
     print("Retrieving factoring data")
-    print(data)
     # Insert data into the Treeview for the specified columns
     for row in data[2:]:  # Start from the 4th row (index 3) in your spreadsheet
         tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
 
 
 def open_wizard():
+    global user
+    # Check if user is empty
+    if not user:
+        user_login()
+
     def handle_submit():
         # Insert the values into the corresponding columns in your Google Sheet
         spreadsheet = gc.open('Factoring Diary')
@@ -817,10 +1030,10 @@ def open_wizard():
         worksheet.update_cell(next_row, 2, entry1.get())
         worksheet.update_cell(next_row, 3, entry2.get())
         worksheet.update_cell(next_row, 4, entry3.get())
-        worksheet.update_cell(next_row, 5, entry4.get())
+        worksheet.update_cell(next_row, 5, user)  # Use user initials instead of entry4.get()
 
         # Insert the new row into the Treeview
-        tree.insert("", "end", values=[current_time, entry1.get(), entry2.get(), entry3.get(), entry4.get()])
+        tree.insert("", "end", values=[current_time, entry1.get(), entry2.get(), entry3.get(), user])
 
         # Close the wizard window
         wizard_window.destroy()
@@ -840,18 +1053,12 @@ def open_wizard():
     options = ["W", "M", "X", "S"]
     entry2 = ttk.Combobox(wizard_window, values=options)
     entry2.pack(padx=5, pady=5)
-    entry2.set(options[0])  # Set the default value, you can change this as needed
+    entry2.set(options[0])
      
     assrating = ttk.Label(wizard_window, text="Assessment Rating")
     assrating.pack(padx=5, pady=5)
     entry3 = ttk.Entry(wizard_window)
     entry3.pack(padx=5, pady=5)
-
-    initials = ttk.Label(wizard_window, text="Initials")
-    initials.pack(padx=5, pady=5)
-    entry4 = ttk.Entry(wizard_window)
-    entry4.pack(padx=5, pady=5)
-
 
     # Bind the "Enter" key to the submit function
     wizard_window.bind('<Return>', lambda event=None: handle_submit())
@@ -861,16 +1068,9 @@ def open_wizard():
     submit_button.pack(padx=5, pady=5)
 
 
-def set_recent_bets(value):
-    global DEFAULT_NUM_RECENT_FILES, recent_bets_label
-    new_recent_value = int(float(value))
-    if new_recent_value is not None:
-        DEFAULT_NUM_RECENT_FILES = new_recent_value
-        recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
-
-    #recent_bets_label.config(text=f"{DEFAULT_NUM_RECENT_FILES}")
-
-
+def set_recent_bets():
+    global DEFAULT_NUM_RECENT_FILES
+    DEFAULT_NUM_RECENT_FILES = recent_bets_var.get()
 
 def set_bet_folder_path():
     global BET_FOLDER_PATH
@@ -879,94 +1079,11 @@ def set_bet_folder_path():
         BET_FOLDER_PATH = new_folder_path
     refresh_display()
 
-
-def open_settings():
-
-    ### IMPORT LOGO
-    logo_image = Image.open('src\\splash.ico')
-    logo_image.thumbnail((80, 80))
-    company_logo = ImageTk.PhotoImage(logo_image)  
-    settings_window = tk.Toplevel(root)
-    settings_window.title("Settings")
-
-    # Set window size to match frame size
-    settings_window.geometry("505x300")  # Width x Height
-
-    # Disable window resizing
-    settings_window.resizable(False, False)
-
-    # Position window on the right side of the screen
-    screen_width = settings_window.winfo_screenwidth()
-    settings_window.geometry(f"+{screen_width - 550}+50")  # "+X+Y"
-
-    # OPTIONS FRAME
-    options_frame = ttk.LabelFrame(settings_window, style='Card', text="Options", width=120, height=205)
-    options_frame.place(x=5, y=5, width=495, height=290)
-
-    ### OPTIONS FRAME
-    # options_frame = ttk.LabelFrame(root, style='Card', text="Options", width=120, height=205)
-    # options_frame.place(x=395, y=650, width=495, height=290)
-
-    options_label=tk.Label(options_frame, font=("Helvetica", 11), wraplength=140, text="Click logo to refresh", fg="#000000", bg="#ffffff")
-    options_label.place(x=60,y=10)
-
-
-    show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Bets Only',style="Switch", variable=default_state_risk)
-    show_risk_bets.place(x=60, y=50)
-
-    show_wageralert = ttk.Checkbutton(options_frame, text='Knockbacks',style="Switch", variable=default_state_wageralert)
-    show_wageralert.place(x=140, y=90)
-
-    show_textbets = ttk.Checkbutton(options_frame, text='Text Bets',style="Switch", variable=default_state_textbets)
-    show_textbets.place(x=20, y=90)
-
-    ### SLIDER OPTIONS
-    recent_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_RECENT_FILES}")
-    recent_bets_label.place(x=240, y=150)
-
-    set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to Check", fg="#000000", bg="#ffffff")
-    set_recent_bets_label.place(x=85,y=130)
-
-    set_recent_bets = ttk.Scale(options_frame, from_=20, to=1500,cursor="hand2", command=set_recent_bets)
-    set_recent_bets.set(DEFAULT_NUM_RECENT_FILES)
-    set_recent_bets.pack()
-    set_recent_bets.place(x=30, y=150, width=200)
-
-    run_bets_label = ttk.Label(options_frame, text=f"{DEFAULT_NUM_BETS_TO_RUN}")
-    run_bets_label.place(x=240, y=200)
-
-    set_recent_runs_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to a Run", fg="#000000", bg="#ffffff")
-    set_recent_runs_label.place(x=85,y=175)
-
-    set_num_run_bets = ttk.Scale(options_frame, from_=2, to=7, cursor="hand2",command=set_num_run_bets)
-    set_num_run_bets.set(DEFAULT_NUM_BETS_TO_RUN)
-    set_num_run_bets.pack()
-    set_num_run_bets.place(x=30, y=195, width=200)
-
-    ### SET EXPORT PATH BUTTON
-    set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="Set BWW Folder")
-    set_bet_folder_path_button.place(x=30, y=230, width=200)
-
-    ### OPTIONS SEPARATOR
-    separator = ttk.Separator(options_frame, orient='vertical')
-    separator.place(x=270, y=5, height=255)
-
-    ### LOGO DISPLAY
-    logo_label = tk.Label(options_frame, image=company_logo, bd=0, cursor="hand2")
-    logo_label.place(x=343, y=10)
-    logo_label.bind("<Button-1>", lambda e: refresh_display())
-
-    ### TITLE TEXT
-    title_label=tk.Label(options_frame, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
-    title_label.place(x=320,y=100)
-
-    ### PASSWORD GENERATOR
-    copy_button = ttk.Button(options_frame, command=copy_to_clipboard, text="Generate & Copy Password")
-    copy_button.place(x=290, y=200)
-
-    password_result_label = tk.Label(options_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
-    password_result_label.place(x=340, y=240)
-
+def set_num_run_bets(*args):
+    global DEFAULT_NUM_BETS_TO_RUN
+    new_value = int(num_run_bets_var.get())
+    if new_value is not None:
+        DEFAULT_NUM_BETS_TO_RUN = new_value
 
 ### GET CURRENT OPTIONS SETUP FOR FEED
 def get_feed_options():
@@ -975,6 +1092,87 @@ def get_feed_options():
     textbets_value = default_state_textbets.get()
     return risk_value, wageralert_value, textbets_value
 
+
+def user_login():
+    global user
+    while True:
+        user = simpledialog.askstring("Input", "Please enter your initials:")
+        if user and len(user) <= 2:
+            user = user.upper()
+            break
+        else:
+            messagebox.showerror("Error", "Maximum of 2 characters.")
+
+
+def open_settings():
+
+    settings_window = tk.Toplevel(root)
+    settings_window.title("Options")
+
+    # Set window size to match frame size
+    settings_window.geometry("310x430")  # Width x Height
+
+    # Disable window resizing
+    settings_window.resizable(False, False)
+
+    # Position window on the right side of the screen
+    screen_width = settings_window.winfo_screenwidth()
+    settings_window.geometry(f"+{screen_width - 350}+50")  # "+X+Y"
+
+    # OPTIONS FRAME
+    options_frame = ttk.LabelFrame(settings_window, style='Card', text="Options", width=120, height=205)
+    options_frame.place(x=5, y=5, width=300, height=420)
+    
+    set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to Check", fg="#000000", bg="#ffffff")
+    set_recent_bets_label.place(x=100,y=10)
+
+    radiobutton_values = [20, 50, 100, 300, 1000]
+    for i, value in enumerate(radiobutton_values):
+        ttk.Radiobutton(options_frame, text=str(value), variable=recent_bets_var, value=value, command=set_recent_bets).place(x=5 + i*55, y=30, width=65)
+    
+    set_recent_runs_label=tk.Label(options_frame, font=("Helvetica", 10), text="Bets to a Run", fg="#000000", bg="#ffffff")
+    set_recent_runs_label.place(x=100,y=70)
+
+    spinbox = ttk.Spinbox(options_frame, from_=2, to=10, textvariable=num_run_bets_var)
+    spinbox.place(x=50, y=95, width=200)
+
+    separator = ttk.Separator(options_frame, orient='horizontal')
+    separator.place(x=10, y=140, width=270)
+
+    set_recent_bets_label=tk.Label(options_frame, font=("Helvetica", 10), text="Feed Options", fg="#000000", bg="#ffffff")
+    set_recent_bets_label.place(x=100,y=150)
+
+    show_risk_bets = ttk.Checkbutton(options_frame, text='Risk Only',style="Switch", variable=default_state_risk)
+    show_risk_bets.place(x=20, y=175)
+
+    show_wageralert = ttk.Checkbutton(options_frame, text='Knockbacks',style="Switch", variable=default_state_wageralert)
+    show_wageralert.place(x=140, y=205)
+
+    show_textbets = ttk.Checkbutton(options_frame, text='Text Bets',style="Switch", variable=default_state_textbets)
+    show_textbets.place(x=20, y=205)
+
+    separator = ttk.Separator(options_frame, orient='horizontal')
+    separator.place(x=10, y=240, width=270)
+
+    toggle_button = ttk.Checkbutton(options_frame, text='Auto Refresh', variable=auto_refresh_state, onvalue=True, offvalue=False)
+    toggle_button.place(x=90, y=260) 
+
+    separator = ttk.Separator(options_frame, orient='horizontal')
+    separator.place(x=10, y=300, width=270)
+
+    ### SET EXPORT PATH BUTTON
+    set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="BWW Folder")
+    set_bet_folder_path_button.place(x=30, y=320, width=100)
+
+    add_course_button = ttk.Button(options_frame, text="Add Course", command=add_course)
+    add_course_button.place(x=160, y=320, width=100)
+
+    def save_and_close():
+        refresh_display()
+        settings_window.destroy()
+
+    save_and_close_button = ttk.Button(options_frame, text="Save and Close", command=save_and_close)
+    save_and_close_button.place(x=70, y=360, width=150)
 
 
 ### PASSWORD GENERATOR FUNCTIONS
@@ -986,8 +1184,6 @@ def generate_random_string():
     generated_string = 'GB' + random_numbers
     
     return generated_string
-
-
 
 ### COPY PASSWORD TO CLIPBOARD
 def copy_to_clipboard():
@@ -1002,23 +1198,13 @@ def copy_to_clipboard():
     copy_button.config(state=tk.NORMAL)
 
 
-
 ### MENU BAR * OPTIONS ITEMS
 def about():
     messagebox.showinfo("About", "Geoff Banks Bet Monitoring V5.0")
 
 
-
 def howTo():
     messagebox.showinfo("How to use", "Ask Sam")
-
-
-
-def set_num_run_bets(value):
-    global DEFAULT_NUM_BETS_TO_RUN, run_bets_label
-    DEFAULT_NUM_BETS_TO_RUN = int(float(value))
-    run_bets_label.config(text=f"{DEFAULT_NUM_BETS_TO_RUN+1}")
-
 
 def run_factoring_sheet():
     threading.Thread(target=factoring_sheet).start()
@@ -1028,7 +1214,7 @@ def run_create_daily_report():
 
 
 if __name__ == "__main__":
-    
+
     ### WINDOW SETTINGS
     root = tk.Tk()
     root.title("GB Bet Monitor v5.0")
@@ -1043,14 +1229,17 @@ if __name__ == "__main__":
     alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
     root.geometry(alignstr)
     root.resizable(width=False, height=False)
+    ### IMPORT LOGO
+    logo_image = Image.open('src\\splash.ico')
+    logo_image.thumbnail((80, 80))
+    company_logo = ImageTk.PhotoImage(logo_image)  
     root.iconbitmap('src\\splash.ico')
 
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
     options_menu = tk.Menu(menu_bar, tearoff=0)
-    #options_menu.add_command(label="Set Recent Bets", command=set_recent_bets, foreground="#000000", background="#ffffff")
+    options_menu.add_command(label="Set User Initials", command=user_login, foreground="#000000", background="#ffffff")
     options_menu.add_command(label="Set Num of Bets to a Run", command=set_num_run_bets, foreground="#000000", background="#ffffff")
-    #options_menu.add_command(label="Set BWW Export Folder", command=set_bet_folder_path, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
     menu_bar.add_cascade(label="Options", menu=options_menu)
@@ -1061,12 +1250,21 @@ if __name__ == "__main__":
     menu_bar.add_cascade(label="Help", menu=help_menu, foreground="#000000", background="#ffffff")
     root.config(menu=menu_bar)
 
-  
-
     ### CHECK BOX OPTIONS
     default_state_risk = tk.IntVar(value=0)
     default_state_wageralert = tk.IntVar(value=1)
     default_state_textbets = tk.IntVar(value=1)
+
+    num_run_bets_var = tk.StringVar()
+    num_run_bets_var.set(DEFAULT_NUM_BETS_TO_RUN)
+    num_run_bets_var.trace("w", set_num_run_bets)
+
+    recent_bets_var = tk.IntVar()
+    recent_bets_var.set(DEFAULT_NUM_RECENT_FILES)
+
+    auto_refresh_state = tk.BooleanVar()
+    auto_refresh_state.set(True)
+
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
@@ -1212,10 +1410,34 @@ if __name__ == "__main__":
     factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
+    bulletin_frame = ttk.LabelFrame(root, style='Card', text="Race Updation", width=120, height=205)
+    bulletin_frame.place(x=395, y=650, width=300, height=295)
+
+    # ### LOGO DISPLAY
+    logo_label = tk.Label(root, image=company_logo, bd=0, cursor="hand2")
+    logo_label.place(x=760, y=670)
+    logo_label.bind("<Button-1>", lambda e: refresh_display())
+
+    ### TITLE TEXT
+    title_label=tk.Label(root, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
+    title_label.place(x=737,y=750)
+
     # Create the 'settings' button
     settings_button = ttk.Button(root, text="Settings", command=open_settings)
-    settings_button.pack()
+    settings_button.place(x=755,y=810)
 
+    separator = ttk.Separator(root, orient='horizontal')
+    separator.place(x=720, y=860, width=160)
+
+    ### PASSWORD GENERATOR
+    copy_button = ttk.Button(root, command=copy_to_clipboard, text="Generate Password")
+    copy_button.place(x=730, y=880, width=140)
+
+    password_result_label = tk.Label(root, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
+    password_result_label.place(x=760, y=915)
+
+    courses = get_courses()
+    display_courses(courses)
     run_factoring_sheet()
 
     ### GUI LOOP
