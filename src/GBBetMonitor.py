@@ -32,8 +32,8 @@ bet_info = {}
 password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
-#BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "c:\TESTING"
+#BET_FOLDER_PATH = "F:\BWW\Export"
 
 credentials_file = 'src\creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -52,10 +52,9 @@ def refresh_display():
 
     # Refresh the display
     start_bet_check_thread(num_recent_files)
-    display_courses(courses)
-    print("Refreshed Bets")
-
-
+    display_courses()
+    run_factoring_sheet()
+    print("Refreshed")
 
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
@@ -67,275 +66,15 @@ def refresh_display_periodic():
     # Schedule the next refresh check
     root.after(30000, refresh_display_periodic)
 
-
-
 ### RETURN 'DATE OF CREATION' FOR TEXT FILES
 def get_creation_date(file_path):
     return os.path.getctime(file_path)
-
-
 
 ### BET CHECK THREAD FUNCTIONS
 def start_bet_check_thread(num_recent_files):
     bet_thread = threading.Thread(target=bet_check_thread, args=(num_recent_files,))
     bet_thread.daemon = True
     bet_thread.start()
-
-
-
-### GET FILES FROM FOLDER
-def get_files():
-    try:
-        files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-        
-        # Sort files by creation date in descending order
-        files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
-
-        return files
-    except FileNotFoundError:
-        error_message = f"Error: Could not find files in folder: {BET_FOLDER_PATH}. Please check the folder path in settings."
-        print(error_message)
-        messagebox.showerror("Error", error_message)
-        return []
-    except Exception as e:
-        error_message = f"An error occurred: {e}"
-        print(error_message)
-        messagebox.showerror("Error", error_message)
-        return []
-
-
-def get_courses():
-    # Load the credentials from the JSON file
-    with open('src/creds.json') as f:
-        creds = json.load(f)
-
-    # Get today's date
-    today = date.today()
-
-    url = "https://horse-racing.p.rapidapi.com/racecards"
-
-    querystring = {"date": today.strftime('%Y-%m-%d')}
-
-    headers = {
-        "X-RapidAPI-Key": creds['rapidapi_key'],
-        "X-RapidAPI-Host": "horse-racing.p.rapidapi.com"
-    }
-
-    response = requests.get(url, headers=headers, params=querystring)
-
-    data = response.json()
-
-    # Check if the response is a list
-    if not isinstance(data, list):
-        print("Error: The response from the API is not a list.", data)
-        return get_courses_from_file()
-
-    # Get a list of unique courses
-    courses = set()
-    for race in data:
-        try:
-            courses.add(race['course'])
-        except TypeError:
-            print("Error: The 'race' object is not a dictionary.")
-            return []
-
-    # Convert the set to a list
-    courses = list(courses)
-
-    return courses
-
-def display_courses(courses):
-    # Get today's date
-    today = date.today()
-
-    # Try to load the existing data from the file
-    try:
-        with open('update_times.json', 'r') as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        # If the file doesn't exist, create it with the initial data
-        data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
-        with open('update_times.json', 'w') as f:
-            json.dump(data, f)
-
-    # Check if the date in the file matches today's date
-    if data['date'] != today.strftime('%Y-%m-%d'):
-        # If not, update the file with the new date and courses
-        data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
-        with open('update_times.json', 'w') as f:
-            json.dump(data, f)
-    else:
-        # If the date is correct, compare the courses in the file with the courses list
-        for course in data['courses']:
-            if course not in courses:
-                # If a course in the file is not in the list, add it to the list
-                courses.append(course)
-
-    # Sort the courses in alphabetical order
-    courses.sort()
-
-    # Display the courses
-    for i, course in enumerate(courses):
-        # Create a label for the course
-        course_label = ttk.Label(bulletin_frame, text=course)
-        course_label.grid(row=i, column=0, padx=10, pady=2, sticky="w")  # Add padding
-
-        # Create a button to remove the course
-        remove_button = ttk.Button(bulletin_frame, text="X", command=lambda course=course: remove_course(course, courses), width=2)
-        remove_button.grid(row=i, column=1, padx=5, pady=2)  # Add padding
-
-        # Create a button for the course
-        course_button = ttk.Button(bulletin_frame, text="✔", command=lambda course=course: handle_button_click(course), width=2)
-        course_button.grid(row=i, column=2, padx=5, pady=2)  # Add padding
-
-        # Create a label for the last updated time
-        if course in data['courses']:
-            # Extract the time part from the string
-            last_updated_time = data['courses'][course].split(' ')[0]
-
-            # Convert the time string to a datetime object
-            last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
-
-            # Get the current time
-            now = datetime.now().time()
-
-            # Calculate the time difference in minutes
-            time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
-
-            # Set the color based on the time difference
-            if 20 <= time_diff < 30:
-                color = 'Orange'
-            elif time_diff >= 30:
-                color = 'red'
-            else:
-                color = 'black'
-
-            time_label = ttk.Label(bulletin_frame, text=data['courses'][course], foreground=color)
-            time_label.grid(row=i, column=3, padx=5, pady=2)  # Add padding
-
-
-def handle_button_click(course):
-    global user
-    # Check if user is empty
-    if not user:
-        user_login()
-
-    # Get the current time
-    now = datetime.now()
-
-    # Format the time as a string
-    time_string = now.strftime('%H:%M')
-
-    # Load the existing data from the file
-    with open('update_times.json', 'r') as f:
-        data = json.load(f)
-
-    # Update the time for the course and add the user's initials
-    data['courses'][course] = f"{time_string} by {user}"
-
-    # Write the updated data back to the file
-    with open('update_times.json', 'w') as f:
-        json.dump(data, f)
-
-    print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
-
-    # Clear the existing labels and buttons
-    for widget in bulletin_frame.winfo_children():
-        widget.destroy()
-
-    # Display the courses again
-    display_courses(courses)
-
-def get_courses_from_file():
-    # Try to load the existing data from the file
-    try:
-        with open('update_times.json', 'r') as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        # If the file doesn't exist, return an empty list
-        return []
-
-    # Return the courses from the file
-    return list(data['courses'].keys())
-
-def add_course():
-    # Ask the user for the course name
-    course_name = simpledialog.askstring("Input", "Please enter the course name:")
-
-    # Add the course to the courses list
-    if course_name:
-        courses.append(course_name)
-
-        # Load the existing data from the file
-        with open('update_times.json', 'r') as f:
-            data = json.load(f)
-
-        # Add the course to the data
-        if course_name not in data['courses']:
-            data['courses'][course_name] = ""
-
-        # Write the updated data back to the file
-        with open('update_times.json', 'w') as f:
-            json.dump(data, f)
-
-    # Clear the existing labels and buttons
-    for widget in bulletin_frame.winfo_children():
-        widget.destroy()
-
-    # Display the courses again
-    display_courses(courses)
-
-def remove_course(course, courses):
-    # Remove the course from the list
-    courses.remove(course)
-
-    # Load the existing data from the file
-    with open('update_times.json', 'r') as f:
-        data = json.load(f)
-
-    # Remove the course from the data
-    if course in data['courses']:
-        del data['courses'][course]
-
-    # Write the updated data back to the file
-    with open('update_times.json', 'w') as f:
-        json.dump(data, f)
-
-    # Clear the existing labels and buttons
-    for widget in bulletin_frame.winfo_children():
-        widget.destroy()
-
-    # Display the courses again
-    display_courses(courses)
-
-# def get_freebets():
-
-#     freebets = {}
-
-#     tree.delete(*tree.get_children())
-#     spreadsheet = gc.open('Reporting November')
-#     print("Getting Reporting Sheet")
-#     worksheet = spreadsheet.get_worksheet(6)  # 0 represents the first worksheet
-#     data = worksheet.get_all_values()
-#     print("Retrieving Free Bet data")
-
-#     # Configure the progress bar
-#     freebets_progress["value"] = 0  # Reset the progress bar to zero
-#     freebets_progress["maximum"] = len(data) - 1  # Set the maximum value for the progress bar
-
-#     # Insert data into the Treeview for the specified columns
-#     for i, row in enumerate(data[1:], start=1):  # Skip the first row (header)
-#         if row[4] and not row[8]:  # Check if column I (index 8) is empty
-#             main_item = tree.insert("", "end", values=[row[1], row[4], row[5], row[6], row[7]])
-
-#             # Add columns 2 and 3 as children for the main row
-#             tree.insert(main_item, "end", values=["", row[2], [row[3]]])  # Child for column 2
-
-#         # Update the progress bar
-#         freebets_progress["value"] = i
-#         tree.update_idletasks()  # Update the UI
-
-
 
 # MAIN FUNCTION TO GET FILES
 def bet_check_thread(num_recent_files):
@@ -395,7 +134,183 @@ def bet_check_thread(num_recent_files):
     check_bet_runs()
     get_bets_with_risk_category()
 
+### GET FILES FROM FOLDER
+def get_files():
+    try:
+        files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
+        
+        # Sort files by creation date in descending order
+        files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
 
+        return files
+    except FileNotFoundError:
+        error_message = f"Error: Could not find files in folder: {BET_FOLDER_PATH}. Please check the folder path in settings."
+        print(error_message)
+        messagebox.showerror("Error", error_message)
+        return []
+    except Exception as e:
+        error_message = f"An error occurred: {e}"
+        print(error_message)
+        messagebox.showerror("Error", error_message)
+        return []
+
+def get_courses():
+    # Load the credentials from the JSON file
+    with open('src/creds.json') as f:
+        creds = json.load(f)
+
+    # Get today's date
+    today = date.today()
+
+    url = "https://horse-racing.p.rapidapi.com/racecards"
+
+    querystring = {"date": today.strftime('%Y-%m-%d')}
+
+    headers = {
+        "X-RapidAPI-Key": creds['rapidapi_key'],
+        "X-RapidAPI-Host": "horse-racing.p.rapidapi.com"
+    }
+
+    response = requests.get(url, headers=headers, params=querystring)
+
+    data = response.json()
+
+    print("API response:", data)
+
+    # Check if the response is a list
+    if not isinstance(data, list):
+        print("Error: The response from the API is not a list.", data)
+        return
+
+    # Get a list of unique courses
+    courses = set()
+    for race in data:
+        try:
+            courses.add(race['course'])
+        except TypeError:
+            print("Error: The 'race' object is not a dictionary.")
+            return []
+
+    # Convert the set to a list
+    courses = list(courses)
+
+    print("Courses:", courses)
+
+    # Try to load the existing data from the file
+    try:
+        with open('update_times.json', 'r') as f:
+            update_data = json.load(f)
+    except FileNotFoundError:
+        # If the file doesn't exist, create it with the initial data
+        update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
+        with open('update_times.json', 'w') as f:
+            json.dump(update_data, f)
+
+    # Check if the date in the file matches today's date
+    if update_data['date'] != today.strftime('%Y-%m-%d'):
+        # If not, update the file with the new date and courses
+        update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in courses}}
+        with open('update_times.json', 'w') as f:
+            json.dump(update_data, f)
+
+    return courses
+
+
+def display_courses():
+    for widget in bulletin_frame.winfo_children():
+        widget.destroy()
+    # Get today's date
+    today = date.today()
+
+    print("Displaying courses for", today.strftime('%Y-%m-%d'))
+
+    # Load the existing data from the file
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+
+    print("Data:", data)
+
+    # Get the courses from the data
+    courses = list(data['courses'].keys())
+
+    print("Courses:", courses)
+
+    # Display the courses
+    for i, course in enumerate(courses):
+        # Create a label for the course
+        course_label = ttk.Label(bulletin_frame, text=course)
+        course_label.grid(row=i, column=0, padx=10, pady=2, sticky="w")  # Add padding
+
+        # Create a button to remove the course
+        remove_button = ttk.Button(bulletin_frame, text="X", command=lambda course=course: remove_course(course), width=2)
+        remove_button.grid(row=i, column=1, padx=5, pady=2)  # Add padding
+
+        # Create a button for the course
+        course_button = ttk.Button(bulletin_frame, text="✔", command=lambda course=course: update_course(course), width=2)
+        course_button.grid(row=i, column=2, padx=5, pady=2)  # Add padding
+
+        # Create a label for the last updated time
+        if course in data['courses'] and data['courses'][course]:
+            last_updated_time = data['courses'][course].split(' ')[0]
+            last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+        else:
+            # Handle the case where 'data['courses'][course]' is an empty string
+            last_updated = datetime.now().time()
+
+        # Get the current time
+        now = datetime.now().time()
+
+        # Calculate the time difference in minutes
+        time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+
+        # Set the color based on the time difference
+        if 20 <= time_diff < 30:
+            color = 'Orange'
+        elif time_diff >= 30:
+            color = 'red'
+        else:
+            color = 'black'
+
+        # Set the text of the label based on the last updated time
+        if course in data['courses'] and data['courses'][course]:
+            time_text = data['courses'][course]
+        else:
+            time_text = "Not updated"
+
+        time_label = ttk.Label(bulletin_frame, text=time_text, foreground=color)
+        time_label.grid(row=i, column=3, padx=5, pady=2, sticky="w")  # Add padding
+
+
+def remove_course(course):
+    # Load the existing data from the file
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+
+    # Remove the course from the data
+    if course in data['courses']:
+        del data['courses'][course]
+
+    # Write the updated data back to the file
+    with open('update_times.json', 'w') as f:
+        json.dump(data, f)
+
+    # Refresh the display
+    display_courses()
+
+def update_course(course):
+    # Load the existing data from the file
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+
+    # Update the course in the data
+    data['courses'][course] = datetime.now().strftime('%H:%M')
+
+    # Write the updated data back to the file
+    with open('update_times.json', 'w') as f:
+        json.dump(data, f)
+
+    # Refresh the display
+    display_courses()
 
 ### PARSE BET INFORMATION FROM RAW BET TEXT
 def parse_bet_details(bet_text):
@@ -460,8 +375,6 @@ def parse_bet_details(bet_text):
     else:
         return None, None, None, None, None, None, None, None, None
 
-
-
 ### PARSE KNOCKBACK INFORMATION FROM WAGERALERT
 def parse_wageralert_details(content):
     # Initialize variables to store extracted information
@@ -497,8 +410,6 @@ def parse_wageralert_details(content):
 
     return customer_ref, knockback_details, time
 
-
-
 ###  PARSE SMS BETS
 def parse_sms_details(bet_text):
     wager_number_pattern = r"Wager Number = (\d+)"
@@ -517,8 +428,6 @@ def parse_sms_details(bet_text):
     sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
 
     return wager_number, customer_reference, mobile_number, sms_wager_text
-
-
 
 ### ADD PARSED DATA TO SELECTION_BETS DICTIONARY
 def update_selection_bets(bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type):
@@ -542,8 +451,6 @@ def update_selection_bets(bet_no, parsed_selections, timestamp, customer_referen
         payment,
         bet_type
     ))
-
-
 
 ### CREATE REPORT ON DAILY ACTIVITY
 def create_daily_report():
@@ -756,8 +663,6 @@ def create_daily_report():
     report_ticket.insert('1.0', report_output)
     report_ticket.config(state="disabled")
 
-
-
 ### CREATE CLIENT REPORT ON DAILY ACTIVITY
 def create_client_report(customer_ref):
     # Get a list of all text files in the folder
@@ -891,8 +796,6 @@ def create_client_report(customer_ref):
     report_ticket.insert('1.0', report_output)
     report_ticket.config(state="disabled")    
 
-
-
 ### FUNCTION TO EXTRACT BETS PLACED BY RISK CLIENTS FROM DICTIONARY
 def get_bets_with_risk_category():
     risk_users_betting = set()
@@ -918,8 +821,6 @@ def get_bets_with_risk_category():
     bets_with_risk_text.delete('1.0', tk.END)
     bets_with_risk_text.insert('1.0', formatted_message)
     bets_with_risk_text.config(state="disabled")
-
-
 
 ### GET EP BETS, NOT BEING USED BUT MAY BE IN FUTURE
 def get_ep_bets():
@@ -949,8 +850,6 @@ def get_ep_bets():
     # ep_bets_text.delete('1.0', tk.END)
     # ep_bets_text.insert('1.0', formatted_message)
     # ep_bets_text.config(state="disabled")
-
-
 
 ### FUNCTION TO DISPLAY RUNS ON SELECTIONS
 def check_bet_runs():
@@ -987,7 +886,6 @@ def check_bet_runs():
 
     runs_text.config(state=tk.DISABLED)
 
-
 ### GET THE LIST OF USERS TO SEARCH
 def get_client_report_ref():
     global client_report_user
@@ -995,7 +893,6 @@ def get_client_report_ref():
     if client_report_user:
         client_report_user = client_report_user.upper()
         threading.Thread(target=create_client_report, args=(client_report_user,)).start()
-
 
 def factoring_sheet():
     tree.delete(*tree.get_children())
@@ -1007,7 +904,6 @@ def factoring_sheet():
     # Insert data into the Treeview for the specified columns
     for row in data[2:]:  # Start from the 4th row (index 3) in your spreadsheet
         tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
-
 
 def open_wizard():
     global user
@@ -1067,7 +963,6 @@ def open_wizard():
     submit_button = ttk.Button(wizard_window, text="Submit", command=handle_submit)
     submit_button.pack(padx=5, pady=5)
 
-
 def set_recent_bets():
     global DEFAULT_NUM_RECENT_FILES
     DEFAULT_NUM_RECENT_FILES = recent_bets_var.get()
@@ -1092,7 +987,6 @@ def get_feed_options():
     textbets_value = default_state_textbets.get()
     return risk_value, wageralert_value, textbets_value
 
-
 def user_login():
     global user
     while True:
@@ -1102,7 +996,6 @@ def user_login():
             break
         else:
             messagebox.showerror("Error", "Maximum of 2 characters.")
-
 
 def open_settings():
 
@@ -1164,8 +1057,11 @@ def open_settings():
     set_bet_folder_path_button = ttk.Button(options_frame, command=set_bet_folder_path, text="BWW Folder")
     set_bet_folder_path_button.place(x=30, y=320, width=100)
 
-    add_course_button = ttk.Button(options_frame, text="Add Course", command=add_course)
-    add_course_button.place(x=160, y=320, width=100)
+    # add_course_button = ttk.Button(options_frame, text="Add Course", command=add_course)
+    # add_course_button.place(x=160, y=320, width=100)
+
+    get_courses_button = ttk.Button(options_frame, text="Get Courses", command=get_courses)
+    get_courses_button.place(x=160, y=320, width=100)
 
     def save_and_close():
         refresh_display()
@@ -1201,7 +1097,6 @@ def copy_to_clipboard():
 ### MENU BAR * OPTIONS ITEMS
 def about():
     messagebox.showinfo("About", "Geoff Banks Bet Monitoring V5.0")
-
 
 def howTo():
     messagebox.showinfo("How to use", "Ask Sam")
@@ -1324,58 +1219,6 @@ if __name__ == "__main__":
     daily_refresh_button = ttk.Button(tab_2, text="Daily Report", command=run_create_daily_report)
     daily_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="e")
 
-    # tab_3 = ttk.Frame(notebook)
-    # notebook.add(tab_3, text="Daily Report")
-
-    # report_ticket = tk.Text(tab_3, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
-    # report_ticket.config(state='disabled')
-    # report_ticket.grid(row=0, column=0, sticky="nsew")
-
-    # progress = ttk.Progressbar(tab_3, mode="determinate", length=250)
-    # progress.grid(row=1, column=0, pady=(10, 20), sticky="w")
-
-    # refresh_button = ttk.Button(tab_3, text="Generate", command=create_daily_report)
-    # refresh_button.grid(row=1, column=0, pady=(0, 10), sticky="e")
-
-    # # Configure the row and column weights for the frame
-    # tab_3.grid_rowconfigure(0, weight=1)
-    # tab_3.grid_columnconfigure(0, weight=1)
-
-
-    # tab_4 = ttk.Frame(notebook)
-    # notebook.add(tab_4, text="Free Bets")
-
-    # # Create a Treeview widget in the window
-    # tree = ttk.Treeview(tab_4)
-
-    # columns = ["B", "E", "F", "G", "H"]
-    # headings = ["Date", "User", "Credit", "Next", "Time"]
-    # tree["columns"] = columns
-    # for col, heading in enumerate(headings):
-    #     tree.heading(columns[col], text=heading)
-    #     tree.column(columns[col], width=84, stretch=tk.NO)
-
-    # tree.column("B", width=75, stretch=tk.NO)
-    # tree.column("E", width=110, stretch=tk.NO)
-    # tree.column("F", width=50, stretch=tk.NO)
-    # tree.column("G", width=60, stretch=tk.NO)
-    # tree.column("H", width=45, stretch=tk.NO)
-
-    # tree.column("#0", width=10, stretch=tk.NO)
-    # tree.heading("#0", text="", anchor="w")
-
-    # tree.grid(row=0, column=0, sticky="nsew")
-
-    # freebets_progress = ttk.Progressbar(tab_4, mode="determinate", length=250)
-    # freebets_progress.grid(row=1, column=0, pady=(15, 20), sticky="w")
-
-    # refresh_freebets_button = ttk.Button(tab_4, text="Refresh", command=get_freebets)
-    # refresh_freebets_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
-
-    # tab_4.grid_rowconfigure(0, weight=1)
-    # tab_4.grid_columnconfigure(0, weight=1)
-
-
     tab_5 = ttk.Frame(notebook)
     notebook.add(tab_5, text="Factoring")
 
@@ -1436,9 +1279,7 @@ if __name__ == "__main__":
     password_result_label = tk.Label(root, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
     password_result_label.place(x=760, y=915)
 
-    courses = get_courses()
-    display_courses(courses)
-    run_factoring_sheet()
+    #get_courses()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
