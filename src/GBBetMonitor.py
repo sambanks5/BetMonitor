@@ -32,8 +32,8 @@ bet_info = {}
 password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
-BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "c:\TESTING"
+BET_FOLDER_PATH = "F:\BWW\Export"
 
 credentials_file = 'src\creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -298,19 +298,53 @@ def remove_course(course):
     display_courses()
 
 def update_course(course):
+    global user
+    # Check if user is empty
+    if not user:
+        user_login()
+
+    now = datetime.now()
+    time_string = now.strftime('%H:%M')
+
     # Load the existing data from the file
     with open('update_times.json', 'r') as f:
         data = json.load(f)
 
     # Update the course in the data
-    data['courses'][course] = datetime.now().strftime('%H:%M')
+    data['courses'][course] = f"{time_string} by {user}"
+
 
     # Write the updated data back to the file
     with open('update_times.json', 'w') as f:
         json.dump(data, f)
 
+    log_update(course, time_string, user)
+
+    print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
+
     # Refresh the display
     display_courses()
+
+def log_update(course, time, user):
+    now = datetime.now()
+    date_string = now.strftime('%d-%m-%Y')
+    log_file = f'update_log_{date_string}.txt'
+
+    if not os.path.exists(log_file):
+        with open(log_file, 'w') as f:
+            f.write('')
+
+    with open(log_file, 'r') as f:
+        data = f.read()
+
+    # Append the update details to the data
+    update = f"{time} - {user}\n"
+    data += f"\n{course}:\n{update}"
+
+    with open(log_file, 'w') as f:
+        f.write(data)
+
+        
 
 ### PARSE BET INFORMATION FROM RAW BET TEXT
 def parse_bet_details(bet_text):
@@ -1279,7 +1313,7 @@ if __name__ == "__main__":
     password_result_label = tk.Label(root, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
     password_result_label.place(x=760, y=915)
 
-    #get_courses()
+    get_courses()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
