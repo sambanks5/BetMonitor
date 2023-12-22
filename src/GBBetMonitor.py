@@ -20,6 +20,7 @@ from PIL import Image, ImageTk
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
 
+
 user = ""
 
 # Main dictionary containing Selections
@@ -33,9 +34,10 @@ password_result_label = None
 
 # Path to BWW Export folder containing raw bet texts
 #BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "/Users/sambanks/Documents/testing"
 
-credentials_file = 'src\creds.json'
+credentials_file = 'src/creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
 gc = gspread.authorize(credentials)
@@ -154,6 +156,7 @@ def get_files():
         messagebox.showerror("Error", error_message)
         return []
 
+### GET COURSES FROM API
 def get_courses():
     # Load the credentials from the JSON file
     with open('src/creds.json') as f:
@@ -215,7 +218,7 @@ def get_courses():
 
     return courses
 
-
+### DISPLAY THE COURSES
 def display_courses():
     for widget in bulletin_frame.winfo_children():
         widget.destroy()
@@ -280,7 +283,7 @@ def display_courses():
         time_label = ttk.Label(bulletin_frame, text=time_text, foreground=color)
         time_label.grid(row=i, column=3, padx=5, pady=2, sticky="w")  # Add padding
 
-
+### REMOVE COURSE FROM COURSES LIST
 def remove_course(course):
     # Load the existing data from the file
     with open('update_times.json', 'r') as f:
@@ -297,6 +300,7 @@ def remove_course(course):
     # Refresh the display
     display_courses()
 
+### HANDLE UPDATE OF COURSE
 def update_course(course):
     global user
     # Check if user is empty
@@ -325,26 +329,34 @@ def update_course(course):
     # Refresh the display
     display_courses()
 
+### LOG ALL COURSE UPDATES TO FILE
 def log_update(course, time, user):
     now = datetime.now()
     date_string = now.strftime('%d-%m-%Y')
-    log_file = f'update_log_{date_string}.txt'
+    log_file = f'logs/update_log_{date_string}.txt' 
 
-    if not os.path.exists(log_file):
-        with open(log_file, 'w') as f:
-            f.write('')
+    if os.path.exists(log_file):
+        with open(log_file, 'r') as f:
+            data = f.readlines()
+    else:
+        data = []
 
-    with open(log_file, 'r') as f:
-        data = f.read()
-
-    # Append the update details to the data
     update = f"{time} - {user}\n"
-    data += f"\n{course}:\n{update}"
+
+    course_index = None
+    for i, line in enumerate(data):
+        if line.strip() == course + ":":
+            course_index = i
+            break
+
+    if course_index is not None:
+        data.insert(course_index + 1, update)
+    else:
+        data.append(f"\n{course}:\n")
+        data.append(update)
 
     with open(log_file, 'w') as f:
-        f.write(data)
-
-        
+        f.writelines(data)
 
 ### PARSE BET INFORMATION FROM RAW BET TEXT
 def parse_bet_details(bet_text):
@@ -1147,22 +1159,26 @@ if __name__ == "__main__":
     ### WINDOW SETTINGS
     root = tk.Tk()
     root.title("GB Bet Monitor v5.0")
-    root.tk.call('source', 'src\\Forest-ttk-theme-master\\forest-light.tcl')
+    root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
     width=900
     height=975
-    root.configure(bg='#ffffff')
     screenwidth = root.winfo_screenwidth()
     screenheight = root.winfo_screenheight()
+    root.configure(bg='#ffffff')
     alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
     root.geometry(alignstr)
-    root.resizable(width=False, height=False)
+    root.minsize(width//2, height//2)  # Minimum size to half of the initial size
+    root.maxsize(screenwidth, screenheight)  # Maximum size to the screen size
+    root.resizable(True, True)  # Allow resizing in both directions
+
     ### IMPORT LOGO
-    logo_image = Image.open('src\\splash.ico')
+    logo_image = Image.open('src/splash.ico')
     logo_image.thumbnail((80, 80))
     company_logo = ImageTk.PhotoImage(logo_image)  
-    root.iconbitmap('src\\splash.ico')
+    root.iconbitmap('src/splash.ico')
+
 
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
@@ -1197,7 +1213,7 @@ if __name__ == "__main__":
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
-    feed_frame.place(x=395, y=10, width=495, height=630)
+    feed_frame.place(relx=0.44, rely=0.01, relwidth=0.55, relheight=0.64)
 
     feed_text = tk.Text(feed_frame, font=("Helvetica", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
     feed_text.config(state='disabled')
@@ -1210,7 +1226,7 @@ if __name__ == "__main__":
 
     ### RUNS ON SELECTIONS
     runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
-    runs_frame.place(x=10, y=10, width=370, height=510)
+    runs_frame.place(relx=0.01, rely=0.01, relwidth=0.41, relheight=0.52)
     runs_text=tk.Text(runs_frame, font=("Helvetica", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
     runs_text.config(state='disabled') 
     runs_text.pack(fill='both', expand=True)
@@ -1221,7 +1237,8 @@ if __name__ == "__main__":
     runs_text.configure(yscrollcommand=runs_scroll.set)
 
     notebook_frame = ttk.Frame(root)
-    notebook_frame.place(x=5, y=530, width=380, height=420)
+    notebook_frame.place(relx=0.01, rely=0.54, relwidth=0.42, relheight=0.43)
+
 
     notebook = ttk.Notebook(notebook_frame)
 
@@ -1287,33 +1304,33 @@ if __name__ == "__main__":
     factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
-    bulletin_frame = ttk.LabelFrame(root, style='Card', text="Race Updation", width=120, height=205)
-    bulletin_frame.place(x=395, y=650, width=300, height=295)
+    bulletin_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
+    bulletin_frame.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
 
     # ### LOGO DISPLAY
     logo_label = tk.Label(root, image=company_logo, bd=0, cursor="hand2")
-    logo_label.place(x=760, y=670)
+    logo_label.place(relx=0.84, rely=0.69)
     logo_label.bind("<Button-1>", lambda e: refresh_display())
 
     ### TITLE TEXT
     title_label=tk.Label(root, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
-    title_label.place(x=737,y=750)
+    title_label.place(relx=0.82, rely=0.77)
 
     # Create the 'settings' button
     settings_button = ttk.Button(root, text="Settings", command=open_settings)
-    settings_button.place(x=755,y=810)
+    settings_button.place(relx=0.84, rely=0.83)
 
     separator = ttk.Separator(root, orient='horizontal')
-    separator.place(x=720, y=860, width=160)
+    separator.place(relx=0.8, rely=0.88, relwidth=0.18)
 
     ### PASSWORD GENERATOR
     copy_button = ttk.Button(root, command=copy_to_clipboard, text="Generate Password")
-    copy_button.place(x=730, y=880, width=140)
+    copy_button.place(relx=0.81, rely=0.9, relwidth=0.16)
 
     password_result_label = tk.Label(root, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
-    password_result_label.place(x=760, y=915)
+    password_result_label.place(relx=0.84, rely=0.94)
 
-    get_courses()
+    #get_courses()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
