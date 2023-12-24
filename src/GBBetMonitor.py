@@ -20,8 +20,17 @@ from PIL import Image, ImageTk
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
 
-
+# STAFF
 user = ""
+USER_NAMES = {
+    'GB': 'George',
+    'JP': 'Jon',
+    'DF': 'Dave',
+    'SB': 'Sam',
+    'JJ': 'Joji',
+    'AE': 'Arch',
+    'EK': 'Ed',
+}
 
 # Main dictionary containing Selections
 selection_bets = {}
@@ -29,13 +38,10 @@ selection_bets = {}
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
 
-# Variable to hold generated temporary password 
-password_result_label = None
-
 # Path to BWW Export folder containing raw bet texts
 #BET_FOLDER_PATH = "c:\TESTING"
-#BET_FOLDER_PATH = "F:\BWW\Export"
-BET_FOLDER_PATH = "/Users/sambanks/Documents/testing"
+BET_FOLDER_PATH = "F:\BWW\Export"
+#BET_FOLDER_PATH = "/Users/sambanks/Documents/testing"
 
 credentials_file = 'src/creds.json'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -56,7 +62,7 @@ def refresh_display():
     start_bet_check_thread(num_recent_files)
     display_courses()
     run_factoring_sheet()
-    print("Refreshed")
+    print("Refreshed Bets")
 
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
@@ -161,24 +167,16 @@ def get_courses():
     # Load the credentials from the JSON file
     with open('src/creds.json') as f:
         creds = json.load(f)
-
     # Get today's date
     today = date.today()
-
     url = "https://horse-racing.p.rapidapi.com/racecards"
-
     querystring = {"date": today.strftime('%Y-%m-%d')}
-
     headers = {
         "X-RapidAPI-Key": creds['rapidapi_key'],
         "X-RapidAPI-Host": "horse-racing.p.rapidapi.com"
     }
-
     response = requests.get(url, headers=headers, params=querystring)
-
     data = response.json()
-
-    print("API response:", data)
 
     # Check if the response is a list
     if not isinstance(data, list):
@@ -196,9 +194,7 @@ def get_courses():
 
     # Convert the set to a list
     courses = list(courses)
-
     print("Courses:", courses)
-
     # Try to load the existing data from the file
     try:
         with open('update_times.json', 'r') as f:
@@ -218,6 +214,18 @@ def get_courses():
 
     return courses
 
+def reset_update_times():
+    # Delete the file if it exists
+    if os.path.exists('update_times.json'):
+        os.remove('update_times.json')
+
+    # Create the file with the initial data
+    update_data = {'date': '', 'courses': {}}
+    with open('update_times.json', 'w') as f:
+        json.dump(update_data, f)
+    
+    display_courses()
+
 ### DISPLAY THE COURSES
 def display_courses():
     for widget in bulletin_frame.winfo_children():
@@ -231,12 +239,12 @@ def display_courses():
     with open('update_times.json', 'r') as f:
         data = json.load(f)
 
-    print("Data:", data)
+    #print("Data:", data)
 
     # Get the courses from the data
     courses = list(data['courses'].keys())
 
-    print("Courses:", courses)
+    #print("Courses:", courses)
 
     # Display the courses
     for i, course in enumerate(courses):
@@ -324,7 +332,7 @@ def update_course(course):
 
     log_update(course, time_string, user)
 
-    print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
+    #print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
 
     # Refresh the display
     display_courses()
@@ -333,7 +341,7 @@ def update_course(course):
 def log_update(course, time, user):
     now = datetime.now()
     date_string = now.strftime('%d-%m-%Y')
-    log_file = f'logs/update_log_{date_string}.txt' 
+    log_file = f'logs/update_log_{date_string}.txt'
 
     if os.path.exists(log_file):
         with open(log_file, 'r') as f:
@@ -1035,13 +1043,22 @@ def get_feed_options():
 
 def user_login():
     global user
+    global full_name
     while True:
         user = simpledialog.askstring("Input", "Please enter your initials:")
         if user and len(user) <= 2:
             user = user.upper()
-            break
+            if user in USER_NAMES:
+                full_name = USER_NAMES[user]
+                break
+            else:
+                messagebox.showerror("Error", "Could not find staff member! Please try again.")
         else:
             messagebox.showerror("Error", "Maximum of 2 characters.")
+
+    # Update the UI to display the logged in user's full name
+    login_label.config(text=f'Logged in as {full_name}')
+
 
 def open_settings():
 
@@ -1113,9 +1130,8 @@ def open_settings():
         refresh_display()
         settings_window.destroy()
 
-    save_and_close_button = ttk.Button(options_frame, text="Save and Close", command=save_and_close)
-    save_and_close_button.place(x=70, y=360, width=150)
-
+    reset_courses_button = ttk.Button(options_frame, text="Reset Courses", command=reset_update_times)
+    reset_courses_button.place(x=70, y=360, width=150)
 
 ### PASSWORD GENERATOR FUNCTIONS
 def generate_random_string():
@@ -1139,10 +1155,9 @@ def copy_to_clipboard():
     password_result_label.config(text=f"{generated_string}")
     copy_button.config(state=tk.NORMAL)
 
-
 ### MENU BAR * OPTIONS ITEMS
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring V5.0")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v6.0")
 
 def howTo():
     messagebox.showinfo("How to use", "Ask Sam")
@@ -1153,17 +1168,16 @@ def run_factoring_sheet():
 def run_create_daily_report():
     threading.Thread(target=create_daily_report).start()
 
-
 if __name__ == "__main__":
 
     ### WINDOW SETTINGS
     root = tk.Tk()
-    root.title("GB Bet Monitor v5.0")
+    root.title("GB Bet Monitor v6.0")
     root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
     width=900
-    height=975
+    height=970
     screenwidth = root.winfo_screenwidth()
     screenheight = root.winfo_screenheight()
     root.configure(bg='#ffffff')
@@ -1175,7 +1189,7 @@ if __name__ == "__main__":
 
     ### IMPORT LOGO
     logo_image = Image.open('src/splash.ico')
-    logo_image.thumbnail((80, 80))
+    logo_image.thumbnail((70, 70))
     company_logo = ImageTk.PhotoImage(logo_image)  
     root.iconbitmap('src/splash.ico')
 
@@ -1307,30 +1321,37 @@ if __name__ == "__main__":
     bulletin_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
     bulletin_frame.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
 
+    settings_frame = ttk.LabelFrame(root, style='Card', text="Settings")
+    settings_frame.place(relx=0.785, rely=0.67, relwidth=0.2, relheight=0.3)
+
     # ### LOGO DISPLAY
-    logo_label = tk.Label(root, image=company_logo, bd=0, cursor="hand2")
-    logo_label.place(relx=0.84, rely=0.69)
+    logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
+    logo_label.place(relx=0.09, rely=0.02)
     logo_label.bind("<Button-1>", lambda e: refresh_display())
 
-    ### TITLE TEXT
-    title_label=tk.Label(root, font=("Helvetica", 14), wraplength=140, text="Geoff Banks Bet Monitoring", fg="#000000", bg="#ffffff")
-    title_label.place(relx=0.82, rely=0.77)
-
     # Create the 'settings' button
-    settings_button = ttk.Button(root, text="Settings", command=open_settings)
-    settings_button.place(relx=0.84, rely=0.83)
+    settings_button = ttk.Button(settings_frame, text="⚙", command=open_settings, width=3)
+    settings_button.place(relx=0.6, rely=0.1)
 
-    separator = ttk.Separator(root, orient='horizontal')
-    separator.place(relx=0.8, rely=0.88, relwidth=0.18)
+    separator = ttk.Separator(settings_frame, orient='horizontal')
+    separator.place(relx=0.02, rely=0.35, relwidth=0.95)
 
     ### PASSWORD GENERATOR
-    copy_button = ttk.Button(root, command=copy_to_clipboard, text="Generate Password")
-    copy_button.place(relx=0.81, rely=0.9, relwidth=0.16)
+    copy_button = ttk.Button(settings_frame, command=copy_to_clipboard, text="Generate PW", state=tk.NORMAL)
+    copy_button.place(relx=0.2, rely=0.4)
 
-    password_result_label = tk.Label(root, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
-    password_result_label.place(relx=0.84, rely=0.94)
+    password_result_label = tk.Label(settings_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
+    password_result_label.place(relx=0.26, rely=0.55)
 
-    #get_courses()
+    separator = ttk.Separator(settings_frame, orient='horizontal')
+    separator.place(relx=0.02, rely=0.7, relwidth=0.95)
+
+    # Create a label to display the logged in user's full name
+    login_label = ttk.Label(settings_frame, text='')
+    login_label.place(relx=0.2, rely=0.8)
+
+    get_courses()
+    user_login()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
