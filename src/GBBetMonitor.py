@@ -1059,11 +1059,12 @@ def user_login():
     # Update the UI to display the logged in user's full name
     login_label.config(text=f'Logged in as {full_name}')
 
-
 def open_settings():
 
     settings_window = tk.Toplevel(root)
     settings_window.title("Options")
+    settings_window.iconbitmap('src/splash.ico')
+
 
     # Set window size to match frame size
     settings_window.geometry("310x430")  # Width x Height
@@ -1192,7 +1193,6 @@ if __name__ == "__main__":
     logo_image.thumbnail((70, 70))
     company_logo = ImageTk.PhotoImage(logo_image)  
     root.iconbitmap('src/splash.ico')
-
 
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
