@@ -39,8 +39,8 @@ selection_bets = {}
 bet_info = {}  
 
 # Path to BWW Export folder containing raw bet texts
-#BET_FOLDER_PATH = "c:\TESTING"
-BET_FOLDER_PATH = "F:\BWW\Export"
+BET_FOLDER_PATH = "c:\TESTING"
+#BET_FOLDER_PATH = "F:\BWW\Export"
 #BET_FOLDER_PATH = "/Users/sambanks/Documents/testing"
 
 credentials_file = 'src/creds.json'
@@ -93,9 +93,7 @@ def bet_check_thread(num_recent_files):
     recent_files = files[:num_recent_files]
 
     feed_content = ""
-
-    # Define the separator
-    separator = '\n\n---------------------------------------------------------------------------------------\n\n'
+    separator = '\n\n\n\n'
 
     # Get the feed options
     risk_only, show_wageralert, show_sms = get_feed_options()
@@ -113,14 +111,38 @@ def bet_check_thread(num_recent_files):
             is_bet = 'website' in bet_text_lower
             is_wageralert = 'knockback' in bet_text_lower
 
-            # Process the bet based on its type
             if is_wageralert and show_wageralert:
-                customer_ref, knockback_details, time = parse_wageralert_details(bet_text)
+                customer_ref, knockback_id, knockback_details, time = parse_wageralert_details(bet_text)
                 formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-                feed_content += f"{time} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+                feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+
+                # Create a dictionary with the bet information
+                bet_info = {
+                    'id': knockback_id,
+                    'type': 'WAGER KNOCKBACK',
+                    'customer_ref': customer_ref,
+                    'details': knockback_details,
+                    'time': time
+                }
+
+                # Call the create_database function
+                create_database(bet_info)
+
             elif is_sms and show_sms:
                 wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
                 feed_content += f"{customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
+
+                # Create a dictionary with the bet information
+                bet_info = {
+                    'id': wager_number,
+                    'type': 'SMS WAGER',
+                    'customer_ref': customer_reference,
+                    'details': sms_wager_text
+                }
+
+                # Call the create_database function
+                create_database(bet_info)
+
             elif is_bet:
                 bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
                 if risk_only and customer_risk_category and customer_risk_category != '-':
@@ -129,7 +151,25 @@ def bet_check_thread(num_recent_files):
                 elif not risk_only:
                     selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in parsed_selections])
                     feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
-                
+
+                # Create a dictionary with the bet information
+                bet_info = {
+                    'id': bet_no,
+                    'type': 'BET',
+                    'customer_ref': customer_reference,
+                    'details': {
+                        'selections': parsed_selections,
+                        'timestamp': timestamp,
+                        'risk_category': customer_risk_category,
+                        'bet_details': bet_details,
+                        'unit_stake': unit_stake,
+                        'payment': payment,
+                        'bet_type': bet_type
+                    }
+                }
+
+                # Call the create_database function
+                create_database(bet_info)
                 update_selection_bets(bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type)
     
     # Update the feed label with the latest bet or wageralert information
@@ -142,11 +182,28 @@ def bet_check_thread(num_recent_files):
     check_bet_runs()
     get_bets_with_risk_category()
 
+# Function to create a database in the form of a JSON file
+def create_database(bet_info, json_file='bet_database.json'):
+    # Load the existing database
+    try:
+        with open(json_file, 'r') as file:
+            database = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        database = []
+
+    # Check if the bet ID already exists in the database
+    if not any(bet['id'] == bet_info['id'] for bet in database):
+        # If not, append the new bet information
+        database.append(bet_info)
+
+        # Write the updated database back to the JSON file
+        with open(json_file, 'w') as file:
+            json.dump(database, file, indent=4)
+
 ### GET FILES FROM FOLDER
 def get_files():
     try:
         files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-        
         # Sort files by creation date in descending order
         files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
 
@@ -191,6 +248,9 @@ def get_courses():
         except TypeError:
             print("Error: The 'race' object is not a dictionary.")
             return []
+
+    courses.add("SIS Greyhounds")
+    courses.add("TRP Greyhounds")
 
     # Convert the set to a list
     courses = list(courses)
@@ -245,20 +305,22 @@ def display_courses():
     courses = list(data['courses'].keys())
 
     #print("Courses:", courses)
-
+    add_button = ttk.Button(bulletin_frame, text="+", command=add_course, width=2)
+    add_button.grid(row=len(courses), column=1, padx=2, pady=2)  # Add padding
+    # ...
     # Display the courses
     for i, course in enumerate(courses):
         # Create a label for the course
         course_label = ttk.Label(bulletin_frame, text=course)
-        course_label.grid(row=i, column=0, padx=10, pady=2, sticky="w")  # Add padding
+        course_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")  # Add padding
 
         # Create a button to remove the course
         remove_button = ttk.Button(bulletin_frame, text="X", command=lambda course=course: remove_course(course), width=2)
-        remove_button.grid(row=i, column=1, padx=5, pady=2)  # Add padding
+        remove_button.grid(row=i, column=1, padx=3, pady=2)  # Add padding
 
         # Create a button for the course
         course_button = ttk.Button(bulletin_frame, text="✔", command=lambda course=course: update_course(course), width=2)
-        course_button.grid(row=i, column=2, padx=5, pady=2)  # Add padding
+        course_button.grid(row=i, column=2, padx=3, pady=2)  # Add padding
 
         # Create a label for the last updated time
         if course in data['courses'] and data['courses'][course]:
@@ -275,12 +337,20 @@ def display_courses():
         time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
 
         # Set the color based on the time difference
-        if 20 <= time_diff < 30:
-            color = 'Orange'
-        elif time_diff >= 30:
-            color = 'red'
+        if course in ["SIS Greyhounds", "TRP Greyhounds"]:
+            if 60 <= time_diff < 90:
+                color = 'Orange'
+            elif time_diff >= 90:
+                color = 'red'
+            else:
+                color = 'black'
         else:
-            color = 'black'
+            if 20 <= time_diff < 30:
+                color = 'Orange'
+            elif time_diff >= 30:
+                color = 'red'
+            else:
+                color = 'black'
 
         # Set the text of the label based on the last updated time
         if course in data['courses'] and data['courses'][course]:
@@ -290,6 +360,25 @@ def display_courses():
 
         time_label = ttk.Label(bulletin_frame, text=time_text, foreground=color)
         time_label.grid(row=i, column=3, padx=5, pady=2, sticky="w")  # Add padding
+
+# Handle adding a course
+def add_course():
+    # Prompt the user for a course name
+    course_name = simpledialog.askstring("Add Course", "Enter the course name:")
+    if course_name:
+        # Load the existing data from the file
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+
+        # Add the course to the data
+        data['courses'][course_name] = ""
+
+        # Write the updated data back to the file
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+        # Refresh the display
+        display_courses()
 
 ### REMOVE COURSE FROM COURSES LIST
 def remove_course(course):
@@ -433,12 +522,13 @@ def parse_bet_details(bet_text):
 def parse_wageralert_details(content):
     # Initialize variables to store extracted information
     customer_ref = None
+    knockback_id = None
     knockback_details = {}
     time = None
 
     # Regular expressions to extract relevant information
     customer_ref_pattern = r'Customer Ref: (\w+)'
-    details_pattern = r'Knockback Details:([\s\S]*?)\n\nCustomer services reference no:'
+    details_pattern = r'Knockback Details: (\d+)([\s\S]*?)\n\nCustomer services reference no:'
     time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
 
     # Extract Customer Ref
@@ -449,7 +539,8 @@ def parse_wageralert_details(content):
     # Extract Knockback Details
     details_match = re.search(details_pattern, content)
     if details_match:
-        details_content = details_match.group(1).strip()
+        knockback_id = details_match.group(1)
+        details_content = details_match.group(2).strip()
         # Split details content by lines
         details_lines = details_content.split('\n')
         for line in details_lines:
@@ -462,7 +553,7 @@ def parse_wageralert_details(content):
     if time_match:
         time = time_match.group(1)
 
-    return customer_ref, knockback_details, time
+    return customer_ref, knockback_id, knockback_details, time
 
 ###  PARSE SMS BETS
 def parse_sms_details(bet_text):
@@ -536,6 +627,9 @@ def create_daily_report():
     timestamps = []
     hour_ranges = {}
 
+    course_updates = {}
+    staff_updates = {}
+    
     # Wageralert Report
     total_wageralerts = 0
     price_change = 0
@@ -628,6 +722,53 @@ def create_daily_report():
                 sms_clients.add(sms_customer_reference)
                 total_sms += 1
 
+    # Get the list of all files in the 'logs' directory
+    log_files = os.listdir('logs')
+
+    # Sort the files by modification time
+    log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
+
+    # Get the latest file
+    latest_file = log_files[-1]
+    print("Latest file:", latest_file)
+
+    # Open and read the latest log file
+    with open('logs/' + latest_file, 'r') as file:
+        lines = file.readlines()
+    print(lines)
+    # Process each line
+    for line in lines:
+        # Skip empty lines
+        if line.strip() == '':
+            continue
+
+        # Split line by '-'
+        parts = line.strip().split(' - ')
+
+        # Handle lines with a course name followed by a colon
+        if len(parts) == 1 and parts[0].endswith(':'):
+            course = parts[0].replace(':', '')
+            continue
+
+        # Handle lines with time, course, and staff
+        if len(parts) == 2:
+            time, staff = parts
+
+            # Increment course count
+            if course in course_updates:
+                course_updates[course] += 1
+            else:
+                course_updates[course] = 1
+
+            # Increment staff count
+            if staff in staff_updates:
+                staff_updates[staff] += 1
+            else:
+                staff_updates[staff] = 1
+
+    print("Course updates:", course_updates)
+    print("Staff updates:", staff_updates)
+
     top_spenders = Counter(customer_payments).most_common(5)
     
     client_bet_counter = Counter(active_clients)
@@ -665,6 +806,15 @@ def create_daily_report():
     report_output += "\nMOST BETS:\n"
     for rank, (client, count) in enumerate(top_client_bets, start=1):
         report_output += f"{rank}. {client} - Bets: {count}\n"
+
+    # Add counts to report_output
+    report_output += "\nCOURSE UPDATES:\n"
+    for course, count in course_updates.items():
+        report_output += f"{course}: {count} updates\n"
+
+    report_output += "\nSTAFF UPDATES:\n"
+    for staff, count in staff_updates.items():
+        report_output += f"{staff}: {count} updates\n"
 
     report_output += f"\nBETS PER HOUR:\n"
 
@@ -1156,6 +1306,9 @@ def copy_to_clipboard():
     password_result_label.config(text=f"{generated_string}")
     copy_button.config(state=tk.NORMAL)
 
+def on_mousewheel(event):
+    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
 ### MENU BAR * OPTIONS ITEMS
 def about():
     messagebox.showinfo("About", "Geoff Banks Bet Monitoring v6.0")
@@ -1318,8 +1471,26 @@ if __name__ == "__main__":
     factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
-    bulletin_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
-    bulletin_frame.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
+    # Create a canvas and a vertical scrollbar
+    canvas = tk.Canvas(root)
+    scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
+
+    # Configure the canvas
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.bind("<MouseWheel>", on_mousewheel)
+    # Create the bulletin_frame inside the canvas
+    bulletin_frame = ttk.LabelFrame(canvas, style='Card', text="Race Updation")
+
+    # Add the bulletin_frame to the canvas
+    canvas.create_window((0, 0), window=bulletin_frame, anchor="nw")
+
+    # Update the scrollregion of the canvas when the size of the bulletin_frame changes
+    bulletin_frame.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # Place the canvas and the scrollbar
+    canvas.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
+    scrollbar.place(relx=0.76, rely=0.67, relwidth=0.02, relheight=0.3)
 
     settings_frame = ttk.LabelFrame(root, style='Card', text="Settings")
     settings_frame.place(relx=0.785, rely=0.67, relwidth=0.2, relheight=0.3)
@@ -1350,8 +1521,8 @@ if __name__ == "__main__":
     login_label = ttk.Label(settings_frame, text='')
     login_label.place(relx=0.2, rely=0.8)
 
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
