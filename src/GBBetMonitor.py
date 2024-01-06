@@ -79,15 +79,44 @@ def get_creation_date(file_path):
     return os.path.getctime(file_path)
 
 ### GET FILES FROM FOLDER
-def get_files():
-    try:
-        files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
-        # Sort files by creation date in descending order
-        files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
+# def get_files():
+#     try:
+#         files = [f for f in os.listdir(BET_FOLDER_PATH) if f.endswith('.bww')]
+#         # Sort files by creation date in descending order
+#         files.sort(key=lambda x: get_creation_date(os.path.join(BET_FOLDER_PATH, x)), reverse=True)
 
-        return files
+#         return files
+#     except FileNotFoundError:
+#         error_message = f"Error: Could not find files in folder: {BET_FOLDER_PATH}. Please check the folder path in settings."
+#         print(error_message)
+#         messagebox.showerror("Error", error_message)
+#         return []
+#     except Exception as e:
+#         error_message = f"An error occurred: {e}"
+#         print(error_message)
+#         messagebox.showerror("Error", error_message)
+#         return []
+
+def get_database():
+    # Generate the JSON file path based on the current date
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    json_file_path = f"database/{date_str}-wager_database.json"
+
+    try:
+        with open(json_file_path, 'r') as json_file:
+            data = json.load(json_file)
+        
+        # Reverse the order of the data to get newest bets first
+        data.reverse()
+
+        return data
     except FileNotFoundError:
-        error_message = f"Error: Could not find files in folder: {BET_FOLDER_PATH}. Please check the folder path in settings."
+        error_message = f"Error: Could not find file: {json_file_path}. Please check the file path."
+        print(error_message)
+        messagebox.showerror("Error", error_message)
+        return []
+    except json.JSONDecodeError:
+        error_message = f"Error: Could not decode JSON from file: {json_file_path}. Please check the file content."
         print(error_message)
         messagebox.showerror("Error", error_message)
         return []
@@ -96,6 +125,7 @@ def get_files():
         print(error_message)
         messagebox.showerror("Error", error_message)
         return []
+
 
 ### BET CHECK THREAD FUNCTIONS
 def start_bet_check_thread(num_recent_files):

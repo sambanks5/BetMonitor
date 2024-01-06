@@ -4,37 +4,52 @@ import json
 import time
 import threading
 import tkinter as tk
+from tkinter import ttk, filedialog
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from tkinter import scrolledtext
 
+path = 'F:\BWW\Export'
+
 class Application(tk.Tk):
     def __init__(self):
         super().__init__()
-
-        # Set the window icon
+        self.title('Database Updater')
+        
         self.iconbitmap('src/splash.ico')
+        self.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
+        ttk.Style().theme_use('forest-light')
+        style = ttk.Style(self)
+        style.configure('TButton', padding=(5, 5))
+
 
         # Create a ScrolledText widget
         self.text_area = scrolledtext.ScrolledText(self, undo=True)
-        self.text_area['font'] = ('consolas', '12')
-        self.text_area.pack(expand=True, fill='both')
+        self.text_area['font'] = ('helvetica', '12')
+        self.text_area.grid(row=0, column=0, columnspan=3, sticky='nsew')
 
-        # Create a button to process existing bets
-        self.process_button = tk.Button(self, text="Process Existing Bets", command=self.process_bets, padx=10, pady=5)
-        self.process_button.pack()
+        self.process_button = ttk.Button(self, text="Process Existing", command=self.process_bets, style='TButton', width=15)
+        self.process_button.grid(row=1, column=0, padx=5, pady=5)
 
-        # Create a button to stop the main loop
-        self.stop_button = tk.Button(self, text="Stop", command=self.stop, padx=10, pady=5)
-        self.stop_button.pack()
+        self.set_path_button = ttk.Button(self, text="Set Bet Path", command=self.set_bet_path, style='TButton', width=15)
+        self.set_path_button.grid(row=1, column=1, padx=5, pady=5)
+
+        self.stop_button = ttk.Button(self, text="Stop", command=self.stop, style='TButton', width=15)
+        self.stop_button.grid(row=1, column=2, padx=5, pady=5)
 
         # Bind the <Destroy> event
         self.bind('<Destroy>', self.on_destroy)
+    
+    def set_bet_path(self):
+        global path
+        new_folder_path = filedialog.askdirectory()
+        if new_folder_path:
+            path = new_folder_path
 
     def process_bets(self):
         # Call the process_existing_bets function
-        process_existing_bets('c:\TESTING', self)
+        process_existing_bets(path, self)
 
     def stop(self):
         # Signal the main loop to stop
@@ -58,9 +73,15 @@ class FileHandler(FileSystemEventHandler):
         if not os.path.isdir(event.src_path):
             process_file(event.src_path)
 
+def set_bet_folder_path():
+    global path
+    new_folder_path = filedialog.askdirectory()
+    if new_folder_path:
+        path = new_folder_path
+
 def process_file(file_path):
     # Load the existing database
-    database = load_database()
+    database = load_database(app)
 
     # Process the file and extract bet data
     bet_data = parse_file(file_path, app)
@@ -71,7 +92,7 @@ def process_file(file_path):
     # Save the updated database
     save_database(database)
 
-def load_database():
+def load_database(app):
     # Get the current date
     date = datetime.now().strftime('%Y-%m-%d')
 
@@ -80,8 +101,10 @@ def load_database():
 
     try:
         with open(filename, 'r') as f:
+            # app.log_message('Loading database for ' + date) 
             return json.load(f)
     except FileNotFoundError:
+        app.log_message('No database found. Creating a new one for ' + date)
         return {}
 
 def save_database(database):
@@ -100,7 +123,7 @@ def add_bet(database, bet, app):
         database[bet['id']] = bet
     else:
         print('Bet already in database ' + bet['id'])
-        app.log_message(f'Bet already in database {bet["id"]}')
+        app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}')
 
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
@@ -114,15 +137,16 @@ def parse_file(file_path, app):
 
         if is_wageralert:
             customer_ref, knockback_id, knockback_details, time = parse_wageralert_details(bet_text)
+            unique_knockback_id = f"{knockback_id}-{time}"
             bet_info = {
-                'id': knockback_id,
+                'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
                 'customer_ref': customer_ref,
                 'details': knockback_details,
                 'time': time
             }
-            print('Bet Processed ' + knockback_id)
-            app.log_message(f'Knockback Processed {knockback_id}, {customer_ref}, {time}')
+            print('Bet Processed ' + unique_knockback_id)
+            app.log_message(f'Knockback Processed {unique_knockback_id}, {customer_ref}, {time}\n')
             return bet_info
 
         elif is_sms:
@@ -134,7 +158,7 @@ def parse_file(file_path, app):
                 'details': sms_wager_text
             }
             print('Bet Processed ' + wager_number)
-            app.log_message(f'SMS Processed {wager_number}, {customer_reference}')
+            app.log_message(f'SMS Processed {wager_number}, {customer_reference}\n')
             return bet_info
 
         elif is_bet:
@@ -154,21 +178,21 @@ def parse_file(file_path, app):
                 }
             }
             print('Bet Processed ' + bet_no)
-            app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
+            app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}\n')
             return bet_info
 
     return {}
 
 def process_existing_bets(directory, app):
     # Load the existing database
-    database = load_database()
+    database = load_database(app)
 
     # Get a list of all files in the directory
     files = os.listdir(directory)
 
     # Filter the list to include only .txt files
     bet_files = [f for f in files if f.endswith('.bww')]
-    app.log_message(f'Found {len(bet_files)} files')
+    app.log_message(f'Found {len(bet_files)} files. Will begin processing...\n')
     
     # Parse each bet file and add it to the database
     for bet_file in bet_files:
@@ -295,12 +319,17 @@ def parse_sms_details(bet_text):
     return wager_number, customer_reference, mobile_number, sms_wager_text
 
 def main(app):
+    global path
     while not app.stop_main_loop:
-        process_existing_bets('c:\TESTING', app)
         # Set up the file watcher
         event_handler = FileHandler()
         observer = Observer()
-        observer.schedule(event_handler, path='c:\TESTING', recursive=False)
+        if not os.path.exists(path):
+            print(f"Error: The path {path} does not exist.")
+            set_bet_folder_path()  # Ask the user to select a directory
+            if not os.path.exists(path):
+                continue  # If the user didn't select a directory, skip this iteration
+        observer.schedule(event_handler, path, recursive=True)
         observer.start()
         app.log_message('Watching for new files...')
         try:

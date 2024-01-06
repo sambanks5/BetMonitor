@@ -1,0 +1,2538 @@
+{
+    "2972812": {
+        "id": "2972812",
+        "type": "SMS WAGER",
+        "customer_ref": "BW1",
+        "details": "\u00c2\u00a3100 double getafe 10/11 win and Torino 23/10 draw pls. Just deposited online"
+    },
+    "1803905": {
+        "id": "1803905",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:54 - Trap 6",
+                    3.5
+                ]
+            ],
+            "timestamp": "20:48:42",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a321.00",
+            "payment": "\u00a321.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803906": {
+        "id": "1803906",
+        "type": "BET",
+        "customer_ref": "EXINIT",
+        "details": {
+            "selections": [
+                [
+                    "Wolves v Tottenha, Full Time Result, Wolves",
+                    5.0
+                ]
+            ],
+            "timestamp": "20:49:32",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a340.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803907": {
+        "id": "1803907",
+        "type": "BET",
+        "customer_ref": "PAULZA20",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:52 - Trap 4",
+                    2.25
+                ]
+            ],
+            "timestamp": "20:50:53",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a380.00",
+            "payment": "\u00a380.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803908": {
+        "id": "1803908",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:52 - Trap 4",
+                    2.25
+                ]
+            ],
+            "timestamp": "20:51:37",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3390.00",
+            "payment": "\u00a3390.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803909": {
+        "id": "1803909",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [],
+            "timestamp": "20:53:02",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803910": {
+        "id": "1803910",
+        "type": "BET",
+        "customer_ref": "CABMAN",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:58 - Trap 4",
+                    4.0
+                ]
+            ],
+            "timestamp": "20:53:42",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803911": {
+        "id": "1803911",
+        "type": "BET",
+        "customer_ref": "PAULZA20",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:54 - Trap 1",
+                    3.5
+                ]
+            ],
+            "timestamp": "20:53:52",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a340.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803912": {
+        "id": "1803912",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [],
+            "timestamp": "20:54:26",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3220.00",
+            "payment": "\u00a3220.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803913": {
+        "id": "1803913",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:58 - Trap 3",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:55:53",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a340.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803914": {
+        "id": "1803914",
+        "type": "BET",
+        "customer_ref": "ELLFISH",
+        "details": {
+            "selections": [
+                [
+                    "J Pegula v Iga Swi, To Win Match, J Pegula",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:58:24",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803915": {
+        "id": "1803915",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [],
+            "timestamp": "21:00:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3350.00",
+            "payment": "\u00a3350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803916": {
+        "id": "1803916",
+        "type": "BET",
+        "customer_ref": "QWERTED",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 21:12 - Trap 3",
+                    "evs"
+                ]
+            ],
+            "timestamp": "21:01:53",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3517.00",
+            "payment": "\u00a3517.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803917": {
+        "id": "1803917",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [],
+            "timestamp": "21:03:26",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3300.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803918": {
+        "id": "1803918",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Palermo, 21:10 - Estibador",
+                    1.67
+                ]
+            ],
+            "timestamp": "21:05:31",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3500.00",
+            "payment": "\u00a3500.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803884": {
+        "id": "1803884",
+        "type": "BET",
+        "customer_ref": "FARRE1L",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Brave Display",
+                    26.0
+                ]
+            ],
+            "timestamp": "20:24:21",
+            "risk_category": "W",
+            "bet_details": "ew",
+            "unit_stake": "\u00a312.50",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803959": {
+        "id": "1803959",
+        "type": "BET",
+        "customer_ref": "GRADYS",
+        "details": {
+            "selections": [
+                [
+                    "Atl Madrid v Celtic, Result Total Goals, Atl Madrid - Over 2.5",
+                    1.9
+                ]
+            ],
+            "timestamp": "23:18:17",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803960": {
+        "id": "1803960",
+        "type": "BET",
+        "customer_ref": "GRADYS",
+        "details": {
+            "selections": [
+                [
+                    "FC Porto v Antwerp, Result Total Goals, FC Porto - Over 2.5",
+                    2.1
+                ]
+            ],
+            "timestamp": "23:22:31",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803961": {
+        "id": "1803961",
+        "type": "BET",
+        "customer_ref": "49MRCHEF",
+        "details": {
+            "selections": [
+                [
+                    "Fairyhouse, 14:13 - An Tobar",
+                    1.57
+                ]
+            ],
+            "timestamp": "23:29:49",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3524.00",
+            "payment": "\u00a3524.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803962": {
+        "id": "1803962",
+        "type": "BET",
+        "customer_ref": "49MRCHEF",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ]
+            ],
+            "timestamp": "23:32:22",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803963": {
+        "id": "1803963",
+        "type": "BET",
+        "customer_ref": "BW1",
+        "details": {
+            "selections": [
+                [
+                    "GS Warriors @ DET Piston, Point Spread, GS Warriors -7",
+                    1.91
+                ],
+                [
+                    "SA Spurs @ IND Pacers, Point Spread, IND Pacers -8.5",
+                    1.91
+                ],
+                [
+                    "WAS Wizards @ PHI 76ers, Point Spread, PHI 76ers -11.5",
+                    1.91
+                ]
+            ],
+            "timestamp": "23:38:16",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Trebles"
+        }
+    },
+    "1803964": {
+        "id": "1803964",
+        "type": "BET",
+        "customer_ref": "GRADYS",
+        "details": {
+            "selections": [
+                [
+                    "Wrexham v Port Vale, Full Time Result, Wrexham",
+                    2.4
+                ]
+            ],
+            "timestamp": "23:38:51",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a360.00",
+            "payment": "\u00a360.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803965": {
+        "id": "1803965",
+        "type": "BET",
+        "customer_ref": "GUS3010",
+        "details": {
+            "selections": [
+                [
+                    "DAL Mavericks @ ORL Magi, Money Line, DAL Mavericks",
+                    2.1
+                ]
+            ],
+            "timestamp": "23:41:14",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3300.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803966": {
+        "id": "1803966",
+        "type": "BET",
+        "customer_ref": "BMAX",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ]
+            ],
+            "timestamp": "23:57:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a330.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "2972520": {
+        "id": "2972520",
+        "type": "SMS WAGER",
+        "customer_ref": "BW1",
+        "details": "\u00c2\u00a3100 Goodwin 1407 7/4. Deposited \u00c2\u00a3100 online a few mins ago."
+    },
+    "2972708": {
+        "id": "2972708",
+        "type": "SMS WAGER",
+        "customer_ref": "ECB77",
+        "details": "Rogue Soldier 5.30 \u00c2\u00a3200 win"
+    },
+    "1803848": {
+        "id": "1803848",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [],
+            "timestamp": "19:56:32",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3350.00",
+            "payment": "\u00a3350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803849": {
+        "id": "1803849",
+        "type": "BET",
+        "customer_ref": "JIMBOBB1",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:00 - Aeroplane Mode",
+                    5.5
+                ]
+            ],
+            "timestamp": "19:58:01",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a368.00",
+            "payment": "\u00a368.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803850": {
+        "id": "1803850",
+        "type": "BET",
+        "customer_ref": "PADAMS24",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, First Goalscorer, Levi Colwill",
+                    51.0
+                ]
+            ],
+            "timestamp": "19:58:43",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803851": {
+        "id": "1803851",
+        "type": "BET",
+        "customer_ref": "ZACHH26",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, Full Time Result, Chelsea",
+                    3.4
+                ]
+            ],
+            "timestamp": "19:58:59",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a352.00",
+            "payment": "\u00a352.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803852": {
+        "id": "1803852",
+        "type": "BET",
+        "customer_ref": "TERRYJON",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:00 - Fast Affair",
+                    3.0
+                ]
+            ],
+            "timestamp": "19:59:09",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803853": {
+        "id": "1803853",
+        "type": "BET",
+        "customer_ref": "RABBITT",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, Full Time Score, Draw 2-2",
+                    13.0
+                ]
+            ],
+            "timestamp": "20:00:01",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a345.00",
+            "payment": "\u00a345.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803854": {
+        "id": "1803854",
+        "type": "BET",
+        "customer_ref": "JIMBOBB1",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:00 - Aeroplane Mode",
+                    5.5
+                ]
+            ],
+            "timestamp": "20:00:27",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a360.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803855": {
+        "id": "1803855",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:0 - Trap 1",
+                    1.91
+                ]
+            ],
+            "timestamp": "20:01:09",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3460.00",
+            "payment": "\u00a3460.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803856": {
+        "id": "1803856",
+        "type": "BET",
+        "customer_ref": "FARRE1L",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:00 - Aeroplane Mode",
+                    5.5
+                ]
+            ],
+            "timestamp": "20:01:36",
+            "risk_category": "W",
+            "bet_details": "ew",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803857": {
+        "id": "1803857",
+        "type": "BET",
+        "customer_ref": "PHIL279",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:08 - Trap 1",
+                    5.0
+                ]
+            ],
+            "timestamp": "20:01:52",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3125.00",
+            "payment": "\u00a3125.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803858": {
+        "id": "1803858",
+        "type": "BET",
+        "customer_ref": "NUTMEG56",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:08 - Trap 1",
+                    5.0
+                ]
+            ],
+            "timestamp": "20:02:51",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803859": {
+        "id": "1803859",
+        "type": "BET",
+        "customer_ref": "WELSHBOY",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, Full Time Result, Chelsea",
+                    3.4
+                ]
+            ],
+            "timestamp": "20:04:19",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803860": {
+        "id": "1803860",
+        "type": "BET",
+        "customer_ref": "49MRCHEF",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, Full Time Result, Tottenham",
+                    2.3
+                ]
+            ],
+            "timestamp": "20:06:09",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3400.00",
+            "payment": "\u00a3400.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803861": {
+        "id": "1803861",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:06:35",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3500.00",
+            "payment": "\u00a3500.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803862": {
+        "id": "1803862",
+        "type": "BET",
+        "customer_ref": "TIMMY155",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ],
+                [
+                    "Tottenham v Chelsea, Full Time Result, Tottenham",
+                    2.3
+                ]
+            ],
+            "timestamp": "20:06:44",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3150.00",
+            "payment": "\u00a3150.00",
+            "bet_type": "1 Doubles"
+        }
+    },
+    "1803863": {
+        "id": "1803863",
+        "type": "BET",
+        "customer_ref": "TOMMYS1",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Wilde And Dandy",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:06:55",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803864": {
+        "id": "1803864",
+        "type": "BET",
+        "customer_ref": "CHALKI56",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Sir Titan",
+                    11.0
+                ]
+            ],
+            "timestamp": "20:07:12",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803865": {
+        "id": "1803865",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ],
+                [
+                    "Wolverhampton, 20:30 - Wilde And Dandy",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:07:14",
+            "risk_category": "-",
+            "bet_details": "Forecast",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Straight Forecasts"
+        }
+    },
+    "1803866": {
+        "id": "1803866",
+        "type": "BET",
+        "customer_ref": "STOLLY",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:08:01",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803867": {
+        "id": "1803867",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Wilde And Dandy",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:08:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3280.00",
+            "payment": "\u00a3280.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803868": {
+        "id": "1803868",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Yarmouth, 20:12 - Trap 1",
+                    2.38
+                ]
+            ],
+            "timestamp": "20:08:59",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a322.92",
+            "payment": "\u00a322.92",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803869": {
+        "id": "1803869",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Yarmouth, 20:12 - Trap 1",
+                    2.25
+                ]
+            ],
+            "timestamp": "20:10:33",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3350.00",
+            "payment": "\u00a3350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803870": {
+        "id": "1803870",
+        "type": "BET",
+        "customer_ref": "ABT17",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Daafy",
+                    12.0
+                ]
+            ],
+            "timestamp": "20:12:49",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803871": {
+        "id": "1803871",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "LA Chargers @ NY Jets, Point Spread, LA Chargers -3.5",
+                    1.91
+                ]
+            ],
+            "timestamp": "20:12:52",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3300.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803872": {
+        "id": "1803872",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:17 - Trap 4",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:14:06",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a325.00",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803873": {
+        "id": "1803873",
+        "type": "BET",
+        "customer_ref": "SPARKY21",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Sir Titan",
+                    11.0
+                ]
+            ],
+            "timestamp": "20:14:21",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a32.50",
+            "payment": "\u00a35.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803874": {
+        "id": "1803874",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:21 - Trap 4",
+                    1.57
+                ]
+            ],
+            "timestamp": "20:15:59",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3400.00",
+            "payment": "\u00a3400.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803875": {
+        "id": "1803875",
+        "type": "BET",
+        "customer_ref": "SPARKY21",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Sir Titan",
+                    11.0
+                ]
+            ],
+            "timestamp": "20:16:19",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a32.50",
+            "payment": "\u00a35.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803876": {
+        "id": "1803876",
+        "type": "BET",
+        "customer_ref": "GANESH55",
+        "details": {
+            "selections": [],
+            "timestamp": "20:18:45",
+            "risk_category": "O",
+            "bet_details": "ew",
+            "unit_stake": "\u00a380.00",
+            "payment": "\u00a3160.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803877": {
+        "id": "1803877",
+        "type": "BET",
+        "customer_ref": "NATHBETS",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Sir Titan",
+                    11.0
+                ]
+            ],
+            "timestamp": "20:18:57",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803878": {
+        "id": "1803878",
+        "type": "BET",
+        "customer_ref": "PHIL279",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:26 - Trap 1",
+                    3.75
+                ]
+            ],
+            "timestamp": "20:21:20",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3137.00",
+            "payment": "\u00a3137.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803879": {
+        "id": "1803879",
+        "type": "BET",
+        "customer_ref": "HAM560",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:21:28",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803880": {
+        "id": "1803880",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Oxford, 20:23 - Trap 2",
+                    1.91
+                ]
+            ],
+            "timestamp": "20:21:30",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a324.44",
+            "payment": "\u00a324.44",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803881": {
+        "id": "1803881",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:26 - Trap 6",
+                    2.38
+                ]
+            ],
+            "timestamp": "20:21:59",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a325.00",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803882": {
+        "id": "1803882",
+        "type": "BET",
+        "customer_ref": "PAULZA20",
+        "details": {
+            "selections": [
+                [
+                    "Oxford, 20:23 - Trap 2",
+                    1.83
+                ],
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:22:24",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Doubles"
+        }
+    },
+    "1803883": {
+        "id": "1803883",
+        "type": "BET",
+        "customer_ref": "AJOWITT1",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ],
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:24:00",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3320.00",
+            "payment": "\u00a3320.00",
+            "bet_type": "1 Doubles"
+        }
+    },
+    "1803885": {
+        "id": "1803885",
+        "type": "BET",
+        "customer_ref": "AJOWITT1",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Wilde And Dandy",
+                    3.0
+                ],
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ]
+            ],
+            "timestamp": "20:24:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3180.00",
+            "payment": "\u00a3180.00",
+            "bet_type": "1 Doubles"
+        }
+    },
+    "1803886": {
+        "id": "1803886",
+        "type": "BET",
+        "customer_ref": "FARRE1L",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:25:10",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a320.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803887": {
+        "id": "1803887",
+        "type": "BET",
+        "customer_ref": "BMAX",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:26:24",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803888": {
+        "id": "1803888",
+        "type": "BET",
+        "customer_ref": "JIMBOBB1",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:27:49",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a357.00",
+            "payment": "\u00a357.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803889": {
+        "id": "1803889",
+        "type": "BET",
+        "customer_ref": "49MRCHEF",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Laura's Breeze",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:28:54",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803890": {
+        "id": "1803890",
+        "type": "BET",
+        "customer_ref": "MROCHE66",
+        "details": {
+            "selections": [],
+            "timestamp": "20:28:56",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803891": {
+        "id": "1803891",
+        "type": "BET",
+        "customer_ref": "TERRYJON",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Wilde And Dandy",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:29:17",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803892": {
+        "id": "1803892",
+        "type": "BET",
+        "customer_ref": "JW3593",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 20:30 - Brave Display",
+                    26.0
+                ]
+            ],
+            "timestamp": "20:29:33",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a31.00",
+            "payment": "\u00a32.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803893": {
+        "id": "1803893",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:38 - Trap 1",
+                    6.0
+                ]
+            ],
+            "timestamp": "20:31:03",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a311.00",
+            "payment": "\u00a311.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803894": {
+        "id": "1803894",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:36 - Trap 5",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:33:25",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a330.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803895": {
+        "id": "1803895",
+        "type": "BET",
+        "customer_ref": "QWERTED",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 20:36 - Trap 5",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:35:23",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3250.00",
+            "payment": "\u00a3250.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803896": {
+        "id": "1803896",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:38 - Trap 2",
+                    2.2
+                ]
+            ],
+            "timestamp": "20:36:38",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3350.00",
+            "payment": "\u00a3350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803897": {
+        "id": "1803897",
+        "type": "BET",
+        "customer_ref": "PAULZA20",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 20:38 - Trap 2",
+                    2.25
+                ]
+            ],
+            "timestamp": "20:37:36",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803898": {
+        "id": "1803898",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Philadelphia, 20:41 - Lindalovesgold",
+                    1.91
+                ]
+            ],
+            "timestamp": "20:38:48",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3300.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803899": {
+        "id": "1803899",
+        "type": "BET",
+        "customer_ref": "QWERTED",
+        "details": {
+            "selections": [
+                [
+                    "Youghal, 20:41 - Trap 3",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:40:36",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3188.00",
+            "payment": "\u00a3188.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803900": {
+        "id": "1803900",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Oxford, 20:43 - Trap 4",
+                    3.75
+                ]
+            ],
+            "timestamp": "20:41:22",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a325.00",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803901": {
+        "id": "1803901",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Club Hipico, 20:45 - Gran Farolito",
+                    5.0
+                ]
+            ],
+            "timestamp": "20:42:03",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803902": {
+        "id": "1803902",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [
+                [
+                    "Club Hipico, 20:45 - Joke Art",
+                    3.0
+                ]
+            ],
+            "timestamp": "20:42:05",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803903": {
+        "id": "1803903",
+        "type": "BET",
+        "customer_ref": "PAULZA20",
+        "details": {
+            "selections": [
+                [
+                    "Yarmouth, 20:46 - Trap 3",
+                    2.75
+                ]
+            ],
+            "timestamp": "20:43:16",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a343.33",
+            "payment": "\u00a343.33",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803904": {
+        "id": "1803904",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Club Hipico, 20:45 - Joke Art",
+                    2.75
+                ],
+                [
+                    "Club Hipico, 20:45 - Seven Summits",
+                    2.88
+                ]
+            ],
+            "timestamp": "20:45:45",
+            "risk_category": "-",
+            "bet_details": "Forecast",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "2 Reversed Forecasts"
+        }
+    },
+    "1803919": {
+        "id": "1803919",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Philadelphia, 21:08 - Bluey",
+                    5.0
+                ]
+            ],
+            "timestamp": "21:07:47",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803920": {
+        "id": "1803920",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Palermo, 21:10 - Super Fantasy",
+                    5.0
+                ]
+            ],
+            "timestamp": "21:10:00",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803921": {
+        "id": "1803921",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Nottingham, 21:11 - Trap 3",
+                    1.57
+                ]
+            ],
+            "timestamp": "21:10:07",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3600.00",
+            "payment": "\u00a3600.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803922": {
+        "id": "1803922",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [
+                [
+                    "Palermo, 21:10 - Piennar",
+                    3.25
+                ]
+            ],
+            "timestamp": "21:11:28",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803923": {
+        "id": "1803923",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Oxford, 21:18 - Trap 3",
+                    5.5
+                ]
+            ],
+            "timestamp": "21:17:51",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803924": {
+        "id": "1803924",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Doncaster Dg, 21:28 - Trap 2",
+                    7.5
+                ]
+            ],
+            "timestamp": "21:19:35",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803925": {
+        "id": "1803925",
+        "type": "BET",
+        "customer_ref": "ADIIDAZ1",
+        "details": {
+            "selections": [
+                [
+                    "J Pegula v Iga Swi, To Win Match, I Swiatek",
+                    1.4
+                ],
+                [
+                    "LA Chargers @ NY Jets, Total Points, Under 40.0",
+                    1.91
+                ],
+                [
+                    "LA Lakers @ MIA Heat, Point Spread, MIA Heat -1",
+                    1.91
+                ],
+                [
+                    "BOS Celtics @ MIN Timber, Money Line, BOS Celtics",
+                    1.61
+                ]
+            ],
+            "timestamp": "21:20:33",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a330.00",
+            "bet_type": "1 Perm 4-Folds"
+        }
+    },
+    "1803926": {
+        "id": "1803926",
+        "type": "BET",
+        "customer_ref": "STOLLY",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ]
+            ],
+            "timestamp": "21:23:53",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a340.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803927": {
+        "id": "1803927",
+        "type": "BET",
+        "customer_ref": "PADAMS24",
+        "details": {
+            "selections": [
+                [
+                    "Tottenham v Chelsea, Full Time Result, Chelsea",
+                    1.29
+                ]
+            ],
+            "timestamp": "21:27:17",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a356.67",
+            "payment": "\u00a356.67",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803928": {
+        "id": "1803928",
+        "type": "BET",
+        "customer_ref": "APR7",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Without A Fight",
+                    5.0
+                ]
+            ],
+            "timestamp": "21:34:03",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803929": {
+        "id": "1803929",
+        "type": "BET",
+        "customer_ref": "ROGLANE",
+        "details": {
+            "selections": [
+                [
+                    "Wolves v Tottenha, Full Time Result, Draw",
+                    4.0
+                ]
+            ],
+            "timestamp": "21:36:36",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803930": {
+        "id": "1803930",
+        "type": "BET",
+        "customer_ref": "WEDKLOVE",
+        "details": {
+            "selections": [
+                [
+                    "Palermo, 21:40 - Hector S",
+                    3.5
+                ]
+            ],
+            "timestamp": "21:39:39",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3110.00",
+            "payment": "\u00a3110.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803931": {
+        "id": "1803931",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [],
+            "timestamp": "21:40:05",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3300.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803932": {
+        "id": "1803932",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Club Hipico, 21:49 - Matimitio",
+                    2.25
+                ]
+            ],
+            "timestamp": "21:43:43",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3240.00",
+            "payment": "\u00a3240.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803933": {
+        "id": "1803933",
+        "type": "BET",
+        "customer_ref": "LEETSCRA",
+        "details": {
+            "selections": [
+                [
+                    "LA Clippers @ NY Knicks, Point Spread, NY Knicks +1",
+                    1.91
+                ],
+                [
+                    "LA Lakers @ MIA Heat, Point Spread, MIA Heat -1",
+                    1.91
+                ],
+                [
+                    "BOS Celtics @ MIN Timber, Point Spread, BOS Celtics -4",
+                    1.91
+                ]
+            ],
+            "timestamp": "22:01:56",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a315.00",
+            "payment": "\u00a315.00",
+            "bet_type": "1 Trebles"
+        }
+    },
+    "1803934": {
+        "id": "1803934",
+        "type": "BET",
+        "customer_ref": "SPARKY21",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Absurde",
+                    8.0
+                ]
+            ],
+            "timestamp": "22:04:58",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a33.75",
+            "payment": "\u00a37.50",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803935": {
+        "id": "1803935",
+        "type": "BET",
+        "customer_ref": "TWS3019",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Future History",
+                    15.0
+                ],
+                [
+                    "Melbourne Cup, Melbourne Cup, Soulcombe",
+                    7.0
+                ]
+            ],
+            "timestamp": "22:19:25",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "2 Singles"
+        }
+    },
+    "1803936": {
+        "id": "1803936",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Warwick, 12:45 - Jingko Blue",
+                    1.67
+                ]
+            ],
+            "timestamp": "22:23:57",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3600.00",
+            "payment": "\u00a3600.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803937": {
+        "id": "1803937",
+        "type": "BET",
+        "customer_ref": "ADAMLAUR",
+        "details": {
+            "selections": [
+                [
+                    "Lingfield, 12:07 - Monfrid",
+                    2.25
+                ]
+            ],
+            "timestamp": "22:25:52",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3334.00",
+            "payment": "\u00a3334.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803938": {
+        "id": "1803938",
+        "type": "BET",
+        "customer_ref": "JBU3271",
+        "details": {
+            "selections": [
+                [
+                    "Lingfield, 12:37 - Summit",
+                    6.0
+                ]
+            ],
+            "timestamp": "22:28:23",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803939": {
+        "id": "1803939",
+        "type": "BET",
+        "customer_ref": "BERO25",
+        "details": {
+            "selections": [
+                [
+                    "FC Porto v Antwerp, Full Time Result, FC Porto",
+                    1.3
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Result, Atl Madrid",
+                    1.22
+                ],
+                [
+                    "Shakhtar v Barce, Full Time Result, Barcelona",
+                    1.2
+                ],
+                [
+                    "LA Chargers @ NY Jets, Anytime TD Scorer, Breece Hall (NYJ)",
+                    2.2
+                ]
+            ],
+            "timestamp": "22:29:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a336.00",
+            "payment": "\u00a336.00",
+            "bet_type": "1 Perm 4-Folds"
+        }
+    },
+    "1803940": {
+        "id": "1803940",
+        "type": "BET",
+        "customer_ref": "BERO25",
+        "details": {
+            "selections": [
+                [
+                    "LA Chargers @ NY Jets, First TD Scorer, Breece Hall (NYJ)",
+                    8.0
+                ]
+            ],
+            "timestamp": "22:29:55",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803941": {
+        "id": "1803941",
+        "type": "BET",
+        "customer_ref": "BERO25",
+        "details": {
+            "selections": [
+                [
+                    "LA Chargers @ NY Jets, First TD Scorer, Joshua Kelley (LAC)",
+                    17.0
+                ]
+            ],
+            "timestamp": "22:30:22",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803942": {
+        "id": "1803942",
+        "type": "BET",
+        "customer_ref": "BERO25",
+        "details": {
+            "selections": [
+                [
+                    "LA Chargers @ NY Jets, First TD Scorer, Austin Ekeler (LAC)",
+                    6.5
+                ]
+            ],
+            "timestamp": "22:30:40",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803943": {
+        "id": "1803943",
+        "type": "BET",
+        "customer_ref": "TOMMYS1",
+        "details": {
+            "selections": [
+                [
+                    "Melbourne Cup, Melbourne Cup, Vauban",
+                    3.5
+                ]
+            ],
+            "timestamp": "22:32:06",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a330.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803944": {
+        "id": "1803944",
+        "type": "BET",
+        "customer_ref": "BERO25",
+        "details": {
+            "selections": [
+                [
+                    "Dortmund v Newc, Full Time Score, Dortmund 2-1",
+                    9.5
+                ],
+                [
+                    "Shakhtar v Barce, Full Time Score, Barcelona 2-1",
+                    9.0
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Score, Atl Madrid 1-0",
+                    7.5
+                ],
+                [
+                    "FC Porto v Antwerp, Full Time Score, FC Porto 4-1",
+                    21.0
+                ]
+            ],
+            "timestamp": "22:32:39",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a30.67",
+            "payment": "\u00a30.67",
+            "bet_type": "1 Perm 4-Folds"
+        }
+    },
+    "1803945": {
+        "id": "1803945",
+        "type": "BET",
+        "customer_ref": "GRADYS",
+        "details": {
+            "selections": [
+                [
+                    "LA Chargers @ NY Jets, Point Spread, NY Jets +3.5",
+                    1.91
+                ]
+            ],
+            "timestamp": "22:35:08",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a355.00",
+            "payment": "\u00a355.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803946": {
+        "id": "1803946",
+        "type": "BET",
+        "customer_ref": "JBU3271",
+        "details": {
+            "selections": [
+                [
+                    "Chelmsford, 14:05 - Jeanne D'arc",
+                    2.5
+                ]
+            ],
+            "timestamp": "22:35:15",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803947": {
+        "id": "1803947",
+        "type": "BET",
+        "customer_ref": "DUNKY723",
+        "details": {
+            "selections": [
+                [
+                    "Chelmsford, 12:20 - Sindri",
+                    26.0
+                ]
+            ],
+            "timestamp": "22:41:00",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803948": {
+        "id": "1803948",
+        "type": "BET",
+        "customer_ref": "ALEXM79",
+        "details": {
+            "selections": [
+                [
+                    "Palermo, 22:40 - Vasco De Acero",
+                    3.0
+                ]
+            ],
+            "timestamp": "22:45:32",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a3150.00",
+            "payment": "\u00a3300.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803949": {
+        "id": "1803949",
+        "type": "BET",
+        "customer_ref": "TWS3019",
+        "details": {
+            "selections": [
+                [
+                    "Dortmund v Newc, Full Time Result, Dortmund",
+                    2.6
+                ],
+                [
+                    "AC Milan v PSG, Full Time Result, PSG",
+                    2.25
+                ],
+                [
+                    "Shakhtar v Barce, Full Time Result, Barcelona",
+                    1.2
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Result, Atl Madrid",
+                    1.22
+                ],
+                [
+                    "Red Star v RB Leipz, Full Time Result, RB Leipzig",
+                    1.53
+                ],
+                [
+                    "FC Porto v Antwerp, Full Time Result, FC Porto",
+                    1.3
+                ],
+                [
+                    "Lazio v Feyenoord, Full Time Result, Lazio",
+                    2.45
+                ]
+            ],
+            "timestamp": "22:54:25",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a3350.00",
+            "bet_type": "7 Perm 6-Folds"
+        }
+    },
+    "1803950": {
+        "id": "1803950",
+        "type": "BET",
+        "customer_ref": "TWS3019",
+        "details": {
+            "selections": [
+                [
+                    "Shakhtar v Barce, Full Time Result, Barcelona",
+                    1.2
+                ],
+                [
+                    "AC Milan v PSG, Full Time Result, PSG",
+                    2.25
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Result, Atl Madrid",
+                    1.22
+                ],
+                [
+                    "Red Star v RB Leipz, Full Time Result, RB Leipzig",
+                    1.53
+                ],
+                [
+                    "FC Porto v Antwerp, Full Time Result, FC Porto",
+                    1.3
+                ],
+                [
+                    "Man City v Young Boys, Full Time Result, Man City",
+                    1.05
+                ]
+            ],
+            "timestamp": "22:56:02",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3500.00",
+            "payment": "\u00a3500.00",
+            "bet_type": "1 Perm 6-Folds"
+        }
+    },
+    "1803951": {
+        "id": "1803951",
+        "type": "BET",
+        "customer_ref": "TWS3019",
+        "details": {
+            "selections": [
+                [
+                    "Dortmund v Newc, Full Time Result, Dortmund",
+                    2.6
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Result, Atl Madrid",
+                    1.22
+                ],
+                [
+                    "FC Porto v Antwerp, Full Time Result, FC Porto",
+                    1.3
+                ]
+            ],
+            "timestamp": "22:56:50",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3250.00",
+            "payment": "\u00a3250.00",
+            "bet_type": "1 Trebles"
+        }
+    },
+    "1803952": {
+        "id": "1803952",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Rotherham v Ipswich, Full Time Result, Ipswich",
+                    1.45
+                ],
+                [
+                    "Shakhtar v Barce, Full Time Result, Barcelona",
+                    1.2
+                ],
+                [
+                    "Atl Madrid v Celtic, Full Time Result, Atl Madrid",
+                    1.22
+                ],
+                [
+                    "FC Porto v Antwerp, Full Time Result, FC Porto",
+                    1.3
+                ],
+                [
+                    "Man City v Young Boys, Full Time Result, Man City",
+                    1.05
+                ],
+                [
+                    "Napoli v U Berlin, Full Time Result, Napoli",
+                    1.33
+                ],
+                [
+                    "Bayern Munich v Galatasa, Full Time Result, Bayern Munich",
+                    1.15
+                ],
+                [
+                    "Real Madrid v Braga, Full Time Result, Real Madrid",
+                    1.18
+                ],
+                [
+                    "Arsenal v Sevilla, Full Time Result, Arsenal",
+                    1.22
+                ],
+                [
+                    "Qarabag v Bayer Lever, Full Time Result, Leverkusen",
+                    1.4
+                ],
+                [
+                    "Atalanta v Sturm Graz, Full Time Result, Atalanta",
+                    1.25
+                ],
+                [
+                    "Real Betis v Aris Limass, Full Time Result, Real Betis",
+                    1.3
+                ],
+                [
+                    "Freiburg v Backa T, Full Time Result, Freiburg",
+                    1.14
+                ],
+                [
+                    "Sporting v Rakow Czestoc, Full Time Result, Sporting",
+                    1.25
+                ],
+                [
+                    "FC Nordsjaelland v Spart, Full Time Result, Nordsjaelland",
+                    1.3
+                ],
+                [
+                    "Cukaricki v Fiorentin, Full Time Result, Fiorentina",
+                    1.29
+                ],
+                [
+                    "PAOK v Aberdeen, Full Time Result, PAOK",
+                    1.29
+                ]
+            ],
+            "timestamp": "22:57:37",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a315.00",
+            "payment": "\u00a315.00",
+            "bet_type": "1 Acc On All Selns"
+        }
+    },
+    "1803953": {
+        "id": "1803953",
+        "type": "BET",
+        "customer_ref": "HAM560",
+        "details": {
+            "selections": [
+                [
+                    "Warwick, 13:20 - Mount Ferns",
+                    8.5
+                ]
+            ],
+            "timestamp": "22:58:58",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803954": {
+        "id": "1803954",
+        "type": "BET",
+        "customer_ref": "RYANDOCY",
+        "details": {
+            "selections": [
+                [
+                    "Dortmund v Newc, Both Teams To Score, Yes",
+                    1.57
+                ],
+                [
+                    "AC Milan v PSG, Both Teams To Score, Yes",
+                    1.62
+                ],
+                [
+                    "Lazio v Feyenoord, Both Teams To Score, Yes",
+                    1.57
+                ],
+                [
+                    "Ajax v Brighton, Both Teams To Score, Yes",
+                    1.5
+                ],
+                [
+                    "Qarabag v Bayer Lever, Both Teams To Score, Yes",
+                    1.62
+                ],
+                [
+                    "LASK Linz v Union Saint, Both Teams To Score, Yes",
+                    1.62
+                ],
+                [
+                    "Maccabi Haifa v Villarre, Both Teams To Score, Yes",
+                    1.9
+                ],
+                [
+                    "Toulouse v Liverpool, Both Teams To Score, Yes",
+                    1.62
+                ],
+                [
+                    "AEK Athens v Marseille, Both Teams To Score, Yes",
+                    1.62
+                ],
+                [
+                    "BK Hacken v Molde, Both Teams To Score, Yes",
+                    1.44
+                ],
+                [
+                    "Besiktas v Bodo/Glimt, Both Teams To Score, Yes",
+                    1.44
+                ],
+                [
+                    "Salt Lake v Houston, Both Teams To Score, Yes",
+                    1.53
+                ],
+                [
+                    "Atlanta Utd v Columbu, Both Teams To Score, Yes",
+                    1.4
+                ],
+                [
+                    "New England v, Both Teams To Score, Yes",
+                    1.44
+                ]
+            ],
+            "timestamp": "23:00:47",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Acc On All Selns"
+        }
+    },
+    "1803955": {
+        "id": "1803955",
+        "type": "BET",
+        "customer_ref": "A7FOLD",
+        "details": {
+            "selections": [
+                [
+                    "Portman Park1, 23:15 - Bijou Gem",
+                    29.0
+                ]
+            ],
+            "timestamp": "23:13:47",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a32.50",
+            "payment": "\u00a32.50",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803956": {
+        "id": "1803956",
+        "type": "BET",
+        "customer_ref": "GRADYS",
+        "details": {
+            "selections": [
+                [
+                    "Man City v Young Boys, Alternative Total Goals, Over 3.5",
+                    "evs"
+                ]
+            ],
+            "timestamp": "23:14:22",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1803957": {
+        "id": "1803957",
+        "type": "BET",
+        "customer_ref": "GUS3010",
+        "details": {
+            "selections": [
+                [
+                    "DAL Mavericks @ ORL Magi, Point Spread, DAL Mavericks +1.5",
+                    1.91
+                ],
+                [
+                    "GS Warriors @ DET Piston, Point Spread, GS Warriors -7",
+                    1.91
+                ],
+                [
+                    "WAS Wizards @ PHI 76ers, Point Spread, PHI 76ers -11.5",
+                    1.91
+                ],
+                [
+                    "LA Clippers @ NY Knicks, Point Spread, LA Clippers -1",
+                    1.91
+                ],
+                [
+                    "LA Lakers @ MIA Heat, Point Spread, MIA Heat -1",
+                    1.91
+                ]
+            ],
+            "timestamp": "23:15:08",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3190.91",
+            "payment": "\u00a3190.91",
+            "bet_type": "1 Perm 5-Folds"
+        }
+    },
+    "1803958": {
+        "id": "1803958",
+        "type": "BET",
+        "customer_ref": "GUS3010",
+        "details": {
+            "selections": [
+                [
+                    "SAC Kings @ HOU Rockets, Point Spread, SAC Kings -2",
+                    1.91
+                ],
+                [
+                    "UTA Jazz @ CHI Bulls, Point Spread, UTA Jazz +4",
+                    1.91
+                ],
+                [
+                    "NO Pelicans @ DEN Nugget, Point Spread, DEN Nuggets -6",
+                    1.87
+                ],
+                [
+                    "BOS Celtics @ MIN Timber, Point Spread, BOS Celtics -4",
+                    1.91
+                ],
+                [
+                    "ATL Hawks @ OKC Thunder, Point Spread, ATL Hawks -2.5",
+                    1.91
+                ],
+                [
+                    "LA Lakers @ MIA Heat, Point Spread, MIA Heat -1",
+                    1.91
+                ]
+            ],
+            "timestamp": "23:15:46",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Perm 6-Folds"
+        }
+    },
+    "1802603-09:42:16": {
+        "id": "1802603-09:42:16",
+        "type": "WAGER KNOCKBACK",
+        "customer_ref": "COLU0412",
+        "details": {
+            "- Error Code": "-7",
+            "- Error Message": "Price Has Changed",
+            "- Wager Number (if available)": "0",
+            "- Wager Type": "13",
+            "- Liability Exceeded": "False"
+        },
+        "time": "09:42:16"
+    }
+}
