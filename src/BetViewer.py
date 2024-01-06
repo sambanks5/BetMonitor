@@ -77,8 +77,7 @@ def get_database():
         with open(json_file_path, 'r') as json_file:
             data = json.load(json_file)
         
-        # Convert dictionary items to a list and reverse the order
-        data = list(data.items())
+        # Reverse the order of the list
         data.reverse()
 
         return data
@@ -112,13 +111,13 @@ def bet_feed():
     risk_bets = ""
     separator = '\n\n------------------------------------------------------------------------------------\n\n'
 
-    for bet_key, bet in data:
+    for bet in data:
         wager_type = bet.get('type', '').lower()
         if wager_type == 'wager knockback':
             customer_ref = bet.get('customer_ref', '')
             knockback_id = bet.get('knockback_id', '')
             knockback_details = bet.get('details', {})
-            time = bet.get('time', '')
+            time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
             feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
 
@@ -132,7 +131,7 @@ def bet_feed():
             bet_no = bet.get('id', '')
             details = bet.get('details', {})
             parsed_selections = details.get('selections', [])
-            timestamp = details.get('timestamp', '')
+            timestamp = bet.get('time', '')
             customer_reference = bet.get('customer_ref', '')
             customer_risk_category = details.get('risk_category', '')
             bet_details = details.get('bet_details', '')
@@ -165,17 +164,17 @@ def bet_runs(data):
     # Load the bets from the JSON database
     selection_bets = data
 
-    selection_bets = selection_bets[-DEFAULT_NUM_RECENT_FILES:]
+    selection_bets = selection_bets[:DEFAULT_NUM_RECENT_FILES]
 
     # Dictionary to store selections and their corresponding bet numbers
     selection_to_bets = defaultdict(list)
 
     # Iterate through the bets and update the dictionary
-    for bet_no, bet_details in selection_bets:
-        if isinstance(bet_details['details'], dict):
-            selections = [selection[0] for selection in bet_details['details'].get('selections', [])]
+    for bet in selection_bets:  # change here
+        if isinstance(bet['details'], dict):
+            selections = [selection[0] for selection in bet['details'].get('selections', [])]
             for selection in selections:
-                selection_to_bets[selection].append(bet_no)
+                selection_to_bets[selection].append(bet['id'])  # change here
 
     # Sort selections by the number of bets in descending order
     sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
@@ -188,11 +187,11 @@ def bet_runs(data):
         if len(bet_numbers) > num_bets:
             runs_text.insert(tk.END, f"{selection}\n")
             for bet_number in bet_numbers:
-                bet_info = next((bet for bet_no, bet in selection_bets if bet_no == bet_number), None)
+                bet_info = next((bet for bet in selection_bets if bet['id'] == bet_number), None)
                 if bet_info:
                     for sel in bet_info['details']['selections']:
                         if selection == sel[0]:
-                            runs_text.insert(tk.END, f" - {bet_info['details']['timestamp']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
+                            runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")  # change here
             runs_text.insert(tk.END, f"\n")
 
     runs_text.config(state=tk.DISABLED)
@@ -493,8 +492,7 @@ def create_daily_report():
     progress["value"] = 0
     root.update_idletasks()
 
-    for i, (bet_id, bet) in enumerate(data):
-        # bet_id = bet['id']
+    for i, bet in enumerate(data):
         progress["value"] = i + 1
         root.update_idletasks()
 
@@ -507,7 +505,7 @@ def create_daily_report():
             bet_customer_reference = bet['customer_ref']
             customer_risk_category = bet['details']['risk_category']
             payment = bet['details']['payment']
-            timestamp = bet['details']['timestamp']
+            timestamp = bet['time']
 
             timestamps.append(timestamp)
 
@@ -597,9 +595,6 @@ def create_daily_report():
                 staff_updates[staff] += 1
             else:
                 staff_updates[staff] = 1
-
-    print("Course updates:", course_updates)
-    print("Staff updates:", staff_updates)
 
     top_spenders = Counter(customer_payments).most_common(5)
     client_bet_counter = Counter(active_clients)
@@ -721,17 +716,17 @@ def create_client_report(customer_ref):
     timestamps = []
     hour_ranges = {}
 
-    for i, (bet_id, bet) in enumerate(data):
+    for i, bet in enumerate(data):
         bet_type = bet['type'].lower()
         is_sms = bet_type == 'sms wager'
         is_bet = bet_type == 'bet'
         is_wageralert = bet_type == 'wager knockback'
         
         if is_bet and bet['customer_ref'] == customer_ref:
-            selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in bet['selections']])
-            client_report_feed += f"{bet['timestamp']}-{bet_id} | {bet['customer_ref']} ({bet['risk_category']}) | {bet['unit_stake']} {bet['details']}, {bet['type']}:\n{selection}" + separator
-            timestamps.append(bet['timestamp'])
-            total_stakes += float(bet['payment'][1:].replace(',', ''))
+            selection = "\n".join([f"   - {sel} at {odds}" for sel, odds in bet['details']['selections']])
+            client_report_feed += f"{bet['time']}-{bet['id']} | {bet['customer_ref']} ({bet['details']['risk_category']}) | {bet['details']['unit_stake']} {bet['details']['bet_details']}, {bet['details']['bet_type']}:\n{selection}" + separator
+            timestamps.append(bet['time'])
+            total_stakes += float(bet['details']['payment'][1:].replace(',', ''))
             total_bets += 1
 
         if is_wageralert and bet['customer_ref'] == customer_ref:
@@ -753,7 +748,7 @@ def create_client_report(customer_ref):
             client_report_feed += f"{bet['time']} - {bet['customer_ref']} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator 
 
         if is_sms and bet['customer_ref'] == customer_ref:
-            client_report_feed += f"{bet['customer_ref']}-{bet['wager_number']} SMS WAGER:\n{bet['sms_wager_text']}" + separator
+            client_report_feed += f"{bet['time']}-{bet['id']} | {bet['customer_ref']} SMS WAGER:\n{bet['details']}" + separator
             total_sms += 1
 
     timestamp_hours = [timestamp.split(':')[0] + ":00" for timestamp in timestamps]
@@ -779,6 +774,7 @@ def create_client_report(customer_ref):
         report_output += f"{hour_range} - Bets {count}\n"
 
     report_output += f"\nKNOCKBACKS: {total_wageralerts}\n\n"
+    report_output += f"Liability Exceeded: {liability_exceeded}\n"
     report_output += f"Price Changes: {price_change}\n"
     report_output += f"Event Ended: {event_ended}\n"
     report_output += f"Other: {other_alert}\n"

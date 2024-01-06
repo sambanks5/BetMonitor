@@ -35,7 +35,7 @@ class Application(tk.Tk):
         self.set_path_button = ttk.Button(self, text="Set Bet Path", command=self.set_bet_path, style='TButton', width=15)
         self.set_path_button.grid(row=1, column=1, padx=5, pady=5)
 
-        self.stop_button = ttk.Button(self, text="Stop", command=self.stop, style='TButton', width=15)
+        self.stop_button = ttk.Button(self, text="Reprocess", command=self.reprocess, style='TButton', width=15)
         self.stop_button.grid(row=1, column=2, padx=5, pady=5)
 
         # Bind the <Destroy> event
@@ -51,10 +51,9 @@ class Application(tk.Tk):
         # Call the process_existing_bets function
         process_existing_bets(path, self)
 
-    def stop(self):
-        # Signal the main loop to stop
-        self.stop_main_loop = True
-        app.log_message('Stopping checking process. Please close the window.')
+    def reprocess(self):
+        app.log_message('Reprocessing bet database...')
+        reprocess_file(self)
 
     def log_message(self, message):
         # Append the message to the text area
@@ -107,16 +106,6 @@ def load_database(app):
         app.log_message('No database found. Creating a new one for ' + date)
         return {}
 
-def save_database(database):
-    # Get the current date
-    date = datetime.now().strftime('%Y-%m-%d')
-
-    # Use the date in the filename and specify the folder
-    filename = f'database/{date}-wager_database.json'
-
-    with open(filename, 'w') as f:
-        json.dump(database, f, indent=4)
-
 def add_bet(database, bet, app):
     # Check if the bet is already in the database
     if bet['id'] not in database:
@@ -124,6 +113,30 @@ def add_bet(database, bet, app):
     else:
         print('Bet already in database ' + bet['id'])
         app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}')
+
+def save_database(database):
+    # Get the current date
+    date = datetime.now().strftime('%Y-%m-%d')
+
+    # Use the date in the filename and specify the folder
+    filename = f'database/{date}-wager_database.json'
+    
+    with open(filename, 'w') as f:
+        json.dump(database, f, indent=4)
+
+    # Sort the data in the file after it has been saved
+    order_bets(filename)
+
+def order_bets(filename):
+    with open(filename, 'r') as f:
+        data = json.load(f)  # parse the JSON string into a Python object
+
+    # Convert the dictionary's values to a list and sort it
+    data_list = sorted(list(data.values()), key=lambda x: x['time'])
+
+    # Overwrite the original file with the sorted data
+    with open(filename, 'w') as f:
+        json.dump(data_list, f, indent=4)
 
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
@@ -139,37 +152,41 @@ def parse_file(file_path, app):
             customer_ref, knockback_id, knockback_details, time = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{knockback_id}-{time}"
             bet_info = {
+                'time': time,  # moved 'time' to the top
                 'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
                 'customer_ref': customer_ref,
                 'details': knockback_details,
-                'time': time
             }
-            print('Bet Processed ' + unique_knockback_id)
+            print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f'Knockback Processed {unique_knockback_id}, {customer_ref}, {time}\n')
             return bet_info
 
         elif is_sms:
+            creation_time = os.path.getctime(file_path)
+            creation_time_str = datetime.fromtimestamp(creation_time).strftime('%H:%M:%S')
             wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
+            
             bet_info = {
+                'time': creation_time_str,  # add 'time' field
                 'id': wager_number,
                 'type': 'SMS WAGER',
                 'customer_ref': customer_reference,
                 'details': sms_wager_text
             }
-            print('Bet Processed ' + wager_number)
+            print('SMS Processed ' + wager_number)
             app.log_message(f'SMS Processed {wager_number}, {customer_reference}\n')
             return bet_info
 
         elif is_bet:
             bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
             bet_info = {
+                'time': timestamp,  # use 'timestamp' as 'time'
                 'id': bet_no,
                 'type': 'BET',
                 'customer_ref': customer_reference,
                 'details': {
                     'selections': parsed_selections,
-                    'timestamp': timestamp,
                     'risk_category': customer_risk_category,
                     'bet_details': bet_details,
                     'unit_stake': unit_stake,
@@ -317,6 +334,18 @@ def parse_sms_details(bet_text):
     sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
 
     return wager_number, customer_reference, mobile_number, sms_wager_text
+
+def reprocess_file(app):
+    # Get the current date
+    date = datetime.now().strftime('%Y-%m-%d')
+
+    # Use the date in the filename and specify the folder
+    filename = f'database/{date}-wager_database.json'
+
+    # Delete the existing file if it exists
+    if os.path.exists(filename):
+        os.remove(filename)
+        app.log_message('Existing database deleted.')
 
 def main(app):
     global path
