@@ -1,0 +1,534 @@
+{
+    "1802581": {
+        "id": "1802581",
+        "type": "BET",
+        "customer_ref": "IAD2546",
+        "details": {
+            "selections": [
+                [
+                    "Kempton, 17:40 - Dark Side Thunder",
+                    5.0
+                ]
+            ],
+            "timestamp": "09:18:22",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802582": {
+        "id": "1802582",
+        "type": "BET",
+        "customer_ref": "STRONG82",
+        "details": {
+            "selections": [
+                [
+                    "Kempton, 17:40 - Dark Side Thunder",
+                    5.0
+                ]
+            ],
+            "timestamp": "09:18:30",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802583": {
+        "id": "1802583",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Kempton, 17:40 - Dark Side Thunder",
+                    5.0
+                ]
+            ],
+            "timestamp": "09:18:34",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a330.00",
+            "payment": "\u00a330.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802584": {
+        "id": "1802584",
+        "type": "BET",
+        "customer_ref": "STRONG82",
+        "details": {
+            "selections": [
+                [
+                    "Hereford, 12:50 - Dukehill",
+                    11.0
+                ]
+            ],
+            "timestamp": "09:19:35",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802585": {
+        "id": "1802585",
+        "type": "BET",
+        "customer_ref": "DRAGONK",
+        "details": {
+            "selections": [
+                [
+                    "Hereford, 12:50 - Dukehill",
+                    11.0
+                ]
+            ],
+            "timestamp": "09:20:01",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a370.00",
+            "payment": "\u00a370.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802586": {
+        "id": "1802586",
+        "type": "BET",
+        "customer_ref": "STRONG82",
+        "details": {
+            "selections": [
+                [
+                    "Hereford, 16:20 - Pencil",
+                    5.5
+                ]
+            ],
+            "timestamp": "09:21:13",
+            "risk_category": "M",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802587": {
+        "id": "1802587",
+        "type": "BET",
+        "customer_ref": "NADMIA",
+        "details": {
+            "selections": [
+                [
+                    "Hereford, 12:50 - Dukehill",
+                    11.0
+                ]
+            ],
+            "timestamp": "09:23:04",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802588": {
+        "id": "1802588",
+        "type": "BET",
+        "customer_ref": "IAD2546",
+        "details": {
+            "selections": [
+                [
+                    "Hereford, 16:20 - Pencil",
+                    5.5
+                ]
+            ],
+            "timestamp": "09:24:19",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802589": {
+        "id": "1802589",
+        "type": "BET",
+        "customer_ref": "DANTESGH",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:37 - Western General",
+                    4.5
+                ]
+            ],
+            "timestamp": "09:28:52",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a315.00",
+            "payment": "\u00a315.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802559": {
+        "id": "1802559",
+        "type": "BET",
+        "customer_ref": "JESSMART",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:07 - Goodwin",
+                    2.88
+                ]
+            ],
+            "timestamp": "08:39:45",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802560": {
+        "id": "1802560",
+        "type": "BET",
+        "customer_ref": "LAWSONG9",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:07 - Goodwin",
+                    2.88
+                ]
+            ],
+            "timestamp": "08:39:55",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802561": {
+        "id": "1802561",
+        "type": "BET",
+        "customer_ref": "JESSMART",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:07 - Goodwin",
+                    2.88
+                ]
+            ],
+            "timestamp": "08:40:07",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a325.00",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802562": {
+        "id": "1802562",
+        "type": "BET",
+        "customer_ref": "CALHAYES",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:07 - Goodwin",
+                    2.88
+                ]
+            ],
+            "timestamp": "08:40:33",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3200.00",
+            "payment": "\u00a3200.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802563": {
+        "id": "1802563",
+        "type": "BET",
+        "customer_ref": "MARKHARR",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:07 - Goodwin",
+                    2.88
+                ]
+            ],
+            "timestamp": "08:42:15",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a325.00",
+            "payment": "\u00a325.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802557": {
+        "id": "1802557",
+        "type": "BET",
+        "customer_ref": "ELMAR1",
+        "details": {
+            "selections": [
+                [
+                    "Steepledowns, 08:40 - Strood Stallion",
+                    8.5
+                ]
+            ],
+            "timestamp": "08:39:34",
+            "risk_category": "-",
+            "bet_details": "ew",
+            "unit_stake": "\u00a320.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802558": {
+        "id": "1802558",
+        "type": "BET",
+        "customer_ref": "ELMAR1",
+        "details": {
+            "selections": [
+                [
+                    "Steepledowns, 08:40 - Mojan",
+                    4.5
+                ]
+            ],
+            "timestamp": "08:39:43",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a340.00",
+            "payment": "\u00a340.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802616": {
+        "id": "1802616",
+        "type": "BET",
+        "customer_ref": "JONNIED",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:46:11",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a329.00",
+            "payment": "\u00a329.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802611": {
+        "id": "1802611",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:44:15",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802612": {
+        "id": "1802612",
+        "type": "BET",
+        "customer_ref": "COLU0412",
+        "details": {
+            "selections": [
+                [
+                    "Plumpton, 14:37 - Western General",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:44:20",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a35.00",
+            "payment": "\u00a35.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802613": {
+        "id": "1802613",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:44:36",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802614": {
+        "id": "1802614",
+        "type": "BET",
+        "customer_ref": "JONNIED",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:45:13",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a335.00",
+            "payment": "\u00a335.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802615": {
+        "id": "1802615",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:45:57",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802617": {
+        "id": "1802617",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:46:23",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802618": {
+        "id": "1802618",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:46:47",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a310.00",
+            "payment": "\u00a310.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802619": {
+        "id": "1802619",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:47:17",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a319.00",
+            "payment": "\u00a319.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802620": {
+        "id": "1802620",
+        "type": "BET",
+        "customer_ref": "JONNIED",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:48:17",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a3100.00",
+            "payment": "\u00a3100.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802621": {
+        "id": "1802621",
+        "type": "BET",
+        "customer_ref": "VLEPA89",
+        "details": {
+            "selections": [
+                [
+                    "Wolverhampton, 17:30 - Rogue Soldier",
+                    4.0
+                ]
+            ],
+            "timestamp": "09:49:26",
+            "risk_category": "-",
+            "bet_details": "Win",
+            "unit_stake": "\u00a350.00",
+            "payment": "\u00a350.00",
+            "bet_type": "1 Singles"
+        }
+    },
+    "1802628": {
+        "id": "1802628",
+        "type": "BET",
+        "customer_ref": "JONNIED",
+        "details": {
+            "selections": [
+                [
+                    "Kempton, 16:00 - Jack Sparowe",
+                    19.0
+                ]
+            ],
+            "timestamp": "09:51:41",
+            "risk_category": "W",
+            "bet_details": "Win",
+            "unit_stake": "\u00a36.00",
+            "payment": "\u00a36.00",
+            "bet_type": "1 Singles"
+        }
+    }
+}
