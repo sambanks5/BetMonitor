@@ -40,10 +40,21 @@ selection_bets = {}
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
 
-credentials_file = 'src/creds.json'
+# Load the credentials from the JSON file
+with open('src/creds.json') as f:
+    data = json.load(f)
+
+# Get the Pipedrive API token
+pipedrive_api_token = data['pipedrive_api_key']
+
+# Now you can use the token in your API URL
+pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={pipedrive_api_token}'
+
+# Get the Google API credentials and authorize
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
+
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
@@ -89,7 +100,7 @@ def get_database(date_str=None):
             messagebox.showerror("Error", error_message)
             return []
         except json.JSONDecodeError:
-            error_message = f"Error: Could not decode JSON from file: {json_file_path}."
+            error_message = f"Error: Could not decode JSON from file: {json_file_path}. "
             print(error_message)
             messagebox.showerror("Error", error_message)
             if attempt < max_retries - 1:  # Don't sleep on the last attempt
@@ -794,47 +805,76 @@ def factoring_sheet():
     tree.delete(*tree.get_children())
     spreadsheet = gc.open('Factoring Diary')
     print("Getting Factoring Sheet")
-    worksheet = spreadsheet.get_worksheet(4)  # 0 represents the first worksheet
+    worksheet = spreadsheet.get_worksheet(4)
     data = worksheet.get_all_values()
     print("Retrieving factoring data")
-    # Insert data into the Treeview for the specified columns
-    for row in data[2:]:  # Start from the 4th row (index 3) in your spreadsheet
+
+    for row in data[2:]:
         tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
 
 ### WIZARD TO ADD FACTORING TO FACTORING DIARY
 def open_wizard():
     global user
-    # Check if user is empty
     if not user:
         user_login()
 
     def handle_submit():
-        # Insert the values into the corresponding columns in your Google Sheet
-        spreadsheet = gc.open('Factoring Diary')
-        worksheet = spreadsheet.get_worksheet(4)  # Adjust the worksheet index as needed
 
-        # Get the next available row
+        params = {
+            'term': entry1.get(),
+            'item_types': 'person',
+            'fields': 'custom_fields',
+            'exact_match': 'true',
+        }
+
+        response = requests.get(pipedrive_api_url, params=params)
+
+        if response.status_code == 200:
+            persons = response.json()['data']['items']
+            print(persons)
+            if not persons:
+                messagebox.showerror("Error", f"No persons found for username: {entry1.get()}. Please make sure the username is correct, or enter the risk category in pipedrive manually.")
+                return
+
+            for person in persons:
+                person_id = person['item']['id']
+
+                # Update the 'Risk Category' field for this person
+                update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
+                update_data = {
+                    'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()  # get the new value from the entry2 field
+                }
+                update_response = requests.put(update_url, json=update_data)
+
+                if update_response.status_code == 200:
+                    print(f'Successfully updated person {person_id}')
+                else:
+                    print(f'Error updating person {person_id}: {update_response.status_code}')
+        else:
+            print(f'Error: {response.status_code}')
+
+        spreadsheet = gc.open('Factoring Diary')
+        worksheet = spreadsheet.get_worksheet(4)
+
         next_row = len(worksheet.col_values(1)) + 1
 
         current_time = datetime.now().strftime("%H:%M:%S")
 
-        # Insert the values into the sheet
         worksheet.update_cell(next_row, 1, current_time)
-        worksheet.update_cell(next_row, 2, entry1.get())
+        worksheet.update_cell(next_row, 2, entry1.get().capitalize())
         worksheet.update_cell(next_row, 3, entry2.get())
         worksheet.update_cell(next_row, 4, entry3.get())
-        worksheet.update_cell(next_row, 5, user)  # Use user initials instead of entry4.get()
+        worksheet.update_cell(next_row, 5, user) 
 
-        # Insert the new row into the Treeview
-        tree.insert("", "end", values=[current_time, entry1.get(), entry2.get(), entry3.get(), user])
+        tree.insert("", "end", values=[current_time, entry1.get().capitalize(), entry2.get(), entry3.get(), user])
 
-        # Close the wizard window
         wizard_window.destroy()
 
-    # Create a new Toplevel window for the wizard
     wizard_window = tk.Toplevel(root)
+    wizard_window.geometry("300x400")  # Width x Height
+    wizard_window.title("Add Factoring")
+    wizard_window.iconbitmap('src/splash.ico')
 
-    # Create and pack three Entry widgets for user input
     username = ttk.Label(wizard_window, text="Username")
     username.pack(padx=5, pady=5)
     entry1 = ttk.Entry(wizard_window)
@@ -842,9 +882,9 @@ def open_wizard():
 
     riskcat = ttk.Label(wizard_window, text="Risk Category")
     riskcat.pack(padx=5, pady=5)
-    # Options for the risk category
-    options = ["W", "M", "X", "S"]
-    entry2 = ttk.Combobox(wizard_window, values=options)
+
+    options = ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
+    entry2 = ttk.Combobox(wizard_window, values=options, state="readonly")
     entry2.pack(padx=5, pady=5)
     entry2.set(options[0])
      
@@ -853,10 +893,8 @@ def open_wizard():
     entry3 = ttk.Entry(wizard_window)
     entry3.pack(padx=5, pady=5)
 
-    # Bind the "Enter" key to the submit function
     wizard_window.bind('<Return>', lambda event=None: handle_submit())
 
-    # Create a submit button that handles the submitted values
     submit_button = ttk.Button(wizard_window, text="Submit", command=handle_submit)
     submit_button.pack(padx=5, pady=5)
 
@@ -1231,8 +1269,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     factoring_sheet_periodic()
     staff_bulletin()
 
