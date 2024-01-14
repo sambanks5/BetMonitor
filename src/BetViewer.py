@@ -13,7 +13,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import messagebox, filedialog, simpledialog
 from tkinter import ttk
 from tkinter.ttk import *
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from PIL import Image, ImageTk
 
 #Default Values for settings
@@ -73,29 +73,34 @@ def get_database(date_str=None):
         date_str += '-wager_database.json'
     json_file_path = f"database/{date_str}"
 
-    try:
-        with open(json_file_path, 'r') as json_file:
-            data = json.load(json_file)
-        
-        # Reverse the order of the list
-        data.reverse()
-        
-        return data
-    except FileNotFoundError:
-        error_message = f"Error: Could not find file: {json_file_path}. Click 'Reprocess' on Bet Processor"
-        print(error_message)
-        messagebox.showerror("Error", error_message)
-        return []
-    except json.JSONDecodeError:
-        error_message = f"Error: Could not decode JSON from file: {json_file_path}. Click 'Reprocess' on Bet Processor"
-        print(error_message)
-        messagebox.showerror("Error", error_message)
-        return []
-    except Exception as e:
-        error_message = f"An error occurred: {e}"
-        print(error_message)
-        messagebox.showerror("Error", error_message)
-        return []
+    max_retries = 5  # Maximum number of retries
+    for attempt in range(max_retries):
+        try:
+            with open(json_file_path, 'r') as json_file:
+                data = json.load(json_file)
+            
+            # Reverse the order of the list
+            data.reverse()
+            
+            return data
+        except FileNotFoundError:
+            error_message = f"Error: Could not find file: {json_file_path}. Click 'Reprocess' on Bet Processor"
+            print(error_message)
+            messagebox.showerror("Error", error_message)
+            return []
+        except json.JSONDecodeError:
+            error_message = f"Error: Could not decode JSON from file: {json_file_path}."
+            print(error_message)
+            messagebox.showerror("Error", error_message)
+            if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                time.sleep(1)  # Wait for 1 second before retrying
+            else:
+                return []  # Return an empty list after max_retries
+        except Exception as e:
+            error_message = f"An error occurred: {e}"
+            print(error_message)
+            messagebox.showerror("Error", error_message)
+            return []
 
 ### BET CHECK THREAD FUNCTIONS
 def start_bet_feed(current_file=None):
@@ -144,11 +149,11 @@ def bet_feed(data=None):
             bet_type = details.get('bet_type', '')
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-                feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
-                risk_bets += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}\n\n"
+                feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}\n\n"
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-                feed_content += f"{timestamp}-{bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
 
     feed_text.config(state="normal")
     feed_text.delete('1.0', tk.END)
@@ -175,11 +180,11 @@ def bet_runs(data):
     selection_to_bets = defaultdict(list)
 
     # Iterate through the bets and update the dictionary
-    for bet in selection_bets:  # change here
+    for bet in selection_bets:
         if isinstance(bet['details'], dict):
             selections = [selection[0] for selection in bet['details'].get('selections', [])]
             for selection in selections:
-                selection_to_bets[selection].append(bet['id'])  # change here
+                selection_to_bets[selection].append(bet['id'])
 
     # Sort selections by the number of bets in descending order
     sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
@@ -189,6 +194,23 @@ def bet_runs(data):
     runs_text.delete('1.0', tk.END)
 
     for selection, bet_numbers in sorted_selections:
+        skip_selection = False
+        # Check if the selection is a race that has already run
+        if runs_remove_off_races.get():  # Replace with actual condition to check if checkbox is selected
+            race_time_str = selection.split(", ")[1] if ", " in selection else None
+            if race_time_str:
+                try:
+                    race_time_str = race_time_str.split(" - ")[0]
+                    race_time = datetime.strptime(race_time_str, "%H:%M")
+                    if race_time < datetime.now():
+                        skip_selection = True
+                except ValueError:
+                    # If the time string is not in the expected format, ignore the time check
+                    pass
+
+        if skip_selection:
+            continue
+
         if len(bet_numbers) > num_bets:
             runs_text.insert(tk.END, f"{selection}\n")
             for bet_number in bet_numbers:
@@ -196,7 +218,7 @@ def bet_runs(data):
                 if bet_info:
                     for sel in bet_info['details']['selections']:
                         if selection == sel[0]:
-                            runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")  # change here
+                            runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
             runs_text.insert(tk.END, f"\n")
 
     runs_text.config(state=tk.DISABLED)
@@ -895,7 +917,6 @@ def open_settings():
     settings_window.title("Options")
     settings_window.iconbitmap('src/splash.ico')
 
-
     # Set window size to match frame size
     settings_window.geometry("310x300")  # Width x Height
 
@@ -910,11 +931,11 @@ def open_settings():
     options_frame = ttk.LabelFrame(settings_window, style='Card', text="Options", width=120, height=205)
     options_frame.place(x=5, y=5, width=300, height=420)
 
-    # separator = ttk.Separator(options_frame, orient='horizontal')
-    # separator.place(x=10, y=140, width=270)
-
     toggle_button = ttk.Checkbutton(options_frame, text='Auto Refresh', variable=auto_refresh_state, onvalue=True, offvalue=False)
-    toggle_button.place(x=90, y=20) 
+    toggle_button.place(x=60, y=5) 
+
+    remove_off_races = ttk.Checkbutton(options_frame, text='Hide Off Races from Runs', variable=runs_remove_off_races, onvalue=True, offvalue=False)
+    remove_off_races.place(x=60, y=30)
 
     get_courses_button = ttk.Button(options_frame, text="Get Courses", command=get_courses)
     get_courses_button.place(x=30, y=70, width=110)
@@ -1048,6 +1069,9 @@ if __name__ == "__main__":
 
     auto_refresh_state = tk.BooleanVar()
     auto_refresh_state.set(True)
+
+    runs_remove_off_races = tk.BooleanVar()
+    runs_remove_off_races.set(False)
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
@@ -1207,8 +1231,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     factoring_sheet_periodic()
     staff_bulletin()
 

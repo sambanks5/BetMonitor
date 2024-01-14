@@ -63,27 +63,35 @@ class Application(tk.Tk):
 
     def reprocess(self):
         reprocess_file(self)
-        # Create a new thread that will run the process_existing_bets function
         process_thread = threading.Thread(target=process_existing_bets, args=(path, self))
-        # Start the new thread
         process_thread.start()
 
     def log_message(self, message):
-        # Append the message to the text area
         self.text_area.insert(tk.END, message + '\n')
 
-        # Auto-scroll to the end
         self.text_area.see(tk.END)
 
+        max_lines = 1500
+        lines = self.text_area.get('1.0', tk.END).splitlines()
+        if len(lines) > max_lines:
+            self.text_area.delete('1.0', f'{len(lines) - max_lines + 1}.0')
+
     def on_destroy(self, event):
-        # Signal the main loop to stop
         self.stop_main_loop = True
 
 class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         # Check if it's a file, not a directory
         if not os.path.isdir(event.src_path):
-            process_file(event.src_path)
+            max_retries = 5  # Maximum number of retries
+            for attempt in range(max_retries):
+                try:
+                    process_file(event.src_path)
+                    break  # If the file was processed successfully, break out of the loop
+                except Exception as e:
+                    print(f"An error occurred while processing the file {event.src_path} on attempt {attempt + 1}: {e}")
+                    if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                        time.sleep(1)  # Wait for 1 second before retrying
 
 def parse_bet_details(bet_text):
     bet_number_pattern = r"Wager Number - (\d+)"
@@ -230,7 +238,6 @@ def load_database(app):
 
     try:
         with open(filename, 'r') as f:
-            app.log_message('Loading database for ' + date) 
             return json.load(f)
     except FileNotFoundError:
         app.log_message('No database found. Creating a new one for ' + date)
@@ -349,8 +356,6 @@ def process_existing_bets(directory, app):
     save_database(database)
     app.log_message('\nBet processing complete...\nWaiting for new files...\n')
 
-
-
 def reprocess_file(app):
     # Get the current date
     date = datetime.now().strftime('%Y-%m-%d')
@@ -376,11 +381,17 @@ def main(app):
                 continue  # If the user didn't select a directory, skip this iteration
         observer.schedule(event_handler, path, recursive=True)
         observer.start()
+
         app.log_message('Bet Processor - import, parse and store daily bet data.\n')
         app.log_message('Watching for new files...')
+
         try:
             while not app.stop_main_loop:
                 time.sleep(1)
+        except Exception as e:
+            app.log_message(f"An error occurred: {e}")
+            app.reprocess()  # Call the reprocess function
+            time.sleep(10)  # Optional: sleep for a bit before continuing
         except KeyboardInterrupt:
             pass
         finally:
