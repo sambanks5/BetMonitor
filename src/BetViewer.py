@@ -100,12 +100,12 @@ def get_database(date_str=None):
             messagebox.showerror("Error", error_message)
             return []
         except json.JSONDecodeError:
-            error_message = f"Error: Could not decode JSON from file: {json_file_path}. "
-            print(error_message)
-            messagebox.showerror("Error", error_message)
             if attempt < max_retries - 1:  # Don't sleep on the last attempt
                 time.sleep(1)  # Wait for 1 second before retrying
             else:
+                error_message = f"Error: Could not decode JSON from file: {json_file_path}. "
+                print(error_message)
+                messagebox.showerror("Error", error_message)
                 return []  # Return an empty list after max_retries
         except Exception as e:
             error_message = f"An error occurred: {e}"
@@ -1029,7 +1029,7 @@ def staff_bulletin():
 
 ### MENU BAR * OPTIONS ITEMS
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v6.0")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v7.1")
 
 def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
@@ -1059,7 +1059,7 @@ if __name__ == "__main__":
 
     ### ROOT WINDOW
     root = tk.Tk()
-    root.title("Bet Monitor v7.0 - BETA")
+    root.title("Bet Viewer v7.1")
     root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
