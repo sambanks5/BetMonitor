@@ -127,7 +127,7 @@ def bet_feed(data=None):
 
     feed_content = ""
     risk_bets = ""
-    separator = '\n\n------------------------------------------------------------------------------------\n\n'
+    separator = '\n\n----------------------------------------------------------------------------------\n\n'
 
     for bet in data:
         wager_type = bet.get('type', '').lower()
@@ -161,7 +161,7 @@ def bet_feed(data=None):
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
-                risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}\n\n"
+                risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
@@ -477,8 +477,11 @@ def create_daily_report(current_file=None):
     customer_payments = {}
     active_clients_set = set()
     w_clients = set()
+    total_w_clients = 0
     m_clients = set()
+    total_m_clients = 0
     norisk_clients = set()
+    total_norisk_clients = 0
     # List of timestamps to find busiest time of day
     timestamps = []
     hour_ranges = {}
@@ -871,7 +874,7 @@ def open_wizard():
         wizard_window.destroy()
 
     wizard_window = tk.Toplevel(root)
-    wizard_window.geometry("300x400")  # Width x Height
+    wizard_window.geometry("250x300")  # Width x Height
     wizard_window.title("Add Factoring")
     wizard_window.iconbitmap('src/splash.ico')
 
@@ -892,6 +895,9 @@ def open_wizard():
     assrating.pack(padx=5, pady=5)
     entry3 = ttk.Entry(wizard_window)
     entry3.pack(padx=5, pady=5)
+
+    factoringnote = ttk.Label(wizard_window, text="Risk Category will be updated in Pipedrive.")
+    factoringnote.pack(padx=5, pady=5)
 
     wizard_window.bind('<Return>', lambda event=None: handle_submit())
 
@@ -1269,8 +1275,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     factoring_sheet_periodic()
     staff_bulletin()
 

@@ -17,11 +17,13 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Bet Processor')
+        self.geometry('750x300')
         
         self.iconbitmap('src/splash.ico')
         self.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
         ttk.Style().theme_use('forest-light')
         style = ttk.Style(self)
+
         style.configure('TButton', padding=(5, 5))
 
         self.grid_columnconfigure(0, weight=3)
@@ -38,7 +40,7 @@ class Application(tk.Tk):
         self.text_area.grid(row=0, column=0, rowspan=4, sticky='nsew')
 
         image = Image.open('src/splash.ico')
-        image = image.resize((150, 150)) 
+        image = image.resize((100, 100)) 
         self.logo = ImageTk.PhotoImage(image)
 
         self.logo_label = Label(self, image=self.logo)
@@ -47,7 +49,7 @@ class Application(tk.Tk):
         self.reprocess_button = ttk.Button(self, text="Reprocess", command=self.reprocess, style='TButton', width=15)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
 
-        self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=15)
+        self.set_path_button = ttk.Button(self, text="Set Path", command=self.set_bet_path, style='TButton', width=15)
         self.set_path_button.grid(row=3, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
 
 
@@ -89,20 +91,22 @@ class FileHandler(FileSystemEventHandler):
                     process_file(event.src_path)
                     break  # If the file was processed successfully, break out of the loop
                 except Exception as e:
-                    print(f"An error occurred while processing the file {event.src_path} on attempt {attempt + 1}: {e}")
-                    if attempt < max_retries - 1:  # Don't sleep on the last attempt
-                        time.sleep(1)  # Wait for 1 second before retrying
+                    print(f"An error occurred while processing the file {event.src_path}: {e}")
+        else:  # This block will be executed if the for loop completed, i.e., max retries reached
+            print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
+        
 
 def parse_bet_details(bet_text):
     bet_number_pattern = r"Wager Number - (\d+)"
     customer_ref_pattern = r"Customer Reference - (\w+)"
-    customer_risk_pattern = r"Customer Risk Category - (\w+)"
-    time_pattern = r"Bet placed on (\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})"
-    selection_pattern = r"(.*?) at (\d+\.\d+)?"
+    customer_risk_pattern = r"Customer Risk Category - (\w+)?"
+    time_pattern = r"Bet placed on \d{2}/\d{2}/\d{4} (\d{2}:\d{2}:\d{2})"
+    selection_pattern = r"(.+?, .+?, .+?) (?:at|on) (\d+\.\d+|SP)?"
     bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
     bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
-    odds_pattern = r"(?:at|on)\s+(\d+\.\d+)"
+    odds_pattern = r"(?:at|on)\s+(\d+\.\d+|SP)"  # Updated pattern to include 'SP'
 
+    # Rest of the code remains the same
     customer_reference_match = re.search(customer_ref_pattern, bet_text)
     customer_risk_match = re.search(customer_risk_pattern, bet_text)
     timestamp_match = re.search(time_pattern, bet_text)
@@ -127,12 +131,13 @@ def parse_bet_details(bet_text):
             selection = selection.replace('  , ', ' - ').strip()
 
             if odds:
-                odds = float(odds)
+                if odds != 'SP':
+                    odds = float(odds)
             else:
                 odds = 'evs'
             parsed_selections.append((selection.strip(), odds))
 
-        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match else "-"
+        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match and customer_risk_match.group(1) else "-"        
         bet_no = bet_number.group(1).strip()
         customer_reference = customer_reference_match.group(1).strip()
         timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
@@ -209,7 +214,6 @@ def parse_sms_details(bet_text):
 
     return wager_number, customer_reference, mobile_number, sms_wager_text
 
-
 def set_bet_folder_path():
     global path
     new_folder_path = filedialog.askdirectory()
@@ -230,6 +234,7 @@ def process_file(file_path):
     save_database(database)
 
 def load_database(app):
+    print("\nLoading database")
     # Get the current date
     date = datetime.now().strftime('%Y-%m-%d')
 
@@ -241,9 +246,13 @@ def load_database(app):
             return json.load(f)
     except FileNotFoundError:
         app.log_message('No database found. Creating a new one for ' + date)
+        # Create a new file and return an empty list
+        # with open(filename, 'w') as f:
+        #     json.dump([], f, indent=4)
         return []
 
 def add_bet(database, bet, app):
+    print("Adding a bet to the database")
     # Check if the bet is already in the database
     if not any(bet['id'] == existing_bet['id'] for existing_bet in database):
         database.append(bet)
@@ -251,6 +260,7 @@ def add_bet(database, bet, app):
         app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
 
 def save_database(database):
+    print("Saving database")
     # Get the current date
     date = datetime.now().strftime('%Y-%m-%d')
 
@@ -263,6 +273,7 @@ def save_database(database):
     order_bets(filename)
 
 def order_bets(filename):
+    print("Ordering bets")
     with open(filename, 'r') as f:
         data = json.load(f)  # load the list directly
 
@@ -287,7 +298,7 @@ def parse_file(file_path, app):
             customer_ref, knockback_id, knockback_details, time = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{knockback_id}-{time}"
             bet_info = {
-                'time': time,  # moved 'time' to the top
+                'time': time,
                 'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
                 'customer_ref': customer_ref,
@@ -303,7 +314,7 @@ def parse_file(file_path, app):
             wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
             
             bet_info = {
-                'time': creation_time_str,  # add 'time' field
+                'time': creation_time_str,
                 'id': wager_number,
                 'type': 'SMS WAGER',
                 'customer_ref': customer_reference,
@@ -316,7 +327,7 @@ def parse_file(file_path, app):
         elif is_bet:
             bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
             bet_info = {
-                'time': timestamp,  # use 'timestamp' as 'time'
+                'time': timestamp,
                 'id': bet_no,
                 'type': 'BET',
                 'customer_ref': customer_reference,
@@ -332,31 +343,29 @@ def parse_file(file_path, app):
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
             return bet_info
-
+    print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
 
 def process_existing_bets(directory, app):
-    # Load the existing database
     database = load_database(app)
 
-    # Get a list of all files in the directory
     files = os.listdir(directory)
 
-    # Filter the list to include only .txt files
     bet_files = [f for f in files if f.endswith('.bww')]
     app.log_message(f'Found {len(bet_files)} files. Beginning process, please wait...\n')
     time.sleep(3)
     
-    # Parse each bet file and add it to the database
     for bet_file in bet_files:
         bet = parse_file(os.path.join(directory, bet_file), app)
+        print("Parsed a file")
         add_bet(database, bet, app)
+        print("Added a bet to JSON")
 
-    # Save the updated database
     save_database(database)
     app.log_message('\nBet processing complete...\nWaiting for new files...\n')
 
 def reprocess_file(app):
+    print("Reprocessing file")
     # Get the current date
     date = datetime.now().strftime('%Y-%m-%d')
 
@@ -367,36 +376,42 @@ def reprocess_file(app):
     if os.path.exists(filename):
         os.remove(filename)
         app.log_message('Existing database deleted. Will begin processing existing bets...\n\n')
+    else:
+        app.log_message('No existing database found. Will begin processing existing bets...\n\n')
 
 def main(app):
     global path
+    event_handler = FileHandler()
+    observer = Observer()
+    observer_started = False
+        
+    app.log_message('Bet Processor - import, parse and store daily bet data.\n')
+    app.log_message('Watching for new files...')
+
     while not app.stop_main_loop:
-        # Set up the file watcher
-        event_handler = FileHandler()
-        observer = Observer()
         if not os.path.exists(path):
             print(f"Error: The path {path} does not exist.")
-            set_bet_folder_path()  # Ask the user to select a directory
+            set_bet_folder_path() 
             if not os.path.exists(path):
-                continue  # If the user didn't select a directory, skip this iteration
-        observer.schedule(event_handler, path, recursive=True)
-        observer.start()
+                continue  
+        if not observer_started:
+            observer.schedule(event_handler, path, recursive=False)
+            observer.start()
+            observer_started = True
 
-        app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-        app.log_message('Watching for new files...')
 
         try:
-            while not app.stop_main_loop:
-                time.sleep(1)
+            time.sleep(1)  # Add a delay of 1 second
         except Exception as e:
             app.log_message(f"An error occurred: {e}")
-            app.reprocess()  # Call the reprocess function
-            time.sleep(10)  # Optional: sleep for a bit before continuing
+            app.reprocess() 
+            time.sleep(10)
         except KeyboardInterrupt:
             pass
-        finally:
-            observer.stop()
-        observer.join()
+    observer.stop()
+    print("OBSERVER STOPPED!")  
+    observer.join()
+    print("MAIN LOOP STOPPED! If you see this please tell Sam.")
 
 if __name__ == "__main__":
     # Create the application
