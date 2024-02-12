@@ -40,17 +40,13 @@ selection_bets = {}
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
 
-# Load the credentials from the JSON file
 with open('src/creds.json') as f:
     data = json.load(f)
 
-# Get the Pipedrive API token
 pipedrive_api_token = data['pipedrive_api_key']
 
-# Now you can use the token in your API URL
 pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={pipedrive_api_token}'
 
-# Get the Google API credentials and authorize
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
@@ -58,39 +54,31 @@ gc = gspread.authorize(credentials)
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
-    # Get the number of recent files to check from the user input
     global current_file
-    # Refresh the display
     start_bet_feed(current_file)
     display_courses()
-    #run_factoring_sheet()
     print("Refreshed Bets")
 
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
-    # Check if auto refresh is enabled
     if auto_refresh_state.get():
-        # Refresh the display
         refresh_display()
 
-    # Schedule the next refresh check
     root.after(30000, refresh_display_periodic)
 
 def get_database(date_str=None):
-    # Generate the JSON file path based on the current date if no date_str is provided
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
     if not date_str.endswith('-wager_database.json'):
         date_str += '-wager_database.json'
     json_file_path = f"database/{date_str}"
 
-    max_retries = 5  # Maximum number of retries
+    max_retries = 5
     for attempt in range(max_retries):
         try:
             with open(json_file_path, 'r') as json_file:
                 data = json.load(json_file)
             
-            # Reverse the order of the list
             data.reverse()
             
             return data
@@ -100,13 +88,13 @@ def get_database(date_str=None):
             messagebox.showerror("Error", error_message)
             return []
         except json.JSONDecodeError:
-            if attempt < max_retries - 1:  # Don't sleep on the last attempt
-                time.sleep(1)  # Wait for 1 second before retrying
+            if attempt < max_retries - 1:
+                time.sleep(1)  
             else:
                 error_message = f"Error: Could not decode JSON from file: {json_file_path}. "
                 print(error_message)
                 messagebox.showerror("Error", error_message)
-                return []  # Return an empty list after max_retries
+                return []  
         except Exception as e:
             error_message = f"An error occurred: {e}"
             print(error_message)
@@ -115,7 +103,6 @@ def get_database(date_str=None):
 
 ### BET CHECK THREAD FUNCTIONS
 def start_bet_feed(current_file=None):
-    # Load the data from the file
     data = get_database(current_file) if current_file else None
     bet_thread = threading.Thread(target=bet_feed, args=(data,))
     bet_thread.daemon = True
@@ -134,12 +121,11 @@ def bet_feed(data=None):
         if wager_type == 'wager knockback':
             customer_ref = bet.get('customer_ref', '')
             knockback_id = bet.get('id', '')
-            # Remove the time from the knockback_id
             knockback_id = knockback_id.rsplit('-', 1)[0]
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-            feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+            feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}\n" + separator
         
         elif wager_type == 'sms wager':
             wager_number = bet.get('id', '')
@@ -182,32 +168,26 @@ def bet_runs(data):
     global DEFAULT_NUM_BETS_TO_RUN
     num_bets = DEFAULT_NUM_BETS_TO_RUN
 
-    # Load the bets from the JSON database
     selection_bets = data
 
     selection_bets = selection_bets[:DEFAULT_NUM_RECENT_FILES]
 
-    # Dictionary to store selections and their corresponding bet numbers
     selection_to_bets = defaultdict(list)
 
-    # Iterate through the bets and update the dictionary
     for bet in selection_bets:
         if isinstance(bet['details'], dict):
             selections = [selection[0] for selection in bet['details'].get('selections', [])]
             for selection in selections:
                 selection_to_bets[selection].append(bet['id'])
 
-    # Sort selections by the number of bets in descending order
     sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
 
-    # Clear the text widget
     runs_text.config(state="normal")
     runs_text.delete('1.0', tk.END)
 
     for selection, bet_numbers in sorted_selections:
         skip_selection = False
-        # Check if the selection is a race that has already run
-        if runs_remove_off_races.get():  # Replace with actual condition to check if checkbox is selected
+        if runs_remove_off_races.get(): 
             race_time_str = selection.split(", ")[1] if ", " in selection else None
             if race_time_str:
                 try:
@@ -216,7 +196,6 @@ def bet_runs(data):
                     if race_time < datetime.now():
                         skip_selection = True
                 except ValueError:
-                    # If the time string is not in the expected format, ignore the time check
                     pass
 
         if skip_selection:
@@ -236,10 +215,8 @@ def bet_runs(data):
 
 ### GET COURSES FROM API
 def get_courses():
-    # Load the credentials from the JSON file
     with open('src/creds.json') as f:
         creds = json.load(f)
-    # Get today's date
     today = date.today()
     url = "https://horse-racing.p.rapidapi.com/racecards"
     querystring = {"date": today.strftime('%Y-%m-%d')}
@@ -250,12 +227,10 @@ def get_courses():
     response = requests.get(url, headers=headers, params=querystring)
     data = response.json()
 
-    # Check if the response is a list
     if not isinstance(data, list):
         print("Error: The response from the API is not a list.", data)
         return
 
-    # Get a list of unique courses
     courses = set()
     for race in data:
         try:
@@ -267,22 +242,17 @@ def get_courses():
     courses.add("SIS Greyhounds")
     courses.add("TRP Greyhounds")
 
-    # Convert the set to a list
     courses = list(courses)
     print("Courses:", courses)
-    # Try to load the existing data from the file
     try:
         with open('update_times.json', 'r') as f:
             update_data = json.load(f)
     except FileNotFoundError:
-        # If the file doesn't exist, create it with the initial data
         update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
         with open('update_times.json', 'w') as f:
             json.dump(update_data, f)
 
-    # Check if the date in the file matches today's date
     if update_data['date'] != today.strftime('%Y-%m-%d'):
-        # If not, update the file with the new date and courses
         update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in courses}}
         with open('update_times.json', 'w') as f:
             json.dump(update_data, f)
@@ -292,11 +262,9 @@ def get_courses():
     return courses
 
 def reset_update_times():
-    # Delete the file if it exists
     if os.path.exists('update_times.json'):
         os.remove('update_times.json')
 
-    # Create the file with the initial data
     update_data = {'date': '', 'courses': {}}
     with open('update_times.json', 'w') as f:
         json.dump(update_data, f)
@@ -362,67 +330,52 @@ def display_courses():
         time_label.grid(row=i, column=3, padx=5, pady=2, sticky="w")
 
 def add_course():
-    # Prompt the user for a course name
     course_name = simpledialog.askstring("Add Course", "Enter the course name:")
     if course_name:
-        # Load the existing data from the file
         with open('update_times.json', 'r') as f:
             data = json.load(f)
 
-        # Add the course to the data
         data['courses'][course_name] = ""
 
-        # Write the updated data back to the file
         with open('update_times.json', 'w') as f:
             json.dump(data, f)
 
-        # Refresh the display
         display_courses()
 
 ### REMOVE COURSE FROM COURSES LIST
 def remove_course(course):
-    # Load the existing data from the file
     with open('update_times.json', 'r') as f:
         data = json.load(f)
 
-    # Remove the course from the data
     if course in data['courses']:
         del data['courses'][course]
 
-    # Write the updated data back to the file
     with open('update_times.json', 'w') as f:
         json.dump(data, f)
 
-    # Refresh the display
     display_courses()
 
 ### HANDLE UPDATE OF COURSE
 def update_course(course):
     global user
-    # Check if user is empty
     if not user:
         user_login()
 
     now = datetime.now()
     time_string = now.strftime('%H:%M')
 
-    # Load the existing data from the file
     with open('update_times.json', 'r') as f:
         data = json.load(f)
 
-    # Update the course in the data
     data['courses'][course] = f"{time_string} by {user}"
 
 
-    # Write the updated data back to the file
     with open('update_times.json', 'w') as f:
         json.dump(data, f)
 
     log_update(course, time_string, user)
 
-    #print(f"Button clicked for course: {course}. Updated at {time_string} - {user}.")
 
-    # Refresh the display
     display_courses()
 
 ### LOG ALL COURSE UPDATES TO FILE
@@ -508,7 +461,7 @@ def create_daily_report(current_file=None):
         bet_type = bet['type'].lower()
         is_sms = bet_type == 'sms wager'
         is_bet = bet_type == 'bet'
-        is_wageralert = bet_type == 'wager knockback'  # Adjust this as per your data
+        is_wageralert = bet_type == 'wager knockback'
 
         if is_bet:
             bet_customer_reference = bet['customer_ref']
@@ -532,7 +485,6 @@ def create_daily_report(current_file=None):
 
             payment_value = float(payment[1:].replace(',', ''))
             total_stakes += payment_value 
-            # Update the total payment for this customer
             if bet_customer_reference in customer_payments:
                 customer_payments[bet_customer_reference] += payment_value
             else:
@@ -566,40 +518,29 @@ def create_daily_report(current_file=None):
             sms_clients.add(sms_customer_reference)
             total_sms += 1
 
-    # Get the list of all files in the 'logs' directory
     log_files = os.listdir('logs')
-    # Sort the files by modification time
     log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
-    # Get the latest file
     latest_file = log_files[-1]
-    # Open and read the latest log file
     with open('logs/' + latest_file, 'r') as file:
         lines = file.readlines()
-    # Process each line
     for line in lines:
-        # Skip empty lines
         if line.strip() == '':
             continue
 
-        # Split line by '-'
         parts = line.strip().split(' - ')
 
-        # Handle lines with a course name followed by a colon
         if len(parts) == 1 and parts[0].endswith(':'):
             course = parts[0].replace(':', '')
             continue
 
-        # Handle lines with time, course, and staff
         if len(parts) == 2:
             time, staff = parts
 
-            # Increment course count
             if course in course_updates:
                 course_updates[course] += 1
             else:
                 course_updates[course] = 1
 
-            # Increment staff count
             if staff in staff_updates:
                 staff_updates[staff] += 1
             else:
@@ -638,7 +579,6 @@ def create_daily_report(current_file=None):
     for rank, (client, count) in enumerate(top_client_bets, start=1):
         report_output += f"{rank}. {client} - Bets: {count}\n"
 
-    # Add counts to report_output
     report_output += "\nCOURSE UPDATES:\n"
     for course, count in course_updates.items():
         report_output += f"{course}: {count} updates\n"
@@ -842,10 +782,9 @@ def open_wizard():
             for person in persons:
                 person_id = person['item']['id']
 
-                # Update the 'Risk Category' field for this person
                 update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
                 update_data = {
-                    'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()  # get the new value from the entry2 field
+                    'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()
                 }
                 update_response = requests.put(update_url, json=update_data)
 
@@ -874,7 +813,7 @@ def open_wizard():
         wizard_window.destroy()
 
     wizard_window = tk.Toplevel(root)
-    wizard_window.geometry("250x300")  # Width x Height
+    wizard_window.geometry("250x300")
     wizard_window.title("Add Factoring")
     wizard_window.iconbitmap('src/splash.ico')
 
@@ -933,18 +872,15 @@ def user_login():
         else:
             messagebox.showerror("Error", "Maximum of 2 characters.")
 
-    # Update the UI to display the logged in user's full name
     login_label.config(text=f'Logged in as {full_name}')
 
 ### SETTINGS WINDOW
 def open_settings():
     def load_database(event):
         global current_file
-        # Get the selected file
         selected_file = databases_combobox.get()
         current_file = selected_file
 
-        # Use a regular expression to extract the date string from the selected file
         match = re.search(r'\d{4}-\d{2}-\d{2}', selected_file)
         if match:
             date_str = match.group()
@@ -952,7 +888,6 @@ def open_settings():
             print(f"Error: Could not extract date from file name: {selected_file}")
             return
 
-        # Load the data from the selected file
         data = get_database(date_str)
 
         bet_feed(data)
@@ -961,13 +896,10 @@ def open_settings():
     settings_window.title("Options")
     settings_window.iconbitmap('src/splash.ico')
 
-    # Set window size to match frame size
-    settings_window.geometry("310x300")  # Width x Height
+    settings_window.geometry("310x300")
 
-    # Disable window resizing
     settings_window.resizable(False, False)
 
-    # Position window on the right side of the screen
     screen_width = settings_window.winfo_screenwidth()
     settings_window.geometry(f"+{screen_width - 350}+50")  # "+X+Y"
 
@@ -990,7 +922,6 @@ def open_settings():
     separator = ttk.Separator(options_frame, orient='horizontal')
     separator.place(x=10, y=130, width=270)
 
-    # Get a list of all JSON files in the 'databases' directory
     json_files = [f for f in os.listdir('database') if f.endswith('.json')]
 
     databases_combobox = ttk.Combobox(options_frame, values=json_files, width=4)
@@ -1005,21 +936,17 @@ def open_settings():
 
 ### PASSWORD GENERATOR FUNCTIONS
 def generate_random_string():
-    # Generate 6 random digits
     random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
     
-    # Combine 'GB' with the random numbers
     generated_string = 'GB' + random_numbers
     
     return generated_string
 
 ### COPY PASSWORD TO CLIPBOARD
 def copy_to_clipboard():
-    global result_label  # Access the global result_label variable
-    # Generate the string
+    global result_label
     generated_string = generate_random_string()
     
-    # Copy the generated string to the clipboard
     pyperclip.copy(generated_string)
     
     password_result_label.config(text=f"{generated_string}")
@@ -1041,10 +968,8 @@ def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
 
 def factoring_sheet_periodic():
-    # Call factoring_sheet
     run_factoring_sheet()
 
-    # Schedule the next call to factoring_sheet
     root.after(300000, factoring_sheet_periodic)
 
 def run_factoring_sheet():
@@ -1076,9 +1001,9 @@ if __name__ == "__main__":
     root.configure(bg='#ffffff')
     alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
     root.geometry(alignstr)
-    root.minsize(width//2, height//2)  # Minimum size to half of the initial size
-    root.maxsize(screenwidth, screenheight)  # Maximum size to the screen size
-    root.resizable(True, True)  # Allow resizing in both directions
+    root.minsize(width//2, height//2)
+    root.maxsize(screenwidth, screenheight)
+    root.resizable(True, True)
 
 
     ### IMPORT LOGO
@@ -1136,22 +1061,18 @@ if __name__ == "__main__":
     runs_text.config(state='disabled') 
     runs_text.pack(fill='both', expand=True)
 
-    # Create a new frame for the label and spinbox
     spinbox_frame = ttk.Frame(runs_frame)
     spinbox_frame.pack(side='bottom')
 
-    # Create the label
     spinbox_label = ttk.Label(spinbox_frame, text='Bets to a run: ')
     spinbox_label.grid(row=0, column=0, sticky='e')
 
-    # Create the Spinbox
     spinbox = ttk.Spinbox(spinbox_frame, from_=2, to=10, textvariable=num_run_bets_var, width=2)
     spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
 
     combobox_label = ttk.Label(spinbox_frame, text=' Number of bets: ')
     combobox_label.grid(row=0, column=2, sticky='w')
 
-    # Create the Combobox
     combobox_values = [20, 50, 100, 300, 1000, 2000]
     combobox_var = tk.IntVar(value=50)   
     combobox = ttk.Combobox(spinbox_frame, textvariable=combobox_var, values=combobox_values, width=4)
@@ -1275,8 +1196,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     factoring_sheet_periodic()
     staff_bulletin()
 
