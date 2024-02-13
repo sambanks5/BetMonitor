@@ -7,6 +7,7 @@ import requests
 import random
 import gspread
 import datetime
+import logging
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
@@ -66,6 +67,13 @@ def refresh_display_periodic():
 
     root.after(30000, refresh_display_periodic)
 
+
+def update_feed_text(message):
+    feed_text.config(state="normal")
+    feed_text.insert('end', message)
+    feed_text.config(state="disabled")
+
+
 def get_database(date_str=None):
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
@@ -83,10 +91,15 @@ def get_database(date_str=None):
             
             return data
         except FileNotFoundError:
-            error_message = f"Error: Could not find file: {json_file_path}. Click 'Reprocess' on Bet Processor"
-            print(error_message)
-            messagebox.showerror("Error", error_message)
+            error_message = f"No bet data available for {date_str}. \nIf this is wrong, click 'Reprocess' on Bet Processor\n\n"
+            feed_text.after(0, update_feed_text, error_message)
             return []
+            # messagebox.showerror("Error", error_message)
+            # print("test")
+            # feed_text.config(state="normal")
+            # feed_text.insert('end', error_message)            
+            # feed_text.config(state="disabled")
+            # return []
         except json.JSONDecodeError:
             if attempt < max_retries - 1:
                 time.sleep(1)  
@@ -314,9 +327,9 @@ def display_courses():
             else:
                 color = 'black'
         else:
-            if 20 <= time_diff < 30:
+            if 25 <= time_diff < 35:
                 color = 'Orange'
-            elif time_diff >= 30:
+            elif time_diff >= 35:
                 color = 'red'
             else:
                 color = 'black'
@@ -438,8 +451,6 @@ def create_daily_report(current_file=None):
     # List of timestamps to find busiest time of day
     timestamps = []
     hour_ranges = {}
-    course_updates = {}
-    staff_updates = {}
     # Wageralert Report
     total_wageralerts = 0
     price_change = 0
@@ -534,34 +545,6 @@ def create_daily_report(current_file=None):
             sms_clients.add(sms_customer_reference)
             total_sms += 1
 
-    log_files = os.listdir('logs')
-    log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
-    latest_file = log_files[-1]
-    with open('logs/' + latest_file, 'r') as file:
-        lines = file.readlines()
-    for line in lines:
-        if line.strip() == '':
-            continue
-
-        parts = line.strip().split(' - ')
-
-        if len(parts) == 1 and parts[0].endswith(':'):
-            course = parts[0].replace(':', '')
-            continue
-
-        if len(parts) == 2:
-            time, staff = parts
-
-            if course in course_updates:
-                course_updates[course] += 1
-            else:
-                course_updates[course] = 1
-
-            if staff in staff_updates:
-                staff_updates[staff] += 1
-            else:
-                staff_updates[staff] = 1
-
     top_spenders = Counter(customer_payments).most_common(5)
     client_bet_counter = Counter(active_clients)
     top_client_bets = client_bet_counter.most_common(5)
@@ -578,32 +561,25 @@ def create_daily_report(current_file=None):
     report_output += f"\tDAILY REPORT TICKET {date_string}\n\t        Generated at {formatted_time}"
     report_output += f"{separator}"
 
-    report_output += f"\nStakes: £{total_stakes:.2f}  |  "
+    report_output += f"\nStakes: £{total_stakes:,.2f}  |  "
     report_output += f"Bets: {total_bets}  |  "
     report_output += f"Knockbacks: {total_wageralerts}"
-    report_output += f"\n\tKnockback Percentage: {total_wageralerts / total_bets * 100:.2f}%\n"
+    report_output += f"\n\tKnockback Percentage: {total_wageralerts / total_bets * 100:.2f}%"
+    report_output += f"\n\t    Average Stake: £{total_stakes / total_bets:,.2f}\n"
 
     report_output += f"\n\nClients: {total_clients}  |  "
     report_output += f"No Risk: {total_norisk_clients}  |  "
     report_output += f"M: {total_m_clients}  |  "
     report_output += f"W: {total_w_clients}"
-    report_output += f"\n\tRisk Cat Percentage: {total_m_clients / total_clients * 100:.2f}%\n"
+    report_output += f"\n\tRisk Cat. Percentage: {total_m_clients / total_clients * 100:.2f}%"
 
     report_output += "\n\n\nHighest Spend:\n"
     for rank, (customer, spend) in enumerate(top_spenders, start=1):
-        report_output += f"\t{rank}. {customer} - Stakes: £{spend:.2f}\n"
+        report_output += f"\t{rank}. {customer} - Stakes: £{spend:,.2f}\n"
 
     report_output += "\nMost Bets:\n"
     for rank, (client, count) in enumerate(top_client_bets, start=1):
         report_output += f"\t{rank}. {client} - Bets: {count}\n"
-
-    # report_output += "\nCOURSE UPDATES:\n"
-    # for course, count in course_updates.items():
-    #     report_output += f"{course}: {count} updates\n"
-
-    # report_output += "\nSTAFF UPDATES:\n"
-    # for staff, count in staff_updates.items():
-    #     report_output += f"{staff}: {count} updates\n"
 
     report_output += f"\nBets Per Hour:\n"
     for hour, count in hour_counts.items():
@@ -763,6 +739,171 @@ def create_client_report(customer_ref, current_file=None):
     report_ticket.insert('1.0', report_output)
     report_ticket.config(state="disabled")    
 
+def create_staff_report():
+    global USER_NAMES
+    report_output = ""
+    course_updates = Counter()
+    staff_updates = Counter()
+    factoring_updates = Counter()
+
+    # Get the current date and the date a month ago
+    current_date = datetime.now()
+    month_ago = current_date - timedelta(days=30)
+
+    log_files = os.listdir('logs')
+    log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
+    
+    progress["maximum"] = len(log_files)
+    progress["value"] = 0
+    # Read all the log files from the past month
+    for i, log_file in enumerate(log_files):
+
+        progress["value"] = i + 1
+        root.update_idletasks()
+
+        file_date = datetime.fromtimestamp(os.path.getmtime('logs/' + log_file))
+        if month_ago <= file_date <= current_date:
+            with open('logs/' + log_file, 'r') as file:
+                lines = file.readlines()
+
+            for line in lines:
+                if line.strip() == '':
+                    continue
+
+                parts = line.strip().split(' - ')
+
+                if len(parts) == 1 and parts[0].endswith(':'):
+                    course = parts[0].replace(':', '')
+                    continue
+
+                if len(parts) == 2:
+                    time, staff_initials = parts
+                    staff_name = USER_NAMES.get(staff_initials, staff_initials)
+                    course_updates[course] += 1
+                    staff_updates[staff_name] += 1
+
+    factoring_log_file = os.listdir('factoringlogs')
+    factoring_log_file.sort(key=lambda file: os.path.getmtime('factoringlogs/' + file))
+
+    for log_file in factoring_log_file:
+        file_date = datetime.fromtimestamp(os.path.getmtime('factoringlogs/' + log_file))
+        if month_ago <= file_date <= current_date:
+            with open('factoringlogs/' + log_file, 'r') as file:
+                lines = file.readlines()
+
+            # Only keep the last 100 lines
+            lines = lines[-100:]
+
+            for line in lines:
+                if line.strip() == '':
+                    continue
+
+                data = json.loads(line)
+                staff_initials = data['Staff']
+                staff_name = USER_NAMES.get(staff_initials, staff_initials)
+                factoring_updates[staff_name] += 1
+
+
+    report_output += f"---------------------------------------------------------------------------------\n"
+    report_output += f"\t    STAFF REPORT {current_date.strftime('%d-%m-%y')}\n"
+    report_output += f"---------------------------------------------------------------------------------\n"
+
+    employee_of_the_month, _ = staff_updates.most_common(1)[0]
+    report_output += f"\nEmployee Of The Month: {employee_of_the_month}\n"
+
+    factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
+    report_output += f"\nCurrent Factoring Leader: {factoring_employee_of_the_month}\n"
+
+    report_output += "\nStaff Updates:\n"
+    for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
+        report_output += f"\t{staff}  |  {count}\n"
+
+    report_output += "\nStaff Factoring:\n"
+    for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
+        report_output += f"\t{staff}  |  {count}\n"
+
+    report_output += "\nCourse Updates:\n"
+    for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
+        report_output += f"\t{course}  |  {count}\n"
+
+    # Find the employee of the month for factoring
+
+
+
+    report_ticket.config(state="normal")
+    report_ticket.delete('1.0', tk.END)
+    report_ticket.insert('1.0', report_output)
+    report_ticket.config(state="disabled")
+
+def find_traders():
+    data = get_database()
+    selection_to_users = {}
+    selection_to_odds = {}
+
+    for bet in data:
+        wager_type = bet.get('type', '').lower()
+        if wager_type == 'bet':
+            details = bet.get('details', {})
+            customer_reference = bet.get('customer_ref', '')
+            customer_risk_category = details.get('risk_category', '')
+
+            for selection in details['selections']:
+                selection_name = selection[0]
+                odds = selection[1]
+
+                if isinstance(odds, str):
+                    if odds == 'SP':
+                        continue  
+                    elif odds.lower() == 'evs':
+                        odds = 2.0  
+                    else:
+                        odds = float(odds)  
+
+                selection_tuple = (selection_name,)
+                if selection_tuple not in selection_to_users:
+                    selection_to_users[selection_tuple] = set()
+                    selection_to_odds[selection_tuple] = []
+                selection_to_users[selection_tuple].add((customer_reference, customer_risk_category))
+                selection_to_odds[selection_tuple].append((customer_reference, odds))
+
+    users_without_risk_category = set()
+    users_with_high_odds = set()
+
+    for selection, users in selection_to_users.items():
+        users_with_risk_category = {user for user in users if user[1] and user[1] != '-'}
+        users_without_risk_category_for_selection = {user for user in users if not user[1] or user[1] == '-'}
+
+        if len(users_with_risk_category) / len(users) > 0.5:
+            users_without_risk_category.update(users_without_risk_category_for_selection)
+
+        if len(selection_to_odds[selection]) >= 3:
+            max_odds = max(odds for _, odds in selection_to_odds[selection])
+            users_with_max_odds = {user for user, odds in selection_to_odds[selection] if odds == max_odds}
+            
+            # Include users with a risk category of 'W' in the users without a risk category
+            users_without_risk_category_with_max_odds = {user for user in users_with_max_odds if user[1] in ['-', 'W']}
+            
+            users_with_high_odds.update(users_without_risk_category_with_max_odds)
+
+    return users_without_risk_category, users_with_high_odds
+
+def update_traders_report():
+    users_without_risk_category, users_with_high_odds = find_traders()
+
+    users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
+    users_with_high_odds_str = '  |  '.join(user for user in users_with_high_odds)
+    traders_report_ticket.config(state='normal')
+    traders_report_ticket.delete('1.0', tk.END)
+    traders_report_ticket.insert(tk.END, "\tBETA - Most will be wrong\n\n")
+
+    traders_report_ticket.insert(tk.END, "No Risk Clients wagering on selections containing multiple risk users:\n\n")
+    traders_report_ticket.insert(tk.END, users_without_risk_category_str)
+    traders_report_ticket.insert(tk.END, "\n\nUsers with no Risk Category, wagering at high odds:\n\n")
+    traders_report_ticket.insert(tk.END, users_with_high_odds_str)
+
+    traders_report_ticket.config(state='disabled')
+
+
 ### GET FACTORING DATA FROM GOOGLE SHEETS USING API
 def factoring_sheet():
     tree.delete(*tree.get_children())
@@ -776,21 +917,32 @@ def factoring_sheet():
         tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
 
 ### WIZARD TO ADD FACTORING TO FACTORING DIARY
-def open_wizard():
+def open_factoring_wizard():
     global user
     if not user:
         user_login()
 
     def handle_submit():
-
+        print("yes")
+        if not entry1.get() or not entry3.get():
+            messagebox.showerror("Error", "Please make sure all fields are completed.")
+            return
+        
+        try:
+            float(entry3.get())
+        except ValueError:
+            messagebox.showerror("Error", "Assessment rating should be a number.")
+            return
+        
         params = {
             'term': entry1.get(),
             'item_types': 'person',
             'fields': 'custom_fields',
             'exact_match': 'true',
         }
-
+        print("no")
         response = requests.get(pipedrive_api_url, params=params)
+        print(response.status_code)
 
         if response.status_code == 200:
             persons = response.json()['data']['items']
@@ -814,9 +966,10 @@ def open_wizard():
                     print(f'Error updating person {person_id}: {update_response.status_code}')
         else:
             print(f'Error: {response.status_code}')
-
+        print("hello?")
         spreadsheet = gc.open('Factoring Diary')
         worksheet = spreadsheet.get_worksheet(4)
+        print(worksheet)
 
         next_row = len(worksheet.col_values(1)) + 1
 
@@ -828,7 +981,21 @@ def open_wizard():
         worksheet.update_cell(next_row, 4, entry3.get())
         worksheet.update_cell(next_row, 5, user) 
 
-        tree.insert("", "end", values=[current_time, entry1.get().capitalize(), entry2.get(), entry3.get(), user])
+        entry2_value = entry2.get().split(' - ')[0]
+
+        tree.insert("", "end", values=[current_time, entry1.get().capitalize(), entry2_value, entry3.get(), user])
+        
+        data = {
+            'Time': current_time,
+            'Username': entry1.get().capitalize(),
+            'Risk Category': entry2_value,
+            'Assessment Rating': entry3.get(),
+            'Staff': user
+        }
+
+        # Write the data to a JSON file
+        with open(f'factoringlogs/factoring.json', 'a') as file:
+            file.write(json.dumps(data) + '\n')
 
         wizard_window.destroy()
 
@@ -972,17 +1139,9 @@ def copy_to_clipboard():
     password_result_label.config(text=f"{generated_string}")
     copy_button.config(state=tk.NORMAL)
 
-def staff_bulletin():
-    with open('staff_bulletin.txt', 'r') as file:
-        bulletin = file.read()
-
-    staff_bulletin_text.config(state="normal")
-    staff_bulletin_text.delete('1.0', tk.END)
-    staff_bulletin_text.insert('1.0', bulletin)
-
 ### MENU BAR * OPTIONS ITEMS
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v7.1")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v7.2")
 
 def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
@@ -1010,7 +1169,7 @@ if __name__ == "__main__":
 
     ### ROOT WINDOW
     root = tk.Tk()
-    root.title("Bet Viewer v7.1")
+    root.title("Bet Viewer v7.2")
     root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
@@ -1111,9 +1270,9 @@ if __name__ == "__main__":
     notebook = ttk.Notebook(notebook_frame)
 
     ### RISK BETS TAB
-    tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Risk Bets")
-    bets_with_risk_text=tk.Text(tab_4, font=("Helvetica", 10), bd=0, wrap='word',padx=10, pady=10, fg="#000000", bg="#ffffff")
+    tab_1 = ttk.Frame(notebook)
+    notebook.add(tab_1, text="Risk Bets")
+    bets_with_risk_text=tk.Text(tab_1, font=("Helvetica", 10), bd=0, wrap='word',padx=10, pady=10, fg="#000000", bg="#ffffff")
     bets_with_risk_text.grid(row=0, column=0, sticky="nsew")
     bets_with_risk_text.pack(fill='both', expand=True)
 
@@ -1134,6 +1293,8 @@ if __name__ == "__main__":
     # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
     client_refresh_button = ttk.Button(tab_2, text="User Report", command=get_client_report_ref)
     client_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="w")
+    staff_refresh_button = ttk.Button(tab_2, text="Staff Report", command=create_staff_report)
+    staff_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="n")
     daily_refresh_button = ttk.Button(tab_2, text="Daily Report", command=run_create_daily_report)
     daily_refresh_button.grid(row=3, column=0, pady=(0, 0), sticky="e")
 
@@ -1160,7 +1321,7 @@ if __name__ == "__main__":
     tab_3.grid_columnconfigure(0, weight=1)
 
     # BUTTONS AND TOOLTIP LABEL FOR FACTORING TAB
-    add_restriction_button = ttk.Button(tab_3, text="Add", command=open_wizard)
+    add_restriction_button = ttk.Button(tab_3, text="Add", command=open_factoring_wizard)
     add_restriction_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
     refresh_factoring_button = ttk.Button(tab_3, text="Refresh", command=run_factoring_sheet)
     refresh_factoring_button.grid(row=1, column=0, pady=(5, 10), sticky="w")
@@ -1169,11 +1330,19 @@ if __name__ == "__main__":
 
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
-    ### STAFF BULLETIN TAB
+    ### FIND TRADERS TAB
     tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Staff Bulletin")
-    staff_bulletin_text=tk.Text(tab_4, font=("Helvetica", 10), bd=0, wrap='word',padx=10, pady=10, fg="#000000", bg="#ffffff")
-    staff_bulletin_text.pack(fill='both', expand=True)
+    notebook.add(tab_4, text="Find Risk")
+    tab_4.grid_rowconfigure(0, weight=1)
+    tab_4.grid_rowconfigure(1, weight=1)
+    tab_4.grid_columnconfigure(0, weight=1)
+    traders_report_ticket = tk.Text(tab_4, font=("Helvetica", 11), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    traders_report_ticket.config(state='disabled')
+    traders_report_ticket.grid(row=0, column=0, sticky="nsew")
+
+    # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
+    find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report)
+    find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
 
     ### RACE UPDATION CANVAS (MUST BE CANVAS OR SCROLLBAR WILL NOT WORK)
     canvas = tk.Canvas(root)
@@ -1216,10 +1385,9 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     factoring_sheet_periodic()
-    staff_bulletin()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
