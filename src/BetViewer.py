@@ -125,7 +125,7 @@ def bet_feed(data=None):
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-            feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}\n" + separator
+            feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
         
         elif wager_type == 'sms wager':
             wager_number = bet.get('id', '')
@@ -444,6 +444,10 @@ def create_daily_report(current_file=None):
     total_wageralerts = 0
     price_change = 0
     event_ended = 0
+    user_restriction = 0
+    price_type_disallowed = 0
+    sport_disallowed = 0
+    max_stake_exceeded = 0
     other_alert = 0
     liability_exceeded = 0
     wageralert_clients = []
@@ -508,6 +512,18 @@ def create_daily_report(current_file=None):
                 elif 'Event Has Ended' in key or 'Event Has Ended' in value:
                     event_ended += 1
                     is_alert = True
+                elif 'Error Source' in key and 'User Restrictions' in value:
+                    user_restriction += 1
+                elif 'Error Message' in key and 'Price Type Disallowed' in value:
+                    price_type_disallowed += 1
+                    is_alert = True
+                elif 'Error Message' in key and 'Sport Disallowed' in value:
+                    sport_disallowed += 1
+                    is_alert = True
+                elif 'Error Message' in key and 'User Max Stake Exceeded' in value:
+                    max_stake_exceeded += 1
+                    is_alert = True
+                        
             if not is_alert:
                 other_alert += 1
             wageralert_clients.append(wageralert_customer_reference)
@@ -562,33 +578,34 @@ def create_daily_report(current_file=None):
     report_output += f"\tDAILY REPORT TICKET {date_string}\n\t        Generated at {formatted_time}"
     report_output += f"{separator}"
 
-    report_output += f"TOTALS - Stakes: £{total_stakes:.2f} | "
-    report_output += f"Bets: {total_bets} | "
-    report_output += f"Clients: {total_clients}\n\n"
+    report_output += f"\nStakes: £{total_stakes:.2f}  |  "
+    report_output += f"Bets: {total_bets}  |  "
+    report_output += f"Knockbacks: {total_wageralerts}"
+    report_output += f"\n\tKnockback Percentage: {total_wageralerts / total_bets * 100:.2f}%\n"
 
-
-    report_output += f"CLIENTS BY RISK - No Risk: {total_norisk_clients} | "
-    report_output += f"M: {total_m_clients} | "
+    report_output += f"\n\nClients: {total_clients}  |  "
+    report_output += f"No Risk: {total_norisk_clients}  |  "
+    report_output += f"M: {total_m_clients}  |  "
     report_output += f"W: {total_w_clients}"
+    report_output += f"\n\tRisk Cat Percentage: {total_m_clients / total_clients * 100:.2f}%\n"
 
-    report_output += "\n\nMOST SPEND:\n"
+    report_output += "\n\n\nHighest Spend:\n"
     for rank, (customer, spend) in enumerate(top_spenders, start=1):
-        report_output += f"{rank}. {customer} - Stakes: £{spend:.2f}\n"
+        report_output += f"\t{rank}. {customer} - Stakes: £{spend:.2f}\n"
 
-    report_output += "\nMOST BETS:\n"
+    report_output += "\nMost Bets:\n"
     for rank, (client, count) in enumerate(top_client_bets, start=1):
-        report_output += f"{rank}. {client} - Bets: {count}\n"
+        report_output += f"\t{rank}. {client} - Bets: {count}\n"
 
-    report_output += "\nCOURSE UPDATES:\n"
-    for course, count in course_updates.items():
-        report_output += f"{course}: {count} updates\n"
+    # report_output += "\nCOURSE UPDATES:\n"
+    # for course, count in course_updates.items():
+    #     report_output += f"{course}: {count} updates\n"
 
-    report_output += "\nSTAFF UPDATES:\n"
-    for staff, count in staff_updates.items():
-        report_output += f"{staff}: {count} updates\n"
+    # report_output += "\nSTAFF UPDATES:\n"
+    # for staff, count in staff_updates.items():
+    #     report_output += f"{staff}: {count} updates\n"
 
-    report_output += f"\nBETS PER HOUR:\n"
-
+    report_output += f"\nBets Per Hour:\n"
     for hour, count in hour_counts.items():
         start_hour = hour
         end_hour = f"{int(start_hour.split(':')[0])+1:02d}:00"
@@ -599,26 +616,29 @@ def create_daily_report(current_file=None):
             hour_ranges[hour_range] = count
 
     for hour_range, count in hour_ranges.items():
-        report_output += f"{hour_range} - Bets {count}\n"
+        report_output += f"\t{hour_range} - Bets {count}\n"
 
-    report_output += f"\nKNOCKBACKS: {total_wageralerts}\n"
-    report_output += f"\nMOST KNOCKBACKS:\n"
+    report_output += f"\nMost Knockbacks:\n"
     for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
-        report_output += f"{rank}. {client} - Knockbacks: {count}\n"
+        report_output += f"\t{rank}. {client} - Knockbacks: {count}\n"
 
-    report_output += f"\nLiability Exceeded: {liability_exceeded}\n"
-    report_output += f"Price Changes: {price_change}\n"
-    report_output += f"Event Ended: {event_ended}\n"
-    report_output += f"Other: {other_alert}\n"
+    report_output += f"\nKnockbacks by Type:"
+    report_output += f"\nLiability: {liability_exceeded}  |  "
+    report_output += f"Price Change: {price_change}  |  "
+    report_output += f"Event Ended: {event_ended}"
 
-    report_output += f"\nTEXTBETS: {total_sms}"
+    report_output += f"\n\nUser Restrictions: {user_restriction}\n"
+    report_output += f"Price Type: {price_type_disallowed}  |  "
+    report_output += f"Sport: {sport_disallowed}  |  "
+    report_output += f"Max Stake: {max_stake_exceeded}"
 
-    report_output += f"\n\nMOST TEXTBETS: \n"
+    report_output += f"\n\nTextbets: {total_sms}"
+    report_output += f"\n\nMost Textbets: \n"
     for rank, (client, count) in enumerate(top_sms_clients, start=1):
-        report_output += f"{rank}. {client} - TEXTS: {count}\n"
+        report_output += f"\t{rank}. {client} - TEXTS: {count}\n"
 
     report_output += f"\n{separator}"
-    report_output += f"\nALL ACTIVE CLIENTS BY RISK\n\n"
+    report_output += f"\nAll active clients by risk\n\n"
 
 
     report_output += f"M Clients: \n"
@@ -825,7 +845,7 @@ def open_wizard():
     riskcat = ttk.Label(wizard_window, text="Risk Category")
     riskcat.pack(padx=5, pady=5)
 
-    options = ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
+    options = ["", "W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
     entry2 = ttk.Combobox(wizard_window, values=options, state="readonly")
     entry2.pack(padx=5, pady=5)
     entry2.set(options[0])
@@ -835,8 +855,8 @@ def open_wizard():
     entry3 = ttk.Entry(wizard_window)
     entry3.pack(padx=5, pady=5)
 
-    factoringnote = ttk.Label(wizard_window, text="Risk Category will be updated in Pipedrive.")
-    factoringnote.pack(padx=5, pady=5)
+    factoring_note = ttk.Label(wizard_window, text="Risk Category will be updated in Pipedrive.")
+    factoring_note.pack(padx=5, pady=5)
 
     wizard_window.bind('<Return>', lambda event=None: handle_submit())
 
@@ -1196,8 +1216,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     factoring_sheet_periodic()
     staff_bulletin()
 
