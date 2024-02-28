@@ -3,15 +3,25 @@ import re
 import json
 import time
 import threading
+import gspread
+import requests
 import tkinter as tk
 from tkinter import ttk, filedialog, Label
 from PIL import ImageTk, Image
 from datetime import datetime, timedelta
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import scrolledtext
 
 last_processed_time = datetime.now()
+
+# with open('src/creds.json') as f:
+#     data = json.load(f)
+
+# scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+# credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+# gc = gspread.authorize(credentials)
 
 
 path = 'F:\BWW\Export'
@@ -144,15 +154,6 @@ def set_bet_folder_path():
     if new_folder_path:
         path = new_folder_path
 
-def process_file(file_path):
-    database = load_database(app)
-
-    bet_data = parse_file(file_path, app)
-
-    add_bet(database, bet_data, app)
-
-    save_database(database)
-
 def load_database(app):
     print("\nLoading database")
     date = datetime.now().strftime('%Y-%m-%d')
@@ -197,7 +198,6 @@ def order_bets(filename):
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
         bet_text = file.read()
-
         bet_text_lower = bet_text.lower()
         is_sms = 'sms' in bet_text_lower
         is_bet = 'website' in bet_text_lower
@@ -254,6 +254,42 @@ def parse_file(file_path, app):
             return bet_info
     print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
+
+
+def update_worksheet(i, bet_id):
+    print("update worksheet")
+    # Update the Google Spreadsheet in a separate thread
+    #worksheet.update_cell(i+2, 7, bet_id)  # i+2 because Google Sheets indices start at 1 and we have a header row
+
+def process_file(file_path):
+    database = load_database(app)
+
+    bet_data = parse_file(file_path, app)
+
+    # Check if the customer reference of the incoming bet is in the list of free bets
+    # for i, row in enumerate(freebets):
+    #     print("\nchecking if the customer ref is in the freebets")
+    #     if row[4] == bet_data['customer_ref']:
+    #         # If it is, start a new thread to update the Google Spreadsheet
+    #         threading.Thread(target=update_worksheet, args=(i, bet_data['id'])).start()
+
+    add_bet(database, bet_data, app)
+
+    save_database(database)
+
+# def get_freebets():
+#     month = datetime.now().strftime('%B')
+#     spreadsheet = gc.open('Reporting ' + month)
+#     print("Getting Free Bets")
+#     worksheet = spreadsheet.get_worksheet(6)
+#     all_freebets = worksheet.get_all_values()
+
+#     global freebets
+
+#     # Filter rows where column G & I are empty, but column E contains content
+#     freebets = [row for row in all_freebets if row[4] and not row[6] and not row[8]]
+
+#     return freebets
 
 def process_existing_bets(directory, app):
     database = load_database(app)
@@ -372,8 +408,12 @@ def main(app):
     event_handler = FileHandler()
     observer = None
     observer_started = False
-        
+    
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
+    # freebets = get_freebets()
+
+    # print(freebets)
+
 
     while not app.stop_main_loop:
         if not os.path.exists(path):
@@ -412,5 +452,4 @@ if __name__ == "__main__":
     app.stop_main_loop = False
     app.main_loop = threading.Thread(target=main, args=(app,))
     app.main_loop.start()
-
     app.mainloop()

@@ -11,7 +11,7 @@ import logging
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
-from tkinter import messagebox, filedialog, simpledialog
+from tkinter import messagebox, filedialog, simpledialog, Text
 from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta, time
@@ -41,6 +41,8 @@ selection_bets = {}
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
 
+bet_feed_lock = threading.Lock()
+
 with open('src/creds.json') as f:
     data = json.load(f)
 
@@ -51,6 +53,14 @@ pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={pipedri
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
+
+def get_vip_clients():
+    with open('vip.json', 'r') as f:
+        return json.load(f)
+
+def get_watchlist_clients():
+    with open('watchlist.json', 'r') as f:
+        return json.load(f)
 
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
@@ -67,14 +77,13 @@ def refresh_display_periodic():
 
     root.after(30000, refresh_display_periodic)
 
-
 def update_feed_text(message):
     feed_text.config(state="normal")
     feed_text.insert('end', message)
     feed_text.config(state="disabled")
 
-
 def get_database(date_str=None):
+
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
     if not date_str.endswith('-wager_database.json'):
@@ -116,18 +125,29 @@ def get_database(date_str=None):
 
 ### BET CHECK THREAD FUNCTIONS
 def start_bet_feed(current_file=None):
+    logo_label.unbind("<Button-1>")
+
     data = get_database(current_file) if current_file else None
     bet_thread = threading.Thread(target=bet_feed, args=(data,))
     bet_thread.daemon = True
     bet_thread.start()
 
 def bet_feed(data=None):
-    if data is None:
-        data = get_database()
+    with bet_feed_lock:
+        if data is None:
+            data = get_database()
 
-    feed_content = ""
+    # feed_content = ""
     risk_bets = ""
-    separator = '\n\n----------------------------------------------------------------------------------\n\n'
+    separator = '\n----------------------------------------------------------------------------------\n'
+
+    feed_text.tag_configure("risk", foreground="red")
+    feed_text.tag_configure("watchlist", foreground="brown")
+    feed_text.tag_configure("vip", foreground="green")
+    feed_text.tag_configure("sms", foreground="orange")
+
+    feed_text.config(state="normal")
+    feed_text.delete('1.0', tk.END)
 
     for bet in data:
         wager_type = bet.get('type', '').lower()
@@ -138,13 +158,18 @@ def bet_feed(data=None):
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-            feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
-        
+            #feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+            if customer_ref in vip_clients:
+                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "vip")
+            else:
+                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}")
+
         elif wager_type == 'sms wager':
             wager_number = bet.get('id', '')
             customer_reference = bet.get('customer_ref', '')
             sms_wager_text = bet.get('details', '')
-            feed_content += f"{customer_reference}-{wager_number} SMS WAGER:\n{sms_wager_text}" + separator
+            #feed_content += f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}" + separator
+            feed_text.insert('end', f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}", "sms")
 
         elif wager_type == 'bet':
             bet_no = bet.get('id', '')
@@ -159,15 +184,21 @@ def bet_feed(data=None):
             bet_type = details.get('bet_type', '')
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-                feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
+                #feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+            elif customer_reference in vip_clients:
+                selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
+            elif customer_reference in watchlist_clients:
+                selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "watchlist")
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-                feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
+                #feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+        feed_text.insert('end', separator)
 
-    feed_text.config(state="normal")
-    feed_text.delete('1.0', tk.END)
-    feed_text.insert('1.0', feed_content)
     feed_text.config(state="disabled")
 
     bets_with_risk_text.config(state="normal")
@@ -175,6 +206,8 @@ def bet_feed(data=None):
     bets_with_risk_text.insert('1.0', risk_bets)
     bets_with_risk_text.config(state="disabled")
 
+    logo_label.bind("<Button-1>", lambda e: start_bet_feed())
+    
     bet_runs(data)
 
 def bet_runs(data):
@@ -752,7 +785,6 @@ def create_staff_report():
 
     log_files = os.listdir('logs')
     log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
-    
     progress["maximum"] = len(log_files)
     progress["value"] = 0
     # Read all the log files from the past month
@@ -840,10 +872,13 @@ def find_traders():
     selection_to_users = {}
     selection_to_odds = {}
 
+    users_without_risk_category = set()
+
     for bet in data:
         wager_type = bet.get('type', '').lower()
         if wager_type == 'bet':
             details = bet.get('details', {})
+            bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
             customer_reference = bet.get('customer_ref', '')
             customer_risk_category = details.get('risk_category', '')
 
@@ -866,8 +901,6 @@ def find_traders():
                 selection_to_users[selection_tuple].add((customer_reference, customer_risk_category))
                 selection_to_odds[selection_tuple].append((customer_reference, odds))
 
-    users_without_risk_category = set()
-    users_with_high_odds = set()
 
     for selection, users in selection_to_users.items():
         users_with_risk_category = {user for user in users if user[1] and user[1] != '-'}
@@ -876,33 +909,112 @@ def find_traders():
         if len(users_with_risk_category) / len(users) > 0.5:
             users_without_risk_category.update(users_without_risk_category_for_selection)
 
-        if len(selection_to_odds[selection]) >= 3:
-            max_odds = max(odds for _, odds in selection_to_odds[selection])
-            users_with_max_odds = {user for user, odds in selection_to_odds[selection] if odds == max_odds}
-            
-            # Include users with a risk category of 'W' in the users without a risk category
-            users_without_risk_category_with_max_odds = {user for user in users_with_max_odds if user[1] in ['-', 'W']}
-            
-            users_with_high_odds.update(users_without_risk_category_with_max_odds)
+    ## Remove exempted users
+    try:
+        with open('vip.json', 'r') as file:
+            exemptions = json.load(file)
+    except FileNotFoundError:
+        exemptions = []
+    
+    users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
 
-    return users_without_risk_category, users_with_high_odds
+    return users_without_risk_category
+
+def add_vip():
+    vip_window = tk.Toplevel(root)
+    vip_window.title("Add VIP")
+    vip_window.geometry("290x510")
+    vip_window.iconbitmap('src/splash.ico')
+
+    try:
+        with open('vip.json', 'r') as file:
+            current_vip = json.load(file)
+    except FileNotFoundError:
+        current_vip = []
+
+    Label(vip_window, text="Current VIP:").pack(padx=2, pady=5)
+    vip_textbox = Text(vip_window)
+    vip_textbox.pack(padx=2, pady=2)
+    for client in current_vip:
+        vip_textbox.insert(tk.END, client + '\n')
+    vip_textbox.config(state=tk.DISABLED)
+
+    new_vip = Entry(vip_window)
+    new_vip.pack( padx=5, pady=5, anchor='s')
+
+    def save_vip():
+        vip = new_vip.get().upper()
+        # Check if the vip is not empty
+        if vip.strip():
+            # If the vip is not empty, save it
+            current_vip.append(vip)
+            vip_clients.append(vip)
+            with open('vip.json', 'w') as file:
+                json.dump(current_vip, file)
+            new_vip.delete(0, tk.END)
+            vip_window.destroy()
+            refresh_display()
+            add_vip()
+        else:
+            # If the vip is empty, show an error message
+            messagebox.showerror("Error", "Box can't be empty")
+
+    Button(vip_window, text="Save", command=save_vip).pack( padx=5, pady=5, anchor='s')
+
+def add_watchlist():
+    watchlist_window = tk.Toplevel(root)
+    watchlist_window.title("Add Watchlist")
+    watchlist_window.geometry("290x510")
+    watchlist_window.iconbitmap('src/splash.ico')
+
+    try:
+        with open('watchlist.json', 'r') as file:
+            current_watchlist = json.load(file)
+    except FileNotFoundError:
+        current_watchlist = []
+
+    Label(watchlist_window, text="Current Watchlist:").pack(padx=2, pady=5)
+    watchlist_textbox = Text(watchlist_window)
+    watchlist_textbox.pack(padx=2, pady=2)
+    for client in current_watchlist:
+        watchlist_textbox.insert(tk.END, client + '\n')
+    watchlist_textbox.config(state=tk.DISABLED)
+
+    new_watchlist = Entry(watchlist_window)
+    new_watchlist.pack( padx=5, pady=5, anchor='s')
+
+    def save_watchlist():
+        watchlist = new_watchlist.get().upper()
+        # Check if the watchlist is not empty
+        if watchlist.strip():
+            # If the watchlist is not empty, save it
+            current_watchlist.append(watchlist)
+            watchlist_clients.append(watchlist)
+            with open('watchlist.json', 'w') as file:
+                json.dump(current_watchlist, file)
+            new_watchlist.delete(0, tk.END)
+            watchlist_window.destroy()
+            refresh_display()
+            add_watchlist()
+        else:
+            # If the watchlist is empty, show an error message
+            messagebox.showerror("Error", "Box can't be empty")
+
+    Button(watchlist_window, text="Save", command=save_watchlist).pack( padx=5, pady=5, anchor='s')
 
 def update_traders_report():
-    users_without_risk_category, users_with_high_odds = find_traders()
+    users_without_risk_category = find_traders()
 
     users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
-    users_with_high_odds_str = '  |  '.join(user for user in users_with_high_odds)
+
     traders_report_ticket.config(state='normal')
     traders_report_ticket.delete('1.0', tk.END)
     traders_report_ticket.insert(tk.END, "\tBETA - Most will be wrong\n\n")
 
     traders_report_ticket.insert(tk.END, "No Risk Clients wagering on selections containing multiple risk users:\n\n")
     traders_report_ticket.insert(tk.END, users_without_risk_category_str)
-    traders_report_ticket.insert(tk.END, "\n\nUsers with no Risk Category, wagering at high odds:\n\n")
-    traders_report_ticket.insert(tk.END, users_with_high_odds_str)
 
     traders_report_ticket.config(state='disabled')
-
 
 ### GET FACTORING DATA FROM GOOGLE SHEETS USING API
 def factoring_sheet():
@@ -1195,7 +1307,8 @@ if __name__ == "__main__":
     menu_bar = tk.Menu(root)
     options_menu = tk.Menu(menu_bar, tearoff=0)
     options_menu.add_command(label="Set User Initials", command=user_login, foreground="#000000", background="#ffffff")
-    options_menu.add_command(label="Set Num of Bets to a Run", command=set_num_run_bets, foreground="#000000", background="#ffffff")
+    options_menu.add_command(label="Add VIP", command=add_vip, foreground="#000000", background="#ffffff")
+    options_menu.add_command(label="Add Watchlist", command=add_watchlist, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
     menu_bar.add_cascade(label="Options", menu=options_menu)
@@ -1343,6 +1456,8 @@ if __name__ == "__main__":
     # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
     find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report)
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
+    add_vip_button = ttk.Button(tab_4, text="Add Exemption", command=add_vip)
+    add_vip_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
 
     ### RACE UPDATION CANVAS (MUST BE CANVAS OR SCROLLBAR WILL NOT WORK)
     canvas = tk.Canvas(root)
@@ -1357,8 +1472,6 @@ if __name__ == "__main__":
     canvas.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
     scrollbar.place(relx=0.76, rely=0.67, relwidth=0.02, relheight=0.3)
 
-
-
     ### SETTINGS FRAME
     settings_frame = ttk.LabelFrame(root, style='Card', text="Settings")
     settings_frame.place(relx=0.785, rely=0.67, relwidth=0.2, relheight=0.3)
@@ -1366,7 +1479,7 @@ if __name__ == "__main__":
     # LOGO, SETTINGS BUTTON AND SEPARATOR
     logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
     logo_label.place(relx=0.09, rely=0.02)
-    logo_label.bind("<Button-1>", lambda e: refresh_display())
+    logo_label.bind("<Button-1>", lambda e: start_bet_feed())
     separator = ttk.Separator(settings_frame, orient='horizontal')
     separator.place(relx=0.02, rely=0.35, relwidth=0.95)
     settings_button = ttk.Button(settings_frame, text="Options", command=open_settings, width=7)
@@ -1387,6 +1500,8 @@ if __name__ == "__main__":
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
     get_courses()
     user_login()
+    vip_clients = get_vip_clients()
+    watchlist_clients = get_watchlist_clients()
     factoring_sheet_periodic()
 
     ### GUI LOOP
