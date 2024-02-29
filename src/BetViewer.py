@@ -43,6 +43,8 @@ bet_info = {}
 
 bet_feed_lock = threading.Lock()
 
+vip_clients = []
+
 with open('src/creds.json') as f:
     data = json.load(f)
 
@@ -55,8 +57,12 @@ credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
 
 def get_vip_clients():
-    with open('vip.json', 'r') as f:
-        return json.load(f)
+    global vip_clients
+    spreadsheet = gc.open('Management Tool')
+    print("Getting 'Good Clients' sheet")
+    worksheet = spreadsheet.get_worksheet(4)
+    data = worksheet.get_all_values()
+    vip_clients = [row[0] for row in data if row[0]]
 
 def get_watchlist_clients():
     with open('watchlist.json', 'r') as f:
@@ -133,18 +139,25 @@ def start_bet_feed(current_file=None):
     bet_thread.start()
 
 def bet_feed(data=None):
+    global vip_clients
+
     with bet_feed_lock:
         if data is None:
             data = get_database()
 
-    # feed_content = ""
     risk_bets = ""
     separator = '\n----------------------------------------------------------------------------------\n'
 
-    feed_text.tag_configure("risk", foreground="red")
-    feed_text.tag_configure("watchlist", foreground="brown")
-    feed_text.tag_configure("vip", foreground="green")
-    feed_text.tag_configure("sms", foreground="orange")
+    if feed_colours.get():
+        feed_text.tag_configure("risk", foreground="#8f0000")
+        feed_text.tag_configure("watchlist", foreground="purple")
+        feed_text.tag_configure("vip", foreground="#009685")
+        feed_text.tag_configure("sms", foreground="orange")
+    else:
+        feed_text.tag_configure("risk", foreground="black")
+        feed_text.tag_configure("watchlist", foreground="black")
+        feed_text.tag_configure("vip", foreground="black")
+        feed_text.tag_configure("sms", foreground="black")
 
     feed_text.config(state="normal")
     feed_text.delete('1.0', tk.END)
@@ -158,7 +171,6 @@ def bet_feed(data=None):
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
-            #feed_content += f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
             if customer_ref in vip_clients:
                 feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "vip")
             else:
@@ -168,7 +180,6 @@ def bet_feed(data=None):
             wager_number = bet.get('id', '')
             customer_reference = bet.get('customer_ref', '')
             sms_wager_text = bet.get('details', '')
-            #feed_content += f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}" + separator
             feed_text.insert('end', f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}", "sms")
 
         elif wager_type == 'bet':
@@ -185,7 +196,6 @@ def bet_feed(data=None):
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
-                #feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
             elif customer_reference in vip_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
@@ -196,7 +206,6 @@ def bet_feed(data=None):
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
-                #feed_content += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
         feed_text.insert('end', separator)
 
     feed_text.config(state="disabled")
@@ -774,13 +783,14 @@ def create_client_report(customer_ref, current_file=None):
 
 def create_staff_report():
     global USER_NAMES
+
     report_output = ""
     course_updates = Counter()
     staff_updates = Counter()
+    staff_updates_today = Counter()
     factoring_updates = Counter()
-
-    # Get the current date and the date a month ago
-    current_date = datetime.now()
+    today = datetime.now().date()
+    current_date = datetime.now().date()
     month_ago = current_date - timedelta(days=30)
 
     log_files = os.listdir('logs')
@@ -793,7 +803,8 @@ def create_staff_report():
         progress["value"] = i + 1
         root.update_idletasks()
 
-        file_date = datetime.fromtimestamp(os.path.getmtime('logs/' + log_file))
+        file_date = datetime.fromtimestamp(os.path.getmtime('logs/' + log_file)).date()
+        print(file_date)
         if month_ago <= file_date <= current_date:
             with open('logs/' + log_file, 'r') as file:
                 lines = file.readlines()
@@ -814,11 +825,14 @@ def create_staff_report():
                     course_updates[course] += 1
                     staff_updates[staff_name] += 1
 
+                    if file_date == today:
+                        staff_updates_today[staff_name] += 1
+
     factoring_log_file = os.listdir('factoringlogs')
     factoring_log_file.sort(key=lambda file: os.path.getmtime('factoringlogs/' + file))
 
     for log_file in factoring_log_file:
-        file_date = datetime.fromtimestamp(os.path.getmtime('factoringlogs/' + log_file))
+        file_date = datetime.fromtimestamp(os.path.getmtime('factoringlogs/' + log_file)).date()
         if month_ago <= file_date <= current_date:
             with open('factoringlogs/' + log_file, 'r') as file:
                 lines = file.readlines()
@@ -846,7 +860,11 @@ def create_staff_report():
     factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
     report_output += f"\nCurrent Factoring Leader: {factoring_employee_of_the_month}\n"
 
-    report_output += "\nStaff Updates:\n"
+    report_output += "\nToday's Staff Updates:\n"
+    for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
+        report_output += f"\t{staff}  |  {count}\n"
+
+    report_output += "\nTotal Staff Updates:\n"
     for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
         report_output += f"\t{staff}  |  {count}\n"
 
@@ -919,47 +937,6 @@ def find_traders():
     users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
 
     return users_without_risk_category
-
-def add_vip():
-    vip_window = tk.Toplevel(root)
-    vip_window.title("Add VIP")
-    vip_window.geometry("290x510")
-    vip_window.iconbitmap('src/splash.ico')
-
-    try:
-        with open('vip.json', 'r') as file:
-            current_vip = json.load(file)
-    except FileNotFoundError:
-        current_vip = []
-
-    Label(vip_window, text="Current VIP:").pack(padx=2, pady=5)
-    vip_textbox = Text(vip_window)
-    vip_textbox.pack(padx=2, pady=2)
-    for client in current_vip:
-        vip_textbox.insert(tk.END, client + '\n')
-    vip_textbox.config(state=tk.DISABLED)
-
-    new_vip = Entry(vip_window)
-    new_vip.pack( padx=5, pady=5, anchor='s')
-
-    def save_vip():
-        vip = new_vip.get().upper()
-        # Check if the vip is not empty
-        if vip.strip():
-            # If the vip is not empty, save it
-            current_vip.append(vip)
-            vip_clients.append(vip)
-            with open('vip.json', 'w') as file:
-                json.dump(current_vip, file)
-            new_vip.delete(0, tk.END)
-            vip_window.destroy()
-            refresh_display()
-            add_vip()
-        else:
-            # If the vip is empty, show an error message
-            messagebox.showerror("Error", "Box can't be empty")
-
-    Button(vip_window, text="Save", command=save_vip).pack( padx=5, pady=5, anchor='s')
 
 def add_watchlist():
     watchlist_window = tk.Toplevel(root)
@@ -1207,24 +1184,27 @@ def open_settings():
     options_frame.place(x=5, y=5, width=300, height=420)
 
     toggle_button = ttk.Checkbutton(options_frame, text='Auto Refresh', variable=auto_refresh_state, onvalue=True, offvalue=False)
-    toggle_button.place(x=60, y=5) 
+    toggle_button.place(x=60, y=5)
+
+    enable_feed_colours = ttk.Checkbutton(options_frame, text='Feed Colours', variable=feed_colours, onvalue=True, offvalue=False)
+    enable_feed_colours.place(x=60, y=30)
 
     remove_off_races = ttk.Checkbutton(options_frame, text='Hide Off Races from Runs', variable=runs_remove_off_races, onvalue=True, offvalue=False)
-    remove_off_races.place(x=60, y=30)
+    remove_off_races.place(x=60, y=55)
 
     get_courses_button = ttk.Button(options_frame, text="Get Courses", command=get_courses)
-    get_courses_button.place(x=30, y=70, width=110)
+    get_courses_button.place(x=30, y=100, width=110)
 
     reset_courses_button = ttk.Button(options_frame, text="Reset Courses", command=reset_update_times)
-    reset_courses_button.place(x=160, y=70, width=110)
+    reset_courses_button.place(x=160, y=100, width=110)
 
     separator = ttk.Separator(options_frame, orient='horizontal')
-    separator.place(x=10, y=130, width=270)
+    separator.place(x=10, y=160, width=270)
 
     json_files = [f for f in os.listdir('database') if f.endswith('.json')]
 
     databases_combobox = ttk.Combobox(options_frame, values=json_files, width=4)
-    databases_combobox.place(x=20, y=160, width=250)
+    databases_combobox.place(x=20, y=190, width=250)
 
     if current_file is not None:
         databases_combobox.set(current_file)
@@ -1259,12 +1239,16 @@ def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
 
 def factoring_sheet_periodic():
-    run_factoring_sheet()
+    global vip_clients, watchlist_clients
+    threading.Thread(target=run_factoring_sheet).start()
+    threading.Thread(target=get_vip_clients).start()
+    watchlist_clients = get_watchlist_clients()
 
-    root.after(300000, factoring_sheet_periodic)
+
+    root.after(400000, factoring_sheet_periodic)
 
 def run_factoring_sheet():
-    threading.Thread(target=factoring_sheet).start()
+    root.after(0, factoring_sheet)
 
 def run_create_daily_report():
     global current_file
@@ -1307,7 +1291,7 @@ if __name__ == "__main__":
     menu_bar = tk.Menu(root)
     options_menu = tk.Menu(menu_bar, tearoff=0)
     options_menu.add_command(label="Set User Initials", command=user_login, foreground="#000000", background="#ffffff")
-    options_menu.add_command(label="Add VIP", command=add_vip, foreground="#000000", background="#ffffff")
+    # options_menu.add_command(label="Add VIP", command=add_vip, foreground="#000000", background="#ffffff")
     options_menu.add_command(label="Add Watchlist", command=add_watchlist, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
@@ -1330,6 +1314,9 @@ if __name__ == "__main__":
 
     auto_refresh_state = tk.BooleanVar()
     auto_refresh_state.set(True)
+
+    feed_colours = tk.BooleanVar()
+    feed_colours.set(True)
 
     runs_remove_off_races = tk.BooleanVar()
     runs_remove_off_races.set(False)
@@ -1456,8 +1443,8 @@ if __name__ == "__main__":
     # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
     find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report)
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
-    add_vip_button = ttk.Button(tab_4, text="Add Exemption", command=add_vip)
-    add_vip_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
+    # add_vip_button = ttk.Button(tab_4, text="Add Exemption", command=add_vip)
+    # add_vip_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
 
     ### RACE UPDATION CANVAS (MUST BE CANVAS OR SCROLLBAR WILL NOT WORK)
     canvas = tk.Canvas(root)
@@ -1500,8 +1487,6 @@ if __name__ == "__main__":
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
     get_courses()
     user_login()
-    vip_clients = get_vip_clients()
-    watchlist_clients = get_watchlist_clients()
     factoring_sheet_periodic()
 
     ### GUI LOOP
