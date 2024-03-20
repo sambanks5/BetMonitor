@@ -44,6 +44,7 @@ bet_info = {}
 bet_feed_lock = threading.Lock()
 
 vip_clients = []
+newreg_clients = []
 
 with open('src/creds.json') as f:
     data = json.load(f)
@@ -56,6 +57,31 @@ scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
 
+def get_newreg_clients():
+    # Get New Registrations from pipedrive API
+    global newreg_clients
+    newreg_clients.clear()
+
+    print("Getting New Registrations from Pipedrive")
+
+    # Get the persons from the filter with ID 55
+    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Parse the JSON response
+        data = response.json()
+
+        # Get the persons from the response
+        persons = data.get('data', [])
+        # Get the usernames from the persons and add them to newreg_clients
+        for person in persons:
+            username = person.get('c1f84d7067cae06931128f22af744701a07b29c6', '')
+            newreg_clients.append(username)
+
+    print(newreg_clients)
+
+
 def get_vip_clients():
     global vip_clients
     spreadsheet = gc.open('Management Tool')
@@ -67,7 +93,6 @@ def get_vip_clients():
 def get_watchlist_clients():
     with open('watchlist.json', 'r') as f:
         return json.load(f)
-
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
@@ -139,7 +164,7 @@ def start_bet_feed(current_file=None):
     bet_thread.start()
 
 def bet_feed(data=None):
-    global vip_clients
+    global vip_clients, watchlist_clients
 
     with bet_feed_lock:
         if data is None:
@@ -150,12 +175,12 @@ def bet_feed(data=None):
 
     if feed_colours.get():
         feed_text.tag_configure("risk", foreground="#8f0000")
-        feed_text.tag_configure("watchlist", foreground="purple")
+        feed_text.tag_configure("newreg", foreground="purple")
         feed_text.tag_configure("vip", foreground="#009685")
         feed_text.tag_configure("sms", foreground="orange")
     else:
         feed_text.tag_configure("risk", foreground="black")
-        feed_text.tag_configure("watchlist", foreground="black")
+        feed_text.tag_configure("newreg", foreground="black")
         feed_text.tag_configure("vip", foreground="black")
         feed_text.tag_configure("sms", foreground="black")
 
@@ -173,6 +198,8 @@ def bet_feed(data=None):
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
             if customer_ref in vip_clients:
                 feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "vip")
+            elif customer_ref in newreg_clients:
+                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "newreg")
             else:
                 feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}")
 
@@ -200,9 +227,9 @@ def bet_feed(data=None):
             elif customer_reference in vip_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
-            elif customer_reference in watchlist_clients:
+            elif customer_reference in newreg_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "watchlist")
+                feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "newreg")
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
@@ -1029,7 +1056,7 @@ def open_factoring_wizard():
             'fields': 'custom_fields',
             'exact_match': 'true',
         }
-        print("no")
+
         response = requests.get(pipedrive_api_url, params=params)
         print(response.status_code)
 
@@ -1055,7 +1082,7 @@ def open_factoring_wizard():
                     print(f'Error updating person {person_id}: {update_response.status_code}')
         else:
             print(f'Error: {response.status_code}')
-        print("hello?")
+
         spreadsheet = gc.open('Factoring Diary')
         worksheet = spreadsheet.get_worksheet(4)
         print(worksheet)
@@ -1239,10 +1266,11 @@ def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
 
 def factoring_sheet_periodic():
-    global vip_clients, watchlist_clients
+    global vip_clients, newreg_clients
     threading.Thread(target=run_factoring_sheet).start()
     threading.Thread(target=get_vip_clients).start()
-    watchlist_clients = get_watchlist_clients()
+    threading.Thread(target=get_newreg_clients).start()
+    # watchlist_clients = get_watchlist_clients()
 
 
     root.after(400000, factoring_sheet_periodic)
@@ -1292,7 +1320,7 @@ if __name__ == "__main__":
     options_menu = tk.Menu(menu_bar, tearoff=0)
     options_menu.add_command(label="Set User Initials", command=user_login, foreground="#000000", background="#ffffff")
     # options_menu.add_command(label="Add VIP", command=add_vip, foreground="#000000", background="#ffffff")
-    options_menu.add_command(label="Add Watchlist", command=add_watchlist, foreground="#000000", background="#ffffff")
+    # options_menu.add_command(label="Add Watchlist", command=add_watchlist, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
     menu_bar.add_cascade(label="Options", menu=options_menu)
