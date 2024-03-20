@@ -255,7 +255,6 @@ def parse_file(file_path, app):
     print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
 
-
 def update_worksheet(i, bet_id):
     print("update worksheet")
     # Update the Google Spreadsheet in a separate thread
@@ -421,7 +420,7 @@ def main(app):
             set_bet_folder_path() 
             if not os.path.exists(path):
                 continue  
-        if not observer_started or datetime.now() - last_processed_time > timedelta(minutes=5):
+        if not observer_started or datetime.now() - last_processed_time > timedelta(minutes=3):
             if observer_started:
                 observer.stop()
                 observer.join()
