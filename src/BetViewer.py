@@ -533,7 +533,7 @@ def create_daily_report(current_file=None):
     wageralert_clients = []
     # SMS Report
     total_sms = 0
-    sms_clients = set()
+    sms_clients = []
     progress["maximum"] = len(data)
     progress["value"] = 0
     root.update_idletasks()
@@ -611,7 +611,7 @@ def create_daily_report(current_file=None):
 
         if is_sms:
             sms_customer_reference = bet['customer_ref']
-            sms_clients.add(sms_customer_reference)
+            sms_clients.append(sms_customer_reference)
             total_sms += 1
 
     top_spenders = Counter(customer_payments).most_common(5)
