@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import schedule
 import time
 import threading
 import gspread
@@ -12,17 +13,19 @@ from datetime import datetime, timedelta
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
 from tkinter import scrolledtext
 
 last_processed_time = datetime.now()
 
-# with open('src/creds.json') as f:
-#     data = json.load(f)
+with open('src/creds.json') as f:
+    creds = json.load(f)
 
-# scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-# credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
-# gc = gspread.authorize(credentials)
+pipedrive_api_token = creds['pipedrive_api_key']
 
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
+gc = gspread.authorize(credentials)
 
 path = 'F:\BWW\Export'
 def parse_bet_details(bet_text):
@@ -255,40 +258,14 @@ def parse_file(file_path, app):
     print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
 
-def update_worksheet(i, bet_id):
-    print("update worksheet")
-    # Update the Google Spreadsheet in a separate thread
-    #worksheet.update_cell(i+2, 7, bet_id)  # i+2 because Google Sheets indices start at 1 and we have a header row
-
 def process_file(file_path):
     database = load_database(app)
 
     bet_data = parse_file(file_path, app)
 
-    # Check if the customer reference of the incoming bet is in the list of free bets
-    # for i, row in enumerate(freebets):
-    #     print("\nchecking if the customer ref is in the freebets")
-    #     if row[4] == bet_data['customer_ref']:
-    #         # If it is, start a new thread to update the Google Spreadsheet
-    #         threading.Thread(target=update_worksheet, args=(i, bet_data['id'])).start()
-
     add_bet(database, bet_data, app)
 
     save_database(database)
-
-# def get_freebets():
-#     month = datetime.now().strftime('%B')
-#     spreadsheet = gc.open('Reporting ' + month)
-#     print("Getting Free Bets")
-#     worksheet = spreadsheet.get_worksheet(6)
-#     all_freebets = worksheet.get_all_values()
-
-#     global freebets
-
-#     # Filter rows where column G & I are empty, but column E contains content
-#     freebets = [row for row in all_freebets if row[4] and not row[6] and not row[8]]
-
-#     return freebets
 
 def process_existing_bets(directory, app):
     database = load_database(app)
@@ -319,6 +296,66 @@ def reprocess_file(app):
         app.log_message('Existing database deleted. Will begin to process todays bets....\n\n')
     else:
         app.log_message('No existing database found. Will begin processing todays bets...\n\n')
+
+def get_data(app):
+   
+    vip_clients = []
+    newreg_clients  = []
+    current_month = datetime.now().strftime('%B')
+
+    ## VIP Clients
+    app.log_message("Updating List of VIP Clients from Management Tool")
+
+    spreadsheet = gc.open('Management Tool')
+    worksheet = spreadsheet.get_worksheet(4)
+    data = worksheet.get_all_values()
+
+    vip_clients = [row[0] for row in data if row[0]]
+
+    ## NewReg clients
+    app.log_message("Updating List of New Registrations from Pipedrive")
+
+    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
+
+    if response.status_code == 200:
+        data = response.json()
+
+        persons = data.get('data', [])
+        for person in persons:
+            username = person.get('c1f84d7067cae06931128f22af744701a07b29c6', '')
+            newreg_clients.append(username)
+
+    ## Reporting Data
+    app.log_message("Getting Reporting Data from Reporting " + current_month)
+
+    spreadsheet_name = 'Reporting ' + current_month
+    spreadsheet = gc.open(spreadsheet_name)
+
+    worksheet = spreadsheet.get_worksheet(3)
+    daily_turnover = worksheet.acell('E1').value
+    daily_profit = worksheet.acell('F1').value
+    daily_profit_percentage = worksheet.acell('G1').value
+
+    drive_service = build('drive', 'v3', credentials=credentials)
+    file_id = spreadsheet.id
+    request = drive_service.files().get(fileId=file_id, fields='modifiedTime')
+    response = request.execute()
+    last_updated_time = response['modifiedTime']
+    last_updated_datetime = datetime.strptime(last_updated_time, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+    last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
+
+    # Output to src/data.json
+    data = {
+        'vip_clients': vip_clients,
+        'new_registrations': newreg_clients,
+        'daily_turnover': daily_turnover,
+        'daily_profit': daily_profit,
+        'daily_profit_percentage': daily_profit_percentage,
+        'last_updated_time': last_updated_time
+    }    
+    with open('src/data.json', 'w') as f:
+        json.dump(data, f, indent=4)
 
 class Application(tk.Tk):
     def __init__(self):
@@ -409,12 +446,16 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    # freebets = get_freebets()
 
-    # print(freebets)
+    get_data(app)
+    # Schedule the function to run every 5 minutes
+    schedule.every(5).minutes.do(get_data, app)
 
 
     while not app.stop_main_loop:
+        # Run pending tasks
+        schedule.run_pending()
+
         if not os.path.exists(path):
             print(f"Error: The path {path} does not exist.")
             set_bet_folder_path() 
@@ -428,7 +469,7 @@ def main(app):
             observer.schedule(event_handler, path, recursive=False)
             observer.start()
             observer_started = True
-            app.log_message('Watchdog observer watching folder ' + path + '\n' )
+            app.log_message('\nWatchdog observer watching folder ' + path + '\n' )
             last_processed_time = datetime.now()
 
         try:

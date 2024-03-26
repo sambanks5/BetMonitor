@@ -60,39 +60,36 @@ gc = gspread.authorize(credentials)
 def get_newreg_clients():
     # Get New Registrations from pipedrive API
     global newreg_clients
-    newreg_clients.clear()
-
-    print("Getting New Registrations from Pipedrive")
-
-    # Get the persons from the filter with ID 55
-    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Parse the JSON response
-        data = response.json()
-
-        # Get the persons from the response
-        persons = data.get('data', [])
-        # Get the usernames from the persons and add them to newreg_clients
-        for person in persons:
-            username = person.get('c1f84d7067cae06931128f22af744701a07b29c6', '')
-            newreg_clients.append(username)
+    
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+        newreg_clients = data.get('new_registrations', [])
 
     print(newreg_clients)
 
-
 def get_vip_clients():
     global vip_clients
-    spreadsheet = gc.open('Management Tool')
-    print("Getting 'Good Clients' sheet")
-    worksheet = spreadsheet.get_worksheet(4)
-    data = worksheet.get_all_values()
-    vip_clients = [row[0] for row in data if row[0]]
 
-def get_watchlist_clients():
-    with open('watchlist.json', 'r') as f:
-        return json.load(f)
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+        vip_clients = data.get('vip_clients', [])
+
+    print(vip_clients)
+
+def get_reporting_data():
+    global daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
+
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+        daily_turnover = data.get('daily_turnover', 0)
+        daily_profit = data.get('daily_profit', 0)
+        daily_profit_percentage = data.get('daily_profit_percentage', 0)
+        last_updated_time = data.get('last_updated_time', '')
+
+    reporting_data = f"Daily Turnover: {daily_turnover} | Daily Profit: {daily_profit} | Profit Percentage: {daily_profit_percentage} | Last Updated: {last_updated_time}"
+
+    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
+
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
@@ -173,6 +170,8 @@ def bet_feed(data=None):
     risk_bets = ""
     separator = '\n----------------------------------------------------------------------------------\n'
 
+    separator2 = '==================================================\n'
+
     if feed_colours.get():
         feed_text.tag_configure("risk", foreground="#8f0000")
         feed_text.tag_configure("newreg", foreground="purple")
@@ -186,6 +185,10 @@ def bet_feed(data=None):
 
     feed_text.config(state="normal")
     feed_text.delete('1.0', tk.END)
+
+    if show_reporting_data_state.get():
+        turnover, profit, profit_percentage, last_updated_time = get_reporting_data()
+        feed_text.insert('end', f"{separator2}Reporting data as of {last_updated_time}\nTurnover: {turnover} | Profit: {profit} | Percentage: {profit_percentage}\n{separator2}", "red")
 
     for bet in data:
         wager_type = bet.get('type', '').lower()
@@ -501,6 +504,7 @@ def create_daily_report(current_file=None):
         current_date = date.today()
         date_string = current_date.strftime("%d-%m-%y")
 
+
     # Get the current time
     time = datetime.now()
     formatted_time = time.strftime("%H:%M:%S")
@@ -634,7 +638,7 @@ def create_daily_report(current_file=None):
     report_output += f"Bets: {total_bets}  |  "
     report_output += f"Knockbacks: {total_wageralerts}"
     report_output += f"\n\tKnockback Percentage: {total_wageralerts / total_bets * 100:.2f}%"
-    report_output += f"\n\t    Average Stake: £{total_stakes / total_bets:,.2f}\n"
+    report_output += f"\n\tAverage Stake: £{total_stakes / total_bets:,.2f}\n"
 
     report_output += f"\n\nClients: {total_clients}  |  "
     report_output += f"No Risk: {total_norisk_clients}  |  "
@@ -642,7 +646,7 @@ def create_daily_report(current_file=None):
     report_output += f"W: {total_w_clients}"
     report_output += f"\n\tRisk Cat. Percentage: {total_m_clients / total_clients * 100:.2f}%"
 
-    report_output += "\n\n\nHighest Spend:\n"
+    report_output += "\n\nHighest Spend:\n"
     for rank, (customer, spend) in enumerate(top_spenders, start=1):
         report_output += f"\t{rank}. {customer} - Stakes: £{spend:,.2f}\n"
 
@@ -1090,20 +1094,21 @@ def open_factoring_wizard():
         next_row = len(worksheet.col_values(1)) + 1
 
         current_time = datetime.now().strftime("%H:%M:%S")
+        entry2_value = entry2.get().split(' - ')[0]
+
 
         worksheet.update_cell(next_row, 1, current_time)
-        worksheet.update_cell(next_row, 2, entry1.get().capitalize())
-        worksheet.update_cell(next_row, 3, entry2.get())
+        worksheet.update_cell(next_row, 2, entry1.get().upper())
+        worksheet.update_cell(next_row, 3, entry2_value)
         worksheet.update_cell(next_row, 4, entry3.get())
         worksheet.update_cell(next_row, 5, user) 
 
-        entry2_value = entry2.get().split(' - ')[0]
 
-        tree.insert("", "end", values=[current_time, entry1.get().capitalize(), entry2_value, entry3.get(), user])
+        tree.insert("", "end", values=[current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
         
         data = {
             'Time': current_time,
-            'Username': entry1.get().capitalize(),
+            'Username': entry1.get().upper(),
             'Risk Category': entry2_value,
             'Assessment Rating': entry3.get(),
             'Staff': user
@@ -1199,7 +1204,7 @@ def open_settings():
     settings_window.title("Options")
     settings_window.iconbitmap('src/splash.ico')
 
-    settings_window.geometry("310x300")
+    settings_window.geometry("310x500")
 
     settings_window.resizable(False, False)
 
@@ -1216,8 +1221,8 @@ def open_settings():
     enable_feed_colours = ttk.Checkbutton(options_frame, text='Feed Colours', variable=feed_colours, onvalue=True, offvalue=False)
     enable_feed_colours.place(x=60, y=30)
 
-    remove_off_races = ttk.Checkbutton(options_frame, text='Hide Off Races from Runs', variable=runs_remove_off_races, onvalue=True, offvalue=False)
-    remove_off_races.place(x=60, y=55)
+    courses_label = ttk.Label(options_frame, text="Get todays meetings or reset current list")
+    courses_label.place(x=25, y=70)
 
     get_courses_button = ttk.Button(options_frame, text="Get Courses", command=get_courses)
     get_courses_button.place(x=30, y=100, width=110)
@@ -1232,6 +1237,15 @@ def open_settings():
 
     databases_combobox = ttk.Combobox(options_frame, values=json_files, width=4)
     databases_combobox.place(x=20, y=190, width=250)
+
+    previous_database_label = ttk.Label(options_frame, text="Selecting old database disables auto refresh.\n   You will need to reload the application.")
+    previous_database_label.place(x=10, y=230, width=280)
+
+    separator = ttk.Separator(options_frame, orient='horizontal')
+    separator.place(x=10, y=290, width=270)
+
+    show_reporting_data = ttk.Checkbutton(options_frame, text='Display Reporting Data in Feed', variable=show_reporting_data_state, onvalue=True, offvalue=False)
+    show_reporting_data.place(x=60, y=320)
 
     if current_file is not None:
         databases_combobox.set(current_file)
@@ -1270,7 +1284,7 @@ def factoring_sheet_periodic():
     threading.Thread(target=run_factoring_sheet).start()
     threading.Thread(target=get_vip_clients).start()
     threading.Thread(target=get_newreg_clients).start()
-    # watchlist_clients = get_watchlist_clients()
+    threading.Thread(target=get_reporting_data).start()
 
 
     root.after(400000, factoring_sheet_periodic)
@@ -1348,6 +1362,9 @@ if __name__ == "__main__":
 
     runs_remove_off_races = tk.BooleanVar()
     runs_remove_off_races.set(False)
+
+    show_reporting_data_state = tk.BooleanVar()
+    show_reporting_data_state.set(True)
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
@@ -1513,8 +1530,8 @@ if __name__ == "__main__":
     login_label.place(relx=0.2, rely=0.8)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     factoring_sheet_periodic()
 
     ### GUI LOOP
