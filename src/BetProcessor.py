@@ -357,10 +357,14 @@ def get_data(app):
     with open('src/data.json', 'w') as f:
         json.dump(data, f, indent=4)
 
+def run_get_data(app):
+    get_data_thread = threading.Thread(target=get_data, args=(app,))
+    get_data_thread.start()
+        
 class Application(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Bet Processor v3.0')
+        self.title('Bet Processor v4.0')
         self.geometry('750x300')
         
         self.iconbitmap('src/splash.ico')
@@ -447,10 +451,9 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
 
-    get_data(app)
+    run_get_data(app)
     # Schedule the function to run every 5 minutes
-    schedule.every(5).minutes.do(get_data, app)
-
+    schedule.every(5).minutes.do(run_get_data, app)
 
     while not app.stop_main_loop:
         # Run pending tasks
