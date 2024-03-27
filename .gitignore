@@ -9,3 +9,6 @@ spOdds.py
 factoringlogs/factoring.json
 watchlist.json
 vip.json
+clients.txt
+src/data.json
+getClientDetails.py
