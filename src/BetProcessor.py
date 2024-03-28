@@ -302,6 +302,8 @@ def get_data(app):
     vip_clients = []
     newreg_clients  = []
     current_month = datetime.now().strftime('%B')
+    current_date = datetime.now().strftime('%Y-%m-%d')
+
 
     ## VIP Clients
     app.log_message("Updating List of VIP Clients from Management Tool")
@@ -345,6 +347,42 @@ def get_data(app):
 
     last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
 
+    ## Racecards
+    app.log_message("Getting Racecards from Racing Post")
+
+    headers = {
+        "X-RapidAPI-Key": "22f72e5c1amsha91beaa0531671ep173453jsnad4cb1bce081",
+    }
+
+    # Greyhound data
+    url = "https://greyhound-racing-uk.p.rapidapi.com/racecards"
+    headers["X-RapidAPI-Host"] = "greyhound-racing-uk.p.rapidapi.com"
+    response = requests.get(url, headers=headers, params={"date": current_date})
+    greyhound_data = response.json()
+
+    greyhound_races = []
+    for race in greyhound_data:
+        time_only = race['date'].split(' ')[1] 
+        greyhound_races.append({
+            'track': race['dogTrack'],
+            'time': time_only,
+        })
+
+    # Horse racing data
+    url = "https://horse-racing.p.rapidapi.com/racecards"
+    headers["X-RapidAPI-Host"] = "horse-racing.p.rapidapi.com"
+    response = requests.get(url, headers=headers, params={"date": current_date})
+    horse_racing_data = response.json()
+
+    horse_races = []
+    for race in horse_racing_data:
+        time_with_seconds = race['date'].split(' ')[1] 
+        time_only = ':'.join(time_with_seconds.split(':')[:2])  
+        horse_races.append({
+            'course': race['course'],
+            'time': time_only,
+        })
+
     # Output to src/data.json
     data = {
         'vip_clients': vip_clients,
@@ -352,7 +390,9 @@ def get_data(app):
         'daily_turnover': daily_turnover,
         'daily_profit': daily_profit,
         'daily_profit_percentage': daily_profit_percentage,
-        'last_updated_time': last_updated_time
+        'last_updated_time': last_updated_time,
+        'greyhound_racecards': greyhound_races,
+        'horse_racecards' : horse_races
     }    
     with open('src/data.json', 'w') as f:
         json.dump(data, f, indent=4)

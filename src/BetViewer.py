@@ -16,6 +16,7 @@ from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta, time
 from PIL import Image, ImageTk
+import tkinter.font
 
 #Default Values for settings
 DEFAULT_NUM_RECENT_FILES = 50
@@ -66,7 +67,6 @@ def get_newreg_clients():
         data = json.load(f)
         newreg_clients = data.get('new_registrations', [])
 
-    print(newreg_clients)
 
 def get_vip_clients():
     global vip_clients
@@ -75,7 +75,6 @@ def get_vip_clients():
         data = json.load(f)
         vip_clients = data.get('vip_clients', [])
 
-    print(vip_clients)
 
 def get_reporting_data():
     global daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
@@ -87,14 +86,22 @@ def get_reporting_data():
         daily_profit_percentage = data.get('daily_profit_percentage', 0)
         last_updated_time = data.get('last_updated_time', '')
 
-    reporting_data = f"Daily Turnover: {daily_turnover} | Daily Profit: {daily_profit} | Profit Percentage: {daily_profit_percentage} | Last Updated: {last_updated_time}"
+    #reporting_data = f"Daily Turnover: {daily_turnover} | Daily Profit: {daily_profit} | Profit Percentage: {daily_profit_percentage} | Last Updated: {last_updated_time}"
 
     return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
+def get_racecards():
+    with open('src/data.json') as f:
+        racecards = json.load(f)
+        greyhound_racecards = racecards.get('greyhound_racecards', [])
+        horse_racecards = racecards.get('horse_racecards', [])
+
+    return horse_racecards, greyhound_racecards
 
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
     global current_file
+    current_file = datetime.now().strftime('%Y-%m-%d') + '-wager_database.json'
     start_bet_feed(current_file)
     display_courses()
     print("Refreshed Bets")
@@ -132,12 +139,6 @@ def get_database(date_str=None):
             error_message = f"No bet data available for {date_str}. \nIf this is wrong, click 'Reprocess' on Bet Processor\n\n"
             feed_text.after(0, update_feed_text, error_message)
             return []
-            # messagebox.showerror("Error", error_message)
-            # print("test")
-            # feed_text.config(state="normal")
-            # feed_text.insert('end', error_message)            
-            # feed_text.config(state="disabled")
-            # return []
         except json.JSONDecodeError:
             if attempt < max_retries - 1:
                 time.sleep(1)  
@@ -162,7 +163,7 @@ def start_bet_feed(current_file=None):
     bet_thread.start()
 
 def bet_feed(data=None):
-    global vip_clients, watchlist_clients
+    global vip_clients, newreg_clients
 
     with bet_feed_lock:
         if data is None:
@@ -202,9 +203,13 @@ def bet_feed(data=None):
             time = bet.get('time', '') 
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
             if customer_ref in vip_clients:
-                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "vip")
+                tag = "vip"
             elif customer_ref in newreg_clients:
-                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", "newreg")
+                tag = "newreg"
+            else:
+                tag = None
+            if tag:
+                feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", tag)
             else:
                 feed_text.insert('end', f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}")
 
@@ -437,6 +442,33 @@ def display_courses():
     else:
         forward_button.grid()
 
+def display_next_races():
+    horse_racecards, greyhound_racecards = get_racecards()
+
+    now = datetime.now().time()  
+
+    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+
+    next_horse_races = horse_racecards[:3]
+    next_greyhound_races = greyhound_racecards[:3]
+
+    for widget in next_races_frame.winfo_children():
+        widget.destroy()
+
+    horse_frame = Frame(next_races_frame)
+    horse_frame.pack(side='left', padx=10)
+
+    for i, race in enumerate(next_horse_races):
+        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=10)
+
+    greyhound_frame = Frame(next_races_frame)
+    greyhound_frame.pack(side='right', padx=10)
+
+    for i, race in enumerate(next_greyhound_races):
+        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=10)
+
+    root.after(60000, display_next_races)
 
 def back():
     global current_page
@@ -1035,7 +1067,7 @@ def add_watchlist():
         if watchlist.strip():
             # If the watchlist is not empty, save it
             current_watchlist.append(watchlist)
-            watchlist_clients.append(watchlist)
+            #watchlist_clients.append(watchlist)
             with open('watchlist.json', 'w') as file:
                 json.dump(current_watchlist, file)
             new_watchlist.delete(0, tk.END)
@@ -1491,19 +1523,19 @@ if __name__ == "__main__":
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
     feed_frame.place(relx=0.44, rely=0.01, relwidth=0.55, relheight=0.64)
-    feed_text = tk.Text(feed_frame, font=("Helvetica", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    feed_text = tk.Text(feed_frame, font=("Arial", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    # Rest of the code...
+
     feed_text.config(state='disabled')
     feed_text.pack(fill='both', expand=True)
     feed_scroll = ttk.Scrollbar(feed_text, orient='vertical', command=feed_text.yview, cursor="hand2")
     feed_scroll.pack(side="right", fill="y")
     feed_text.configure(yscrollcommand=feed_scroll.set)
 
-
-
     ### RUNS ON SELECTIONS
     runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
     runs_frame.place(relx=0.01, rely=0.01, relwidth=0.42, relheight=0.52)
-    runs_text=tk.Text(runs_frame, font=("Helvetica", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    runs_text=tk.Text(runs_frame, font=("Arial", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
     runs_text.config(state='disabled') 
     runs_text.pack(fill='both', expand=True)
 
@@ -1533,7 +1565,7 @@ if __name__ == "__main__":
 
     ### NOTEBOOK FRAME
     notebook_frame = ttk.Frame(root)
-    notebook_frame.place(relx=0.01, rely=0.54, relwidth=0.42, relheight=0.43)
+    notebook_frame.place(relx=0.01, rely=0.54, relwidth=0.42, relheight=0.41)
     notebook = ttk.Notebook(notebook_frame)
 
     ### RISK BETS TAB
@@ -1612,29 +1644,14 @@ if __name__ == "__main__":
     # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
     find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report, cursor="hand2")
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
-    # add_vip_button = ttk.Button(tab_4, text="Add Exemption", command=add_vip)
-    # add_vip_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
-
-    ### RACE UPDATION CANVAS (MUST BE CANVAS OR SCROLLBAR WILL NOT WORK)
-    # canvas = tk.Canvas(root)
-    # scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
-    # canvas.configure(yscrollcommand=scrollbar.set)
-
-    # # LABELFRAME INSIDE CANVAS
-    # race_updation_frame = ttk.LabelFrame(canvas, style='Card', text="Race Updation")
-    # canvas.create_window((0, 0), window=race_updation_frame, anchor="nw")
-    # race_updation_frame.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
-
-    # canvas.place(relx=0.44, rely=0.67, relwidth=0.33, relheight=0.3)
-    # # scrollbar.place(relx=0.76, rely=0.67, relwidth=0.02, relheight=0.3)
 
     # LABELFRAME
     race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
-    race_updation_frame.place(relx=0.44, rely=0.66, relwidth=0.33, relheight=0.3)
+    race_updation_frame.place(relx=0.44, rely=0.66, relwidth=0.33, relheight=0.283)
 
     ### SETTINGS FRAME
     settings_frame = ttk.LabelFrame(root, style='Card', text="Settings")
-    settings_frame.place(relx=0.785, rely=0.66, relwidth=0.2, relheight=0.3)
+    settings_frame.place(relx=0.785, rely=0.66, relwidth=0.2, relheight=0.283)
 
     # LOGO, SETTINGS BUTTON AND SEPARATOR
     logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
@@ -1657,9 +1674,14 @@ if __name__ == "__main__":
     login_label = ttk.Label(settings_frame, text='')
     login_label.place(relx=0.18, rely=0.85)
 
+    next_races_frame = ttk.Frame(root, style='Card')
+    next_races_frame.place(relx=0.015, rely=0.95, relwidth=0.97, relheight=0.047)
+
+
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
+    display_next_races()
     factoring_sheet_periodic()
 
     ### GUI LOOP
