@@ -297,15 +297,7 @@ def reprocess_file(app):
     else:
         app.log_message('No existing database found. Will begin processing todays bets...\n\n')
 
-def get_data(app):
-   
-    vip_clients = []
-    newreg_clients  = []
-    current_month = datetime.now().strftime('%B')
-    current_date = datetime.now().strftime('%Y-%m-%d')
-
-
-    ## VIP Clients
+def get_vip_clients():
     app.log_message("Updating List of VIP Clients from Management Tool")
 
     spreadsheet = gc.open('Management Tool')
@@ -313,8 +305,10 @@ def get_data(app):
     data = worksheet.get_all_values()
 
     vip_clients = [row[0] for row in data if row[0]]
+    
+    return vip_clients
 
-    ## NewReg clients
+def get_new_registrations():
     app.log_message("Updating List of New Registrations from Pipedrive")
 
     response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
@@ -323,11 +317,12 @@ def get_data(app):
         data = response.json()
 
         persons = data.get('data', [])
-        for person in persons:
-            username = person.get('c1f84d7067cae06931128f22af744701a07b29c6', '')
-            newreg_clients.append(username)
+        newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
+    
+    return newreg_clients
 
-    ## Reporting Data
+def get_reporting_data():
+    current_month = datetime.now().strftime('%B')
     app.log_message("Getting Reporting Data from Reporting " + current_month)
 
     spreadsheet_name = 'Reporting ' + current_month
@@ -346,8 +341,11 @@ def get_data(app):
     last_updated_datetime = datetime.strptime(last_updated_time, "%Y-%m-%dT%H:%M:%S.%fZ")
 
     last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
+    
+    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
-    ## Racecards
+def get_racecards():
+    current_date = datetime.now().strftime('%Y-%m-%d')
     app.log_message("Getting Racecards from Racing Post")
 
     headers = {
@@ -383,23 +381,45 @@ def get_data(app):
             'time': time_only,
         })
 
-    # Output to src/data.json
-    data = {
-        'vip_clients': vip_clients,
-        'new_registrations': newreg_clients,
-        'daily_turnover': daily_turnover,
-        'daily_profit': daily_profit,
-        'daily_profit_percentage': daily_profit_percentage,
-        'last_updated_time': last_updated_time,
-        'greyhound_racecards': greyhound_races,
-        'horse_racecards' : horse_races
-    }    
-    with open('src/data.json', 'w') as f:
+    return greyhound_races, horse_races
+
+def update_data_file():
+    vip_clients = get_vip_clients()
+    newreg_clients = get_new_registrations()
+    daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data()
+
+    with open('src/data.json', 'r+') as f:
+        data = json.load(f)
+        data.update({
+            'vip_clients': vip_clients,
+            'new_registrations': newreg_clients,
+            'daily_turnover': daily_turnover,
+            'daily_profit': daily_profit,
+            'daily_profit_percentage': daily_profit_percentage,
+            'last_updated_time': last_updated_time,
+        })
+        f.seek(0)
         json.dump(data, f, indent=4)
+        f.truncate()
+
+def update_racecards():
+    greyhound_races, horse_races = get_racecards()
+
+    with open('src/data.json', 'r+') as f:
+        data = json.load(f)
+        data['greyhound_racecards'] = greyhound_races
+        data['horse_racecards'] = horse_races
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
 
 def run_get_data(app):
-    get_data_thread = threading.Thread(target=get_data, args=(app,))
+    get_data_thread = threading.Thread(target=update_data_file)
     get_data_thread.start()
+
+def run_update_racecards():
+    update_racecards_thread = threading.Thread(target=update_racecards)
+    update_racecards_thread.start()
         
 class Application(tk.Tk):
     def __init__(self):
@@ -492,8 +512,11 @@ def main(app):
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
 
     run_get_data(app)
+    run_update_racecards()
     # Schedule the function to run every 5 minutes
     schedule.every(5).minutes.do(run_get_data, app)
+    # Schedule update_racecards to run every 6 hours
+    schedule.every(6).hours.do(run_update_racecards)
 
     while not app.stop_main_loop:
         # Run pending tasks
@@ -514,6 +537,9 @@ def main(app):
             observer_started = True
             app.log_message('\nWatchdog observer watching folder ' + path + '\n' )
             last_processed_time = datetime.now()
+
+        if datetime.now().strftime("%H:%M") == "00:00":
+            run_update_racecards()
 
         try:
             time.sleep(1) 

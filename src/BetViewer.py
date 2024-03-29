@@ -7,6 +7,7 @@ import requests
 import random
 import gspread
 import datetime
+import time
 import logging
 import tkinter as tk
 from collections import defaultdict, Counter
@@ -14,7 +15,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import messagebox, filedialog, simpledialog, Text
 from tkinter import ttk
 from tkinter.ttk import *
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 import tkinter.font
 
@@ -98,13 +99,23 @@ def get_racecards():
 
     return horse_racecards, greyhound_racecards
 
+def update_feed_text(message):
+    feed_text.config(state="normal")
+    feed_text.insert('end', message)
+    feed_text.config(state="disabled")
+
 ### REFRESH/UPDATE DISPLAY AND DICTIONARY
 def refresh_display():
     global current_file
-    current_file = datetime.now().strftime('%Y-%m-%d') + '-wager_database.json'
-    start_bet_feed(current_file)
-    display_courses()
-    print("Refreshed Bets")
+    try:
+        current_file = datetime.now().strftime('%Y-%m-%d') + '-wager_database.json'
+        print(f"Refreshing display with file: {current_file}")
+        start_bet_feed(current_file)
+        display_courses()
+    except Exception as e:
+        print(f"Error during refresh_display: {e}")
+    else:
+        print("Refreshed Bets")
 
 ### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
 def refresh_display_periodic():
@@ -112,11 +123,6 @@ def refresh_display_periodic():
         refresh_display()
 
     root.after(30000, refresh_display_periodic)
-
-def update_feed_text(message):
-    feed_text.config(state="normal")
-    feed_text.insert('end', message)
-    feed_text.config(state="disabled")
 
 def get_database(date_str=None):
 
@@ -460,13 +466,13 @@ def display_next_races():
     horse_frame.pack(side='left', padx=10)
 
     for i, race in enumerate(next_horse_races):
-        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=10)
+        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
 
     greyhound_frame = Frame(next_races_frame)
     greyhound_frame.pack(side='right', padx=10)
 
     for i, race in enumerate(next_greyhound_races):
-        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=10)
+        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
 
     root.after(60000, display_next_races)
 
@@ -933,22 +939,17 @@ def create_staff_report():
     factoring_log_file.sort(key=lambda file: os.path.getmtime('factoringlogs/' + file))
 
     for log_file in factoring_log_file:
-        file_date = datetime.fromtimestamp(os.path.getmtime('factoringlogs/' + log_file)).date()
-        if month_ago <= file_date <= current_date:
-            with open('factoringlogs/' + log_file, 'r') as file:
-                lines = file.readlines()
+        with open('factoringlogs/' + log_file, 'r') as file:
+            lines = file.readlines()
 
-            # Only keep the last 100 lines
-            lines = lines[-100:]
+        for line in lines:
+            if line.strip() == '':
+                continue
 
-            for line in lines:
-                if line.strip() == '':
-                    continue
-
-                data = json.loads(line)
-                staff_initials = data['Staff']
-                staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                factoring_updates[staff_name] += 1
+            data = json.loads(line)
+            staff_initials = data['Staff']
+            staff_name = USER_NAMES.get(staff_initials, staff_initials)
+            factoring_updates[staff_name] += 1
 
 
     report_output += f"---------------------------------------------------------------------------------\n"
@@ -1656,7 +1657,7 @@ if __name__ == "__main__":
     # LOGO, SETTINGS BUTTON AND SEPARATOR
     logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
     logo_label.place(relx=0.3, rely=0.02)
-    logo_label.bind("<Button-1>", lambda e: start_bet_feed())
+    logo_label.bind("<Button-1>", lambda e: refresh_display())    
     settings_button = ttk.Button(settings_frame, text="Settings", command=open_settings, width=7, cursor="hand2")
     settings_button.place(relx=0.29, rely=0.32)
     separator = ttk.Separator(settings_frame, orient='horizontal')
@@ -1679,8 +1680,8 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     display_next_races()
     factoring_sheet_periodic()
 
