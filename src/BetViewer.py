@@ -76,7 +76,6 @@ def get_vip_clients():
         data = json.load(f)
         vip_clients = data.get('vip_clients', [])
 
-
 def get_reporting_data():
     global daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
@@ -98,6 +97,16 @@ def get_racecards():
         horse_racecards = racecards.get('horse_racecards', [])
 
     return horse_racecards, greyhound_racecards
+
+def get_oddsmonkey_selections():
+    global oddsmonkey_selections
+    with open('src/data.json') as f:
+        data = json.load(f)
+        oddsmonkey_selections = data.get('oddsmonkey_selections', [])
+
+    print("Oddsmonkey Selections:", oddsmonkey_selections)
+    print(oddsmonkey_selections.values())
+    return oddsmonkey_selections
 
 def update_feed_text(message):
     feed_text.config(state="normal")
@@ -186,6 +195,7 @@ def bet_feed(data=None):
         feed_text.tag_configure("vip", foreground="#009685")
         feed_text.tag_configure("sms", foreground="orange")
         feed_text.tag_configure("reporting", foreground="#510094")
+        feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
     else:
         feed_text.tag_configure("risk", foreground="black")
         feed_text.tag_configure("newreg", foreground="black")
@@ -236,19 +246,40 @@ def bet_feed(data=None):
             unit_stake = details.get('unit_stake', '')
             payment = details.get('payment', '')
             bet_type = details.get('bet_type', '')
+            
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
+
+                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                    feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
+
             elif customer_reference in vip_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
+
+                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                    feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
+
             elif customer_reference in newreg_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "newreg")
+
+                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                    feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
+
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
+
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
+
+                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                    feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
+                     
         feed_text.insert('end', separator)
 
     feed_text.config(state="disabled")
@@ -988,10 +1019,15 @@ def create_staff_report():
     report_ticket.config(state="disabled")
 
 def find_traders():
+    # Load today's Oddsmonkey selections
+    with open('src/data.json', 'r') as file:
+        data = json.load(file)
+    todays_oddsmonkey_selections = data['oddsmonkey_selections']
+
     data = get_database()
+    results = []
     selection_to_users = {}
     selection_to_odds = {}
-
     users_without_risk_category = set()
 
     for bet in data:
@@ -1005,6 +1041,7 @@ def find_traders():
             for selection in details['selections']:
                 selection_name = selection[0]
                 odds = selection[1]
+                #print(selection_name, odds)
 
                 if isinstance(odds, str):
                     if odds == 'SP':
@@ -1021,6 +1058,22 @@ def find_traders():
                 selection_to_users[selection_tuple].add((customer_reference, customer_risk_category))
                 selection_to_odds[selection_tuple].append((customer_reference, odds))
 
+                # Check if the selection is in today's Oddsmonkey selections
+                actual_selection = selection_name.split(' - ')[-1] if ' - ' in selection_name else selection_name.split(', ')[-1]
+
+                # Get all selection names from todays_oddsmonkey_selections
+                selection_names = [selection[0] for selection in todays_oddsmonkey_selections.values()]
+
+                if actual_selection in selection_names:
+                    for event, selection in todays_oddsmonkey_selections.items():
+                        if selection[0] == actual_selection:
+                            if odds > float(selection[1]):
+                                results.append({
+                                    'username': customer_reference,
+                                    'selection_name': actual_selection,
+                                    'user_odds': odds,
+                                    'oddsmonkey_odds': float(selection[1])
+                                })
 
     for selection, users in selection_to_users.items():
         users_with_risk_category = {user for user in users if user[1] and user[1] != '-'}
@@ -1038,7 +1091,9 @@ def find_traders():
     
     users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
 
-    return users_without_risk_category
+    print(results)
+
+    return users_without_risk_category, results
 
 def add_watchlist():
     watchlist_window = tk.Toplevel(root)
@@ -1082,7 +1137,10 @@ def add_watchlist():
     Button(watchlist_window, text="Save", command=save_watchlist).pack( padx=5, pady=5, anchor='s')
 
 def update_traders_report():
-    users_without_risk_category = find_traders()
+    users_without_risk_category, oddsmonkey_traders = find_traders()
+    username_counts = Counter(trader['username'] for trader in oddsmonkey_traders)
+    top_users = username_counts.most_common(4)
+
 
     users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
 
@@ -1092,6 +1150,14 @@ def update_traders_report():
 
     traders_report_ticket.insert(tk.END, "No Risk Clients wagering on selections containing multiple risk users:\n\n")
     traders_report_ticket.insert(tk.END, users_without_risk_category_str)
+
+    traders_report_ticket.insert(tk.END, "\n\nTop 4 users taking higher odds than Oddsmonkey:\n")
+    for user, count in top_users:
+        traders_report_ticket.insert(tk.END, f"Username: {user}, Count: {count}\n")
+
+    traders_report_ticket.insert(tk.END, "\n\nList of users taking higher odds than Oddsmonkey:\n")
+    for trader in oddsmonkey_traders:
+        traders_report_ticket.insert(tk.END, f"{trader['username']}, Selection: {trader['selection_name']}\nOdds Taken: {trader['user_odds']}, Lay Odds: {trader['oddsmonkey_odds']}\n\n")
 
     traders_report_ticket.config(state='disabled')
 
@@ -1437,9 +1503,10 @@ def factoring_sheet_periodic():
     threading.Thread(target=get_vip_clients).start()
     threading.Thread(target=get_newreg_clients).start()
     threading.Thread(target=get_reporting_data).start()
+    threading.Thread(target=get_oddsmonkey_selections).start()
 
 
-    root.after(400000, factoring_sheet_periodic)
+    root.after(100000, factoring_sheet_periodic)
 
 def run_factoring_sheet():
     root.after(0, factoring_sheet)

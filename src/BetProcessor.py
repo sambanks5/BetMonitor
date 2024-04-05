@@ -6,14 +6,20 @@ import time
 import threading
 import gspread
 import requests
+import base64
+import email
 import tkinter as tk
 from tkinter import ttk, filedialog, Label
 from PIL import ImageTk, Image
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 
 last_processed_time = datetime.now()
@@ -24,6 +30,7 @@ with open('src/creds.json') as f:
 pipedrive_api_token = creds['pipedrive_api_key']
 
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 
@@ -297,20 +304,18 @@ def reprocess_file(app):
     else:
         app.log_message('No existing database found. Will begin processing todays bets...\n\n')
 
-def get_vip_clients():
-    app.log_message("Updating List of VIP Clients from Management Tool")
-
+def get_vip_clients(app):
     spreadsheet = gc.open('Management Tool')
     worksheet = spreadsheet.get_worksheet(4)
     data = worksheet.get_all_values()
 
     vip_clients = [row[0] for row in data if row[0]]
     
+    app.log_message("VIP Clients List Updated\n")
+
     return vip_clients
 
-def get_new_registrations():
-    app.log_message("Updating List of New Registrations from Pipedrive")
-
+def get_new_registrations(app):
     response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
 
     if response.status_code == 200:
@@ -319,11 +324,12 @@ def get_new_registrations():
         persons = data.get('data', [])
         newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
     
+    app.log_message("New Registrations List Updated\n")
+
     return newreg_clients
 
-def get_reporting_data():
+def get_reporting_data(app):
     current_month = datetime.now().strftime('%B')
-    app.log_message("Getting Reporting Data from Reporting " + current_month)
 
     spreadsheet_name = 'Reporting ' + current_month
     spreadsheet = gc.open(spreadsheet_name)
@@ -342,9 +348,11 @@ def get_reporting_data():
 
     last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
     
+    app.log_message("Reporting data retrieved from reporting " + current_month + "\n")
+
     return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
-def get_racecards():
+def get_racecards(app):
     current_date = datetime.now().strftime('%Y-%m-%d')
     app.log_message("Getting Racecards from Racing Post")
 
@@ -381,12 +389,241 @@ def get_racecards():
             'time': time_only,
         })
 
+    app.log_message("Todays Racecards retrieved\n")
+
     return greyhound_races, horse_races
 
-def update_data_file():
-    vip_clients = get_vip_clients()
-    newreg_clients = get_new_registrations()
-    daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data()
+def update_racecards():
+    greyhound_races, horse_races = get_racecards(app)
+
+    with open('src/data.json', 'r+') as f:
+        data = json.load(f)
+        data['greyhound_racecards'] = greyhound_races
+        data['horse_racecards'] = horse_races
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
+
+def get_oddsmonkey_selections(app):
+    creds = None
+
+    app.log_message("Getting Recent Oddsmonkey Selections")
+
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json')
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    # Call the Gmail API
+    service = build('gmail', 'v1', credentials=creds)
+    # Rest of your code
+        # Get the messages in the 'Oddsmonkey' label
+    # Get the list of all labels
+    results = service.users().labels().list(userId='me').execute()
+    labels = results.get('labels', [])
+
+    oddsmonkey_label_id = None
+    for label in labels:
+        if label['name'] == 'ODDSMONKEY':
+            oddsmonkey_label_id = label['id']
+            break
+
+    if oddsmonkey_label_id is None:
+        print("Label 'Oddsmonkey' not found")
+        return
+
+    # Get the messages in the 'Oddsmonkey' label
+    try:
+        results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id]).execute()
+        messages = results.get('messages', [])
+    except BaseException as e:  # Catch all exceptions
+        print("Error retrieving messages:", e)
+        return
+
+    # Initialize an empty dictionary to store all selections
+    all_selections = {}
+
+    # Get the first three messages
+    for message in messages[:6]:
+        try:
+            # Get the message details
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+
+            # Get the message data
+            payload = msg['payload']
+            headers = payload['headers']
+
+            for d in headers:
+                if d['name'] == 'Subject':
+                    subject = d['value']
+                if d['name'] == 'From':
+                    sender = d['value']
+
+            # Get the message body
+            parts = payload.get('parts')
+            if parts is not None:
+                part = parts[0]
+                data = part['body']['data']
+            else:
+                # If there are no parts, get the body from the 'body' field
+                data = payload['body']['data']
+
+            data = data.replace("-","+").replace("_","/")
+            decoded_data = base64.b64decode(data)
+            soup = BeautifulSoup(decoded_data , "lxml")
+            body = soup.body()
+
+            # Extract selections from this message and add them to the all_selections dictionary
+            selections = extract_oddsmonkey_selections(str(body))
+            all_selections.update(selections)
+        except Exception as e:
+            print("Error processing message:", e)
+            continue
+
+    app.log_message("Recent Oddsmonkey Selections Updated\n")
+    return all_selections
+    
+def get_todays_oddsmonkey_selections(app):
+    creds = None
+
+    app.log_message("Getting Todays Oddsmonkey Selections")
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json')
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
+            creds = flow.run_local_server(port=0)
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    service = build('gmail', 'v1', credentials=creds)
+
+    results = service.users().labels().list(userId='me').execute()
+    labels = results.get('labels', [])
+    oddsmonkey_label_id = None
+    for label in labels:
+        if label['name'] == 'ODDSMONKEY':
+            oddsmonkey_label_id = label['id']
+            break
+
+    if oddsmonkey_label_id is None:
+        print("Label 'Oddsmonkey' not found")
+        return
+
+    today = date.today().strftime('%Y/%m/%d')
+
+    results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=f'after:{today}').execute()
+
+    messages = results.get('messages', [])
+    length = len(messages)
+    print(length)
+
+    all_selections = {}
+
+    for message in messages[:length]:
+        try:
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
+            print(f"Processing message with ID {message['id']}")
+
+            payload = msg['payload']
+            headers = payload['headers']
+
+            for d in headers:
+                if d['name'] == 'Subject':
+                    subject = d['value']
+                if d['name'] == 'From':
+                    sender = d['value']
+
+
+            parts = payload.get('parts')
+            if parts is not None:
+                part = parts[0]
+                data = part['body']['data']
+            else:
+                data = payload['body']['data']
+
+
+            data = data.replace("-","+").replace("_","/")
+            decoded_data = base64.b64decode(data)
+
+            soup = BeautifulSoup(decoded_data , "lxml")
+            #body = soup.body()
+            table = soup.table
+
+            #td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
+
+            #for td in td_tags:
+                #print(td.text)  # This will print the text within each 'td' tag
+
+
+            #print(f"Body for message {message['id']}: {table}")
+            #print(f"Body for message {message['id']}: {body}")
+
+
+
+            try:
+                selections = extract_oddsmonkey_selections(str(table))
+                all_selections.update(selections)
+            except Exception as e:
+                print(f"An error occurred while extracting selections: {e}")
+
+        except Exception as e:
+            print(e)
+
+    app.log_message("Todays Oddsmonkey Selections Updated\n")
+    return all_selections
+
+def extract_oddsmonkey_selections(body):
+    selections = {}
+    pattern = r'<img src="https://azcdn.oddsmonkey.com/om3/images/sports/24x24/.*?.png" style="border-width:0px;"/></td><td style="padding-left: 7px;padding-right: 7px;">(.*?)</td>\s*<td style="padding-left: 7px;padding-right: 7px;">(.*?)</td>.*?<td style="padding-left: 7px;padding-right: 7px;">(\d+\.\d+)</td></tr>'
+
+    try:
+        matches = re.findall(pattern, body, re.DOTALL)
+
+        if not matches:
+            return selections
+
+        for match in matches:
+            event = re.sub(r'</td><td\s*style="padding-left: 7px;padding-right: 7px;">', '', match[0]).strip()
+            selection = match[1].strip()
+            lay_odds = match[2].strip()
+            selections[event] = selection, lay_odds
+
+    except Exception as e:
+        print(f"An error occurred in extract_oddsmonkey_selections: {e}")
+
+    return selections
+
+def update_todays_oddsmonkey_selections():
+    todays_oddsmonkey_selections = get_todays_oddsmonkey_selections(app)
+
+    with open('src/data.json', 'r+') as f:
+        data = json.load(f)
+        data['todays_oddsmonkey_selections'] = todays_oddsmonkey_selections
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
+
+def run_update_todays_oddsmonkey_selections():
+    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
+    update_todays_oddsmonkey_selections_thread.start()
+
+def update_data_file(app):
+    vip_clients = get_vip_clients(app)
+    newreg_clients = get_new_registrations(app)
+    daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
+    oddsmonkey_selections = get_oddsmonkey_selections(app)
 
     with open('src/data.json', 'r+') as f:
         data = json.load(f)
@@ -397,25 +634,25 @@ def update_data_file():
             'daily_profit': daily_profit,
             'daily_profit_percentage': daily_profit_percentage,
             'last_updated_time': last_updated_time,
+            'oddsmonkey_selections': oddsmonkey_selections,
         })
         f.seek(0)
         json.dump(data, f, indent=4)
         f.truncate()
-
-def update_racecards():
-    greyhound_races, horse_races = get_racecards()
-
-    with open('src/data.json', 'r+') as f:
-        data = json.load(f)
-        data['greyhound_racecards'] = greyhound_races
-        data['horse_racecards'] = horse_races
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+    
+    app.log_message("Data file updated")
 
 def run_get_data(app):
-    get_data_thread = threading.Thread(target=update_data_file)
+    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
     get_data_thread.start()
+
+def run_get_oddsmonkey_selections(app):
+    thread = threading.Thread(target=get_oddsmonkey_selections, args=(app,))
+    thread.start()
+
+def run_update_todays_oddsmonkey_selections():
+    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
+    update_todays_oddsmonkey_selections_thread.start()
 
 def run_update_racecards():
     update_racecards_thread = threading.Thread(target=update_racecards)
@@ -510,13 +747,13 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-
     run_get_data(app)
     run_update_racecards()
-    # Schedule the function to run every 5 minutes
-    schedule.every(5).minutes.do(run_get_data, app)
-    # Schedule update_racecards to run every 6 hours
+    run_update_todays_oddsmonkey_selections()
+
+    schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(6).hours.do(run_update_racecards)
+    schedule.every(1).hours.do(run_update_todays_oddsmonkey_selections)
 
     while not app.stop_main_loop:
         # Run pending tasks
@@ -538,9 +775,6 @@ def main(app):
             app.log_message('\nWatchdog observer watching folder ' + path + '\n' )
             last_processed_time = datetime.now()
 
-        if datetime.now().strftime("%H:%M") == "00:00":
-            run_update_racecards()
-
         try:
             time.sleep(1) 
         except Exception as e:
@@ -553,11 +787,9 @@ def main(app):
         observer.stop()
         print("OBSERVER STOPPED!")  
         observer.join()
-    print("MAIN LOOP STOPPED! If you see this please tell Sam.")
 
 if __name__ == "__main__":
     app = Application()
-
     app.stop_main_loop = False
     app.main_loop = threading.Thread(target=main, args=(app,))
     app.main_loop.start()

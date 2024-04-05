@@ -12,3 +12,7 @@ vip.json
 clients.txt
 src/data.json
 getClientDetails.py
+src/gmailcreds.json
+token.json
+retest.py
+yes.py
