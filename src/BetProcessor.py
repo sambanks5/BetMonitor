@@ -290,7 +290,7 @@ def process_existing_bets(directory, app):
         print("Added a bet to JSON")
 
     save_database(database)
-    app.log_message('\nBet processing complete.\nWaiting for new files...\n')
+    app.log_message('Bet processing complete. Waiting for new files...\n')
 
 def reprocess_file(app):
     print("Reprocessing file")
@@ -311,8 +311,6 @@ def get_vip_clients(app):
 
     vip_clients = [row[0] for row in data if row[0]]
     
-    app.log_message("VIP Clients List Updated\n")
-
     return vip_clients
 
 def get_new_registrations(app):
@@ -324,8 +322,6 @@ def get_new_registrations(app):
         persons = data.get('data', [])
         newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
     
-    app.log_message("New Registrations List Updated\n")
-
     return newreg_clients
 
 def get_reporting_data(app):
@@ -348,13 +344,10 @@ def get_reporting_data(app):
 
     last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
     
-    app.log_message("Reporting data retrieved from reporting " + current_month + "\n")
-
     return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
 def get_racecards(app):
     current_date = datetime.now().strftime('%Y-%m-%d')
-    app.log_message("Getting Racecards from Racing Post")
 
     headers = {
         "X-RapidAPI-Key": "22f72e5c1amsha91beaa0531671ep173453jsnad4cb1bce081",
@@ -389,8 +382,6 @@ def get_racecards(app):
             'time': time_only,
         })
 
-    app.log_message("Todays Racecards retrieved\n")
-
     return greyhound_races, horse_races
 
 def update_racecards():
@@ -404,10 +395,8 @@ def update_racecards():
         json.dump(data, f, indent=4)
         f.truncate()
 
-def get_oddsmonkey_selections(app):
+def get_oddsmonkey_selections(app, num_messages=None, query=''):
     creds = None
-
-    app.log_message("Getting Recent Oddsmonkey Selections")
 
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json')
@@ -424,12 +413,10 @@ def get_oddsmonkey_selections(app):
 
     # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
-    # Rest of your code
-        # Get the messages in the 'Oddsmonkey' label
-    # Get the list of all labels
+
     results = service.users().labels().list(userId='me').execute()
     labels = results.get('labels', [])
-
+    # Find the ID of the 'Oddsmonkey' label
     oddsmonkey_label_id = None
     for label in labels:
         if label['name'] == 'ODDSMONKEY':
@@ -440,24 +427,20 @@ def get_oddsmonkey_selections(app):
         print("Label 'Oddsmonkey' not found")
         return
 
-    # Get the messages in the 'Oddsmonkey' label
-    try:
-        results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id]).execute()
-        messages = results.get('messages', [])
-    except BaseException as e:  # Catch all exceptions
-        print("Error retrieving messages:", e)
-        return
+    # Get the messages in the 'Oddsmonkey' label from today
+    results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=query).execute()
+
+    messages = results.get('messages', [])
+    length = len(messages)
 
     # Initialize an empty dictionary to store all selections
     all_selections = {}
 
-    # Get the first three messages
-    for message in messages[:6]:
+    for message in messages if num_messages is None else messages[:num_messages]:
         try:
             # Get the message details
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
 
-            # Get the message data
             payload = msg['payload']
             headers = payload['headers']
 
@@ -478,23 +461,112 @@ def get_oddsmonkey_selections(app):
 
             data = data.replace("-","+").replace("_","/")
             decoded_data = base64.b64decode(data)
+
             soup = BeautifulSoup(decoded_data , "lxml")
-            body = soup.body()
+            
+            # Find all 'td' tags with the specific style attribute
+            td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
 
             # Extract selections from this message and add them to the all_selections dictionary
-            selections = extract_oddsmonkey_selections(str(body))
-            all_selections.update(selections)
-        except Exception as e:
-            print("Error processing message:", e)
-            continue
+            try:
+                selections = extract_oddsmonkey_selections(td_tags)
+                all_selections.update(selections)
+            except Exception as e:
+                app.log_message(f"An error occurred while extracting oddsmonkey data {e}")
+                print(f"An error occurred while extracting selections: {e}")
 
-    app.log_message("Recent Oddsmonkey Selections Updated\n")
+        except Exception as e:
+            app.log_message(f"An error occurred while processing oddsmonkey data {e}")
+            print(e)
+
     return all_selections
     
-def get_todays_oddsmonkey_selections(app):
-    creds = None
+def extract_oddsmonkey_selections(td_tags):
+    selections = {}
 
-    app.log_message("Getting Todays Oddsmonkey Selections")
+    # Convert BeautifulSoup elements to strings and strip whitespace
+    td_tags = [str(td.text).strip() for td in td_tags]
+    #print(td_tags)
+
+    # Check if the length of td_tags is a multiple of 11 (since each selection has 11 lines)
+    if len(td_tags) % 11 != 0:
+        print("Unexpected number of lines in td_tags")
+        return selections
+
+    # Iterate over td_tags in steps of 11
+    for i in range(0, len(td_tags), 11):
+        event = td_tags[i+2]  # Line 3
+        selection = td_tags[i+3]  # Line 4
+        lay_odds = td_tags[i+10]  # Line 11
+
+        # Add the selection to the selections dictionary
+        selections[event] = selection, lay_odds
+
+    print(selections)
+
+    return selections
+
+def update_todays_oddsmonkey_selections():
+    try:
+        today = date.today().strftime('%Y/%m/%d')
+        todays_selections = get_oddsmonkey_selections(app, query=f'after:{today}')
+
+        with open('src/data.json', 'r+') as f:
+            data = json.load(f)
+            data['todays_oddsmonkey_selections'] = todays_selections
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
+
+    except Exception as e:
+        print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
+
+def update_data_file(app):
+    try:
+        vip_clients = get_vip_clients(app)
+        newreg_clients = get_new_registrations(app)
+        daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
+        oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
+        closures = get_closures(app)  # Call the get_closures function
+
+        with open('src/data.json', 'r+') as f:
+            data = json.load(f)
+            data.update({
+                'vip_clients': vip_clients,
+                'new_registrations': newreg_clients,
+                'daily_turnover': daily_turnover,
+                'daily_profit': daily_profit,
+                'daily_profit_percentage': daily_profit_percentage,
+                'last_updated_time': last_updated_time,
+                'oddsmonkey_selections': oddsmonkey_selections,
+                'closures': closures, 
+            })
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
+        
+        app.log_message(" -- Data file updated -- ")
+
+    except Exception as e:
+        app.log_message(f"An error occurred while updating the data file: {e}")
+
+def run_get_data(app):
+    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
+    get_data_thread.start()
+
+def run_update_todays_oddsmonkey_selections():
+    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
+    update_todays_oddsmonkey_selections_thread.start()
+
+def run_update_racecards():
+    update_racecards_thread = threading.Thread(target=update_racecards)
+    update_racecards_thread.start()
+
+def get_closures(app):
+    creds = None
+    closures = []
+    label_ids = {}
+
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json')
     if not creds or not creds.valid:
@@ -504,160 +576,105 @@ def get_todays_oddsmonkey_selections(app):
             flow = InstalledAppFlow.from_client_secrets_file(
                 'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
             creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
 
+    # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
 
     results = service.users().labels().list(userId='me').execute()
     labels = results.get('labels', [])
-    oddsmonkey_label_id = None
-    for label in labels:
-        if label['name'] == 'ODDSMONKEY':
-            oddsmonkey_label_id = label['id']
-            break
 
-    if oddsmonkey_label_id is None:
-        print("Label 'Oddsmonkey' not found")
-        return
+    # Find the IDs of the labels
+    for label_name in ['REPORTING/ACCOUNT DEACTIVATION', 'REPORTING/SELF EXCLUSION', 'REPORTING/TAKE A BREAK']:
+        for label in labels:
+            if label['name'] == label_name:
+                label_ids[label_name] = label['id']
+                break
 
-    today = date.today().strftime('%Y/%m/%d')
+    for label_name, label_id in label_ids.items():
+        if label_id is None:
+            print(f"Label '{label_name}' not found")
+            continue
 
-    results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=f'after:{today}').execute()
+        # Get the messages in the label
+        results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
+        messages = results.get('messages', [])
 
-    messages = results.get('messages', [])
-    length = len(messages)
-    print(length)
-
-    all_selections = {}
-
-    for message in messages[:length]:
-        try:
+        for message in messages:
+            # Get the message details
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
-            print(f"Processing message with ID {message['id']}")
 
             payload = msg['payload']
-            headers = payload['headers']
 
-            for d in headers:
-                if d['name'] == 'Subject':
-                    subject = d['value']
-                if d['name'] == 'From':
-                    sender = d['value']
-
-
+            # Get the message body
             parts = payload.get('parts')
             if parts is not None:
                 part = parts[0]
                 data = part['body']['data']
             else:
+                # If there are no parts, get the body from the 'body' field
                 data = payload['body']['data']
-
 
             data = data.replace("-","+").replace("_","/")
             decoded_data = base64.b64decode(data)
 
             soup = BeautifulSoup(decoded_data , "lxml")
-            #body = soup.body()
-            table = soup.table
 
-            #td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
+            # Extract the data from the specified tags
+            first_name_tag = soup.find('span', {'class': 'given-name'})
+            last_name_tag = soup.find('span', {'class': 'family-name'})
+            username_tag = soup.find('td', {'id': 'roField4'}).find('div')
 
-            #for td in td_tags:
-                #print(td.text)  # This will print the text within each 'td' tag
+            # Find all 'tr' elements with class 'radio'
+            tr_tags = soup.find_all('tr', {'class': 'radio'})
+
+            # Initialize restriction and length
+            restriction = None
+            length = None
+
+            # Iterate over the 'tr' elements
+            for tr_tag in tr_tags:
+                # Find the 'th' and 'div' elements within the 'tr' element
+                th_tag = tr_tag.find('th')
+                div_tag = tr_tag.find('div')
+
+                # If both 'th' and 'div' elements are found
+                if th_tag and div_tag:
+                    # Get the text content of the 'th' and 'div' elements
+                    # Get the text content of the 'th' and 'div' elements
+                    th_text = th_tag.get_text().strip().replace('\n', '').replace('*', '').strip()
+                    div_text = div_tag.get_text().strip()
+
+                    # Check if the 'th' text is 'Restriction Required' or 'Further Options', and if so, set the restriction
+                    if th_text in ['Restriction Required', 'Further Options']:
+                        restriction = div_text
+
+                    # Check if the 'th' text is 'Take-A-Break Length' or 'Self-Exclusion Length', and if so, set the length
+                    elif th_text in ['Take-A-Break Length', 'Self-Exclusion Length']:
+                        length = div_text
+
+            # Get the text content of the tags
+            first_name = first_name_tag.get_text() if first_name_tag else None
+            last_name = last_name_tag.get_text() if last_name_tag else None
+            username = username_tag.get_text().upper() if username_tag else None
 
 
-            #print(f"Body for message {message['id']}: {table}")
-            #print(f"Body for message {message['id']}: {body}")
-
-
-
-            try:
-                selections = extract_oddsmonkey_selections(str(table))
-                all_selections.update(selections)
-            except Exception as e:
-                print(f"An error occurred while extracting selections: {e}")
-
-        except Exception as e:
-            print(e)
-
-    app.log_message("Todays Oddsmonkey Selections Updated\n")
-    return all_selections
-
-def extract_oddsmonkey_selections(body):
-    selections = {}
-    pattern = r'<img src="https://azcdn.oddsmonkey.com/om3/images/sports/24x24/.*?.png" style="border-width:0px;"/></td><td style="padding-left: 7px;padding-right: 7px;">(.*?)</td>\s*<td style="padding-left: 7px;padding-right: 7px;">(.*?)</td>.*?<td style="padding-left: 7px;padding-right: 7px;">(\d+\.\d+)</td></tr>'
-
-    try:
-        matches = re.findall(pattern, body, re.DOTALL)
-
-        if not matches:
-            return selections
-
-        for match in matches:
-            event = re.sub(r'</td><td\s*style="padding-left: 7px;padding-right: 7px;">', '', match[0]).strip()
-            selection = match[1].strip()
-            lay_odds = match[2].strip()
-            selections[event] = selection, lay_odds
-
-    except Exception as e:
-        print(f"An error occurred in extract_oddsmonkey_selections: {e}")
-
-    return selections
-
-def update_todays_oddsmonkey_selections():
-    todays_oddsmonkey_selections = get_todays_oddsmonkey_selections(app)
-
-    with open('src/data.json', 'r+') as f:
-        data = json.load(f)
-        data['todays_oddsmonkey_selections'] = todays_oddsmonkey_selections
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
-
-def run_update_todays_oddsmonkey_selections():
-    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
-    update_todays_oddsmonkey_selections_thread.start()
-
-def update_data_file(app):
-    vip_clients = get_vip_clients(app)
-    newreg_clients = get_new_registrations(app)
-    daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
-    oddsmonkey_selections = get_oddsmonkey_selections(app)
-
-    with open('src/data.json', 'r+') as f:
-        data = json.load(f)
-        data.update({
-            'vip_clients': vip_clients,
-            'new_registrations': newreg_clients,
-            'daily_turnover': daily_turnover,
-            'daily_profit': daily_profit,
-            'daily_profit_percentage': daily_profit_percentage,
-            'last_updated_time': last_updated_time,
-            'oddsmonkey_selections': oddsmonkey_selections,
-        })
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+            closure_data = {
+                'Label': label_name,
+                'First name': first_name,
+                'Last name': last_name,
+                'Username': username,
+                'Restriction': restriction,
+                'Length': length,
+            }
+            
+            closures.append(closure_data)
     
-    app.log_message("Data file updated")
+    return closures
 
-def run_get_data(app):
-    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
-    get_data_thread.start()
 
-def run_get_oddsmonkey_selections(app):
-    thread = threading.Thread(target=get_oddsmonkey_selections, args=(app,))
-    thread.start()
-
-def run_update_todays_oddsmonkey_selections():
-    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
-    update_todays_oddsmonkey_selections_thread.start()
-
-def run_update_racecards():
-    update_racecards_thread = threading.Thread(target=update_racecards)
-    update_racecards_thread.start()
-        
 class Application(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -713,7 +730,8 @@ class Application(tk.Tk):
         process_thread.start()
 
     def log_message(self, message):
-        self.text_area.insert(tk.END, message + '\n')
+        current_time = datetime.now().strftime('%H:%M:%S')  # Get the current time
+        self.text_area.insert(tk.END, f'{current_time}: {message}\n')  # Add the time to the message
 
         self.text_area.see(tk.END)
 
@@ -748,8 +766,9 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     run_get_data(app)
-    run_update_racecards()
-    run_update_todays_oddsmonkey_selections()
+    #run_update_racecards()
+    #run_update_todays_oddsmonkey_selections()
+    #get_closures(app)
 
     schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(6).hours.do(run_update_racecards)
@@ -772,7 +791,7 @@ def main(app):
             observer.schedule(event_handler, path, recursive=False)
             observer.start()
             observer_started = True
-            app.log_message('\nWatchdog observer watching folder ' + path + '\n' )
+            app.log_message('Watchdog observer watching folder ' + path + '\n' )
             last_processed_time = datetime.now()
 
         try:

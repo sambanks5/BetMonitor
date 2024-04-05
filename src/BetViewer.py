@@ -50,6 +50,9 @@ newreg_clients = []
 courses_page = []
 current_page = 0
 courses_per_page = 6
+blacklist = set()
+closures_current_page = 0
+requests_per_page = 8
 
 with open('src/creds.json') as f:
     data = json.load(f)
@@ -67,7 +70,6 @@ def get_newreg_clients():
     with open('src/data.json', 'r') as f:
         data = json.load(f)
         newreg_clients = data.get('new_registrations', [])
-
 
 def get_vip_clients():
     global vip_clients
@@ -253,7 +255,7 @@ def bet_feed(data=None):
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
 
-                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             elif customer_reference in vip_clients:
@@ -261,7 +263,7 @@ def bet_feed(data=None):
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
 
-                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             elif customer_reference in newreg_clients:
@@ -269,7 +271,7 @@ def bet_feed(data=None):
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "newreg")
 
-                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             else:
@@ -277,7 +279,7 @@ def bet_feed(data=None):
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
 
-                if any(sel[0] in selection for sel in oddsmonkey_selections.values()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
                      
         feed_text.insert('end', separator)
@@ -400,6 +402,34 @@ def reset_update_times():
     
     display_courses()
 
+def display_next_races():
+    horse_racecards, greyhound_racecards = get_racecards()
+
+    now = datetime.now().time()  
+
+    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+
+    next_horse_races = horse_racecards[:3]
+    next_greyhound_races = greyhound_racecards[:3]
+
+    for widget in next_races_frame.winfo_children():
+        widget.destroy()
+
+    horse_frame = Frame(next_races_frame)
+    horse_frame.pack(side='left', padx=10)
+
+    for i, race in enumerate(next_horse_races):
+        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
+
+    greyhound_frame = Frame(next_races_frame)
+    greyhound_frame.pack(side='right', padx=10)
+
+    for i, race in enumerate(next_greyhound_races):
+        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
+
+    root.after(60000, display_next_races)
+
 ### DISPLAY THE COURSES
 def display_courses():
     global courses_page, current_page
@@ -465,7 +495,6 @@ def display_courses():
     back_button = ttk.Button(race_updation_frame, text="<", command=back, width=2, cursor="hand2")
     back_button.grid(row=len(courses_page), column=1, padx=2, pady=2)
 
-
     forward_button = ttk.Button(race_updation_frame, text=">", command=forward, width=2, cursor="hand2")
     forward_button.grid(row=len(courses_page), column=2, padx=2, pady=2)
 
@@ -479,33 +508,6 @@ def display_courses():
     else:
         forward_button.grid()
 
-def display_next_races():
-    horse_racecards, greyhound_racecards = get_racecards()
-
-    now = datetime.now().time()  
-
-    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-
-    next_horse_races = horse_racecards[:3]
-    next_greyhound_races = greyhound_racecards[:3]
-
-    for widget in next_races_frame.winfo_children():
-        widget.destroy()
-
-    horse_frame = Frame(next_races_frame)
-    horse_frame.pack(side='left', padx=10)
-
-    for i, race in enumerate(next_horse_races):
-        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
-
-    greyhound_frame = Frame(next_races_frame)
-    greyhound_frame.pack(side='right', padx=10)
-
-    for i, race in enumerate(next_greyhound_races):
-        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
-
-    root.after(60000, display_next_races)
 
 def back():
     global current_page
@@ -1294,6 +1296,85 @@ def open_factoring_wizard():
     submit_button = ttk.Button(wizard_window_frame, text="Submit", command=handle_submit, cursor="hand2")
     submit_button.pack(padx=5, pady=5)
 
+def display_closure_requests():
+    global closures_current_page, requests_per_page, blacklist
+
+    def handle_request(request):
+        # This function will be called when the tick button is clicked
+        # Add the username to the blacklist
+        blacklist.add(request['Username'])
+        # Remove the request from the list
+        requests.remove(request)
+        # Refresh the display
+        display_closure_requests()
+
+    # Read the data from data.json
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+        requests = [request for request in data.get('closures', []) if request['Username'] not in blacklist]
+
+
+    # Create a new frame for the requests
+    requests_frame = ttk.Frame(tab_5)
+    requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+
+    # Calculate the start and end indices for the current page
+    start = closures_current_page * requests_per_page
+    end = start + requests_per_page
+    requests_page = requests[start:end]
+
+    # Define the mapping for the 'restriction' field
+    restriction_mapping = {
+        'Account Deactivation': 'Deactivation',
+        'Further Options': 'Self Exclusion'
+    }
+
+    # Loop over the requests on the current page and create a label and a tick button for each one
+    for i, request in enumerate(requests_page):
+        # Map the 'restriction' field
+        restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
+
+        # Check if the 'length' field is None or Null
+        length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
+
+        # Create a label with the request data
+        request_label = ttk.Label(requests_frame, text=f"{request['Username']} | {restriction} | {length}", width=40)
+        request_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+
+        # Create a tick button
+        tick_button = ttk.Button(requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
+        tick_button.grid(row=i, column=0, padx=3, pady=2)
+
+    # Create the back and forward buttons
+    back_button = ttk.Button(requests_frame, text="<", command=closures_back, width=2, cursor="hand2")
+    back_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
+
+    forward_button = ttk.Button(requests_frame, text=">", command=closures_forward, width=2, cursor="hand2")
+    forward_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
+
+    # Remove the back button if we're on the first page
+    if closures_current_page == 0:
+        back_button.grid_remove()
+
+    # Remove the forward button if we're on the last page
+    if closures_current_page == len(requests) // requests_per_page:
+        forward_button.grid_remove()
+
+def closures_back():
+    global closures_current_page
+    if closures_current_page > 0:
+        closures_current_page -= 1
+        display_closure_requests()
+
+def closures_forward():
+    global closures_current_page, requests_per_page
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+    total_requests = len([request for request in data.get('closures', []) if request['Username'] not in blacklist])
+    if (closures_current_page + 1) * requests_per_page < total_requests:
+        closures_current_page += 1
+        display_closure_requests()
+
 def report_freebet():
     current_month = datetime.now().strftime('%B')
     global user
@@ -1535,8 +1616,8 @@ if __name__ == "__main__":
     screenwidth = root.winfo_screenwidth()
     screenheight = root.winfo_screenheight()
     root.configure(bg='#ffffff')
-    alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width-10), 0)    
-    root.geometry(alignstr)
+    #alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width-10), 0)    
+    #root.geometry(alignstr)
     root.minsize(width//2, height//2)
     root.maxsize(screenwidth, screenheight)
     root.resizable(True, True)
@@ -1633,19 +1714,19 @@ if __name__ == "__main__":
 
     ### NOTEBOOK FRAME
     notebook_frame = ttk.Frame(root)
-    notebook_frame.place(relx=0.01, rely=0.54, relwidth=0.42, relheight=0.41)
+    notebook_frame.place(relx=0.005, rely=0.54, relwidth=0.43, relheight=0.41)
     notebook = ttk.Notebook(notebook_frame)
 
     ### RISK BETS TAB
     tab_1 = ttk.Frame(notebook)
-    notebook.add(tab_1, text="Risk Bets")
+    notebook.add(tab_1, text="Risk")
     bets_with_risk_text=tk.Text(tab_1, font=("Helvetica", 10), bd=0, wrap='word',padx=10, pady=10, fg="#000000", bg="#ffffff")
     bets_with_risk_text.grid(row=0, column=0, sticky="nsew")
     bets_with_risk_text.pack(fill='both', expand=True)
 
     ### REPORT TAB
     tab_2 = ttk.Frame(notebook)
-    notebook.add(tab_2, text="Report")
+    notebook.add(tab_2, text="Reports")
     tab_2.grid_rowconfigure(0, weight=1)
     tab_2.grid_rowconfigure(1, weight=1)
     tab_2.grid_columnconfigure(0, weight=1)
@@ -1694,14 +1775,14 @@ if __name__ == "__main__":
     add_restriction_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
     refresh_factoring_button = ttk.Button(tab_3, text="Refresh", command=run_factoring_sheet, cursor="hand2")
     refresh_factoring_button.grid(row=1, column=0, pady=(5, 10), sticky="w")
-    factoring_label = ttk.Label(tab_3, text="Click 'Add' to report a new customer restriction.")
-    factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
+    # factoring_label = ttk.Label(tab_3, text="Click 'Add' to report a new customer restriction.")
+    # factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
 
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
     ### FIND TRADERS TAB
     tab_4 = ttk.Frame(notebook)
-    notebook.add(tab_4, text="Find Risk")
+    notebook.add(tab_4, text="Screener")
     tab_4.grid_rowconfigure(0, weight=1)
     tab_4.grid_rowconfigure(1, weight=1)
     tab_4.grid_columnconfigure(0, weight=1)
@@ -1709,9 +1790,12 @@ if __name__ == "__main__":
     traders_report_ticket.config(state='disabled')
     traders_report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    # GENERATE REPORT BUTTONS: CLIENT REPORT AND DAILY REPORT
     find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report, cursor="hand2")
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
+
+    ### CLOSURE REQUESTS TAB
+    tab_5 = ttk.Frame(notebook)
+    notebook.add(tab_5, text="Requests")
 
     # LABELFRAME
     race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
@@ -1747,10 +1831,12 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
+    display_closure_requests()
     display_next_races()
     factoring_sheet_periodic()
+
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
