@@ -12,7 +12,12 @@ import logging
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
-from tkinter import messagebox, filedialog, simpledialog, Text
+from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext
+from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta
@@ -39,6 +44,8 @@ USER_NAMES = {
 
 # Main dictionary containing Selections
 selection_bets = {}
+
+oddsmonkey_selections = {}
 
 # Nested dictionary containing bet information per Selection
 bet_info = {}  
@@ -802,13 +809,13 @@ def create_daily_report(current_file=None):
 
     report_output += f"M Clients: \n"
     for client in m_clients:
-        report_output += f"{client}, "
+        report_output += f"{client}\n"
     report_output += f"\n\nW Clients: \n"
     for client in w_clients:
-        report_output += f"{client}, "
+        report_output += f"{client}\n"
     report_output += f"\n\nNo Risk Clients: \n"
     for client in norisk_clients:
-        report_output += f"{client}, "
+        report_output += f"{client}\n"
     report_output += f"\n\n"
 
 
@@ -1299,14 +1306,68 @@ def open_factoring_wizard():
 def display_closure_requests():
     global closures_current_page, requests_per_page, blacklist
 
+    confirm_betty_update_bool = tk.BooleanVar()
+    confirm_betty_update_bool.set(False)  # Set the initial state to False
+
+    send_confirmation_email_bool = tk.BooleanVar()
+    send_confirmation_email_bool.set(True)  # Set the initial state to True
+
+    archive_email_bool = tk.BooleanVar()
+    archive_email_bool.set(True)  # Set the initial state to True
+
     def handle_request(request):
-        # This function will be called when the tick button is clicked
-        # Add the username to the blacklist
-        blacklist.add(request['Username'])
-        # Remove the request from the list
-        requests.remove(request)
-        # Refresh the display
-        display_closure_requests()
+
+        def handle_submit():
+            if confirm_betty_update_bool.get():
+                if send_confirmation_email_bool.get():
+                    print("sending email")
+                    send_email(request['Username'], request['Restriction'], request['Length'])
+                if archive_email_bool.get():
+                    print("archiving email")
+                    archive_email(request['email_id'])
+                
+                report_closure_requests(request['Restriction'], request['Username'], request['Length'])
+
+            else:
+                messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
+
+            handle_closure_request.destroy()
+            blacklist.add(request['Username'])
+            display_closure_requests()
+
+
+        handle_closure_request = tk.Toplevel(root)
+        handle_closure_request.geometry("270x400")
+        handle_closure_request.title("Handle Closure Request")
+        handle_closure_request.iconbitmap('src/splash.ico')
+        screen_width = handle_closure_request.winfo_screenwidth()
+        handle_closure_request.geometry(f"+{screen_width - 350}+50")
+        
+
+        handle_closure_request_frame = ttk.Frame(handle_closure_request, style='Card')
+        handle_closure_request_frame.place(x=5, y=5, width=260, height=390)
+        ## Display username from requests
+        username = ttk.Label(handle_closure_request_frame, text=f"Username: {request['Username']}")
+        username.pack(padx=5, pady=5)
+
+        confirm_betty_update = ttk.Checkbutton(handle_closure_request_frame, text='Updated Client in Betty', variable=confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
+        confirm_betty_update.place(x=40, y=30)
+
+        send_confirmation_email = ttk.Checkbutton(handle_closure_request_frame, text='Send Confirmation Email', variable=send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+        send_confirmation_email.place(x=40, y=60)
+
+        archive_email_check = ttk.Checkbutton(handle_closure_request_frame, text='Archive Email & Add to Management Tool', variable=archive_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+        archive_email_check.place(x=40, y=90)
+
+        submit_button = ttk.Button(handle_closure_request_frame, text="Submit", command=handle_submit, cursor="hand2")
+        submit_button.place(x=80, y=130)
+
+        text_area = scrolledtext.ScrolledText(handle_closure_request_frame)
+        text_area['font'] = ('helvetica', '12')
+        text_area.place(x=5, y=200, width=250, height=100)
+
+
+
 
     # Read the data from data.json
     with open('src/data.json', 'r') as f:
@@ -1375,6 +1436,159 @@ def closures_forward():
         closures_current_page += 1
         display_closure_requests()
 
+def update_person(update_url, update_data, person_id):
+    update_response = requests.put(update_url, json=update_data)
+    print(update_url, update_data, person_id)
+
+    if update_response.status_code == 200:
+        print(f'Successfully updated person {person_id}')
+    else:
+        print(f'Error updating person {person_id}: {update_response.status_code}')
+        print(f'Response: {update_response.json()}')
+
+def send_email(username, restriction, length):
+    print(username, restriction, length)
+
+    params = {
+        'term': username,
+        'item_types': 'person',
+        'fields': 'custom_fields',
+        'exact_match': 'true',
+    }
+
+    try:
+        response = requests.get(pipedrive_api_url, params=params)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as errh:
+        print ("Http Error:",errh)
+        return
+    except requests.exceptions.ConnectionError as errc:
+        print ("Error Connecting:",errc)
+        return
+    except requests.exceptions.Timeout as errt:
+        print ("Timeout Error:",errt)
+        return
+    except requests.exceptions.RequestException as err:
+        print ("Something went wrong",err)
+        return
+
+    persons = response.json()['data']['items']
+    if not persons:
+        messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or apply the exclusion manually.")
+        return
+
+    ## This is Ridiculous
+    number_mapping = {
+        'One': '1',
+        'Two': '2',
+        'Three': '3',
+        'Four': '4',
+        'Five': '5',
+        'Six': '6',
+        'Seven': '7',
+        'Eight': '8',
+        'Nine': '9',
+        'Ten': '10'
+    }
+
+    for person in persons:
+        person_id = person['item']['id']
+        update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
+
+        if restriction == 'Account Deactivation':
+            update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': "Deactivated"}
+            update_person(update_url, update_data, person_id)
+
+        elif restriction == 'Further Options':
+            if length.split()[0] in number_mapping:
+                digit_length = length.replace(length.split()[0], number_mapping[length.split()[0]])
+                update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'SE {digit_length}'}
+                update_person(update_url, update_data, person_id)
+            else:
+                print("Error: Invalid length")
+
+        elif restriction == 'Take-A-Break':
+            if length.split()[0] in number_mapping:
+                digit_length = length.replace(length.split()[0], number_mapping[length.split()[0]])
+                update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'TAB {digit_length}'}
+                update_person(update_url, update_data, person_id)
+            else:
+                print("Error: Invalid length")
+    
+def archive_email(msg_id):
+    creds = None
+
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json')
+    if not creds or not creds.valid:
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.modify'])
+                creds = flow.run_local_server(port=0)
+        except RefreshError:
+            print("The access token has expired or been revoked. Please re-authorize the app.")
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.modify'])
+            creds = flow.run_local_server(port=0)
+
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    # Call the Gmail API
+    service = build('gmail', 'v1', credentials=creds)
+
+    # Get the current labels of the message
+    message = service.users().messages().get(userId='me', id=msg_id).execute()
+    current_labels = message['labelIds']
+
+    # Remove all current labels from the message
+    return service.users().messages().modify(
+      userId='me',
+      id=msg_id,
+      body={
+          'removeLabelIds': current_labels
+      }
+    ).execute()
+
+def report_closure_requests(restriction, username, length):
+    current_date = datetime.now().strftime("%d/%m/%Y")  
+
+
+    try:
+        spreadsheet = gc.open("Management Tool")
+    except gspread.SpreadsheetNotFound:
+        messagebox.showerror("Error", f"Spreadsheet 'Management Tool' not found. Please notify Sam, or enter the exclusion details manually.")
+        return
+
+
+    if restriction == 'Account Deactivation':
+        worksheet = spreadsheet.get_worksheet(31)
+        next_row = len(worksheet.col_values(1)) + 1
+        worksheet.update_cell(next_row, 2, username.upper())
+        worksheet.update_cell(next_row, 1, current_date)
+
+    elif restriction == 'Further Options':
+        worksheet = spreadsheet.get_worksheet(34)
+        next_row = len(worksheet.col_values(1)) + 1
+        worksheet.update_cell(next_row, 2, username.upper())
+        worksheet.update_cell(next_row, 1, current_date)
+        worksheet.update_cell(next_row, 3, length)
+
+    elif restriction == 'Take-A-Break':
+        worksheet = spreadsheet.get_worksheet(33)
+        next_row = len(worksheet.col_values(1)) + 1
+        worksheet.update_cell(next_row, 2, username.upper())
+        worksheet.update_cell(next_row, 1, current_date)
+        worksheet.update_cell(next_row, 3, length.upper())
+    
+    else:
+        print("Error: Invalid restriction")
+
+
 def report_freebet():
     current_month = datetime.now().strftime('%B')
     global user
@@ -1410,9 +1624,6 @@ def report_freebet():
         worksheet.update_cell(next_row, 6, entry3.get())
 
         report_freebet_window.destroy()
-
-
-
 
     report_freebet_window = tk.Toplevel(root)
     report_freebet_window.geometry("270x300")
@@ -1616,8 +1827,8 @@ if __name__ == "__main__":
     screenwidth = root.winfo_screenwidth()
     screenheight = root.winfo_screenheight()
     root.configure(bg='#ffffff')
-    #alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width-10), 0)    
-    #root.geometry(alignstr)
+    alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width-10), 0)    
+    root.geometry(alignstr)
     root.minsize(width//2, height//2)
     root.maxsize(screenwidth, screenheight)
     root.resizable(True, True)
@@ -1668,6 +1879,8 @@ if __name__ == "__main__":
 
     show_reporting_data_state = tk.BooleanVar()
     show_reporting_data_state.set(True)
+
+
 
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
@@ -1831,11 +2044,11 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     display_closure_requests()
     display_next_races()
-    factoring_sheet_periodic()
+    #factoring_sheet_periodic()
 
 
     ### GUI LOOP

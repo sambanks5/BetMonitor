@@ -16,6 +16,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -401,12 +402,19 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json')
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
+                creds = flow.run_local_server(port=0)
+        except RefreshError:
+            print("The access token has expired or been revoked. Please re-authorize the app.")
             flow = InstalledAppFlow.from_client_secrets_file(
                 'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
             creds = flow.run_local_server(port=0)
+
         # Save the credentials for the next run
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
@@ -523,22 +531,22 @@ def update_todays_oddsmonkey_selections():
 
 def update_data_file(app):
     try:
-        vip_clients = get_vip_clients(app)
-        newreg_clients = get_new_registrations(app)
-        daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
-        oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
+        #vip_clients = get_vip_clients(app)
+        #newreg_clients = get_new_registrations(app)
+        #daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
+        #oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
         closures = get_closures(app)  # Call the get_closures function
 
         with open('src/data.json', 'r+') as f:
             data = json.load(f)
             data.update({
-                'vip_clients': vip_clients,
-                'new_registrations': newreg_clients,
-                'daily_turnover': daily_turnover,
-                'daily_profit': daily_profit,
-                'daily_profit_percentage': daily_profit_percentage,
-                'last_updated_time': last_updated_time,
-                'oddsmonkey_selections': oddsmonkey_selections,
+                #'vip_clients': vip_clients,
+                #'new_registrations': newreg_clients,
+                #'daily_turnover': daily_turnover,
+                #'daily_profit': daily_profit,
+                #'daily_profit_percentage': daily_profit_percentage,
+                #'last_updated_time': last_updated_time,
+                #'oddsmonkey_selections': oddsmonkey_selections,
                 'closures': closures, 
             })
             f.seek(0)
@@ -606,7 +614,13 @@ def get_closures(app):
             # Get the message details
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
 
+            timestamp = int(msg['internalDate']) // 1000  # Convert to seconds
+            date_time = datetime.fromtimestamp(timestamp)
+            date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
+
             payload = msg['payload']
+            email_id = message['id']
+
 
             # Get the message body
             parts = payload.get('parts')
@@ -662,6 +676,8 @@ def get_closures(app):
 
 
             closure_data = {
+                'email_id': email_id,
+                'timestamp': date_time_str,
                 'Label': label_name,
                 'First name': first_name,
                 'Last name': last_name,
@@ -673,7 +689,6 @@ def get_closures(app):
             closures.append(closure_data)
     
     return closures
-
 
 class Application(tk.Tk):
     def __init__(self):
@@ -767,8 +782,6 @@ def main(app):
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     run_get_data(app)
     #run_update_racecards()
-    #run_update_todays_oddsmonkey_selections()
-    #get_closures(app)
 
     schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(6).hours.do(run_update_racecards)
