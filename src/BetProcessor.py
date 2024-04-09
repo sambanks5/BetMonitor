@@ -1,3 +1,14 @@
+####################################################################################
+##                                BETPROCESSOR.PY                                    
+
+
+## PROCESS INCOMING & PREVIOUS BET, KNOCKBACK AND SMS REQUESTS, ADD TO DATABASE
+## GET VIP CLIENTS, DAILY REPORTING, NEW REGISTRATIONS, RACECARDS, ODDSMONKEY
+## GET ACCOUNT CLOSURE REQUESTS, WRITE API DATA TO DATA.JSON
+####################################################################################
+
+
+
 import os
 import re
 import json
@@ -7,7 +18,6 @@ import threading
 import gspread
 import requests
 import base64
-import email
 import tkinter as tk
 from tkinter import ttk, filedialog, Label
 from PIL import ImageTk, Image
@@ -23,148 +33,38 @@ from googleapiclient.discovery import build
 from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 
-last_processed_time = datetime.now()
 
+
+####################################################################################
+## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
+####################################################################################
 with open('src/creds.json') as f:
     creds = json.load(f)
-
 pipedrive_api_token = creds['pipedrive_api_key']
-
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
-
+last_processed_time = datetime.now()
+file_lock = threading.Lock()
 path = 'F:\BWW\Export'
-def parse_bet_details(bet_text):
-    bet_number_pattern = r"Wager Number - (\d+)"
-    customer_ref_pattern = r"Customer Reference - (\w+)"
-    customer_risk_pattern = r"Customer Risk Category - (\w+)?"
-    time_pattern = r"Bet placed on \d{2}/\d{2}/\d{4} (\d{2}:\d{2}:\d{2})"
-    selection_pattern = r"(.+?, .+?, .+?) (?:at|on) (\d+\.\d+|SP)?"
-    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
-    bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
-    odds_pattern = r"(?:at|on)\s+(\d+\.\d+|SP)"
 
-    customer_reference_match = re.search(customer_ref_pattern, bet_text)
-    customer_risk_match = re.search(customer_risk_pattern, bet_text)
-    timestamp_match = re.search(time_pattern, bet_text)
-    bet_number = re.search(bet_number_pattern, bet_text)
-    bet_details_match = re.search(bet_details_pattern, bet_text)
-    odds_match = re.search(odds_pattern, bet_text)
-    bet_type_match = re.search(bet_type_pattern, bet_text)
-    odds = odds_match.group(1) if odds_match else "evs"
 
-    if all(match is not None for match in [customer_reference_match, timestamp_match, bet_number, bet_details_match]):
-        selections = re.findall(selection_pattern, bet_text)
-        bet_type = None
-        parsed_selections = []
-        for selection, odds in selections:
-            if '-' in selection and ',' in selection.split('-')[1]:
-                unwanted_part = selection.split('-')[1].split(',')[0].strip()
-                selection = selection.replace(unwanted_part, '').replace('-', '').strip()
-                
-            selection = selection.replace('  , ', ' - ').strip()
 
-            if odds:
-                if odds != 'SP':
-                    odds = float(odds)
-            else:
-                odds = 'evs'
-            parsed_selections.append((selection.strip(), odds))
-
-        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match and customer_risk_match.group(1) else "-"        
-        bet_no = bet_number.group(1).strip()
-        customer_reference = customer_reference_match.group(1).strip()
-        timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
-
-        if bet_details_match and bet_details_match.group(1):
-            bet_details = bet_details_match.group(1).strip()
-            if bet_details == 'Win Only':
-                bet_details = 'Win'
-            elif bet_details == 'Each Way':
-                bet_details = 'ew'        
-        unit_stake = bet_details_match.group(3).strip()
-        payment = bet_details_match.group(4).strip()
-        if bet_type_match:
-            bet_type_parts = bet_type_match.group(1).split(':')
-            if len(bet_type_parts) > 1:
-                bet_type = bet_type_parts[-1].strip()
-
-        return bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type
-    else:
-        return None, None, None, None, None, None, None, None, None
-
-def extract_details(content, pattern, excluded_keys):
-    match = re.search(pattern, content)
-    details = {}
-    knockback_id = None
-    if match:
-        content = match.group(1).strip().replace('\n', ' ')
-        lines = content.split('- ')
-        knockback_id = lines.pop(0)
-        for line in lines:
-            parts = line.split(':')
-            if len(parts) >= 2:
-                key = '- ' + parts[0].strip()
-                value = ':'.join(parts[1:]).strip()
-                if key not in excluded_keys:
-                    details[key] = value
-    return knockback_id, details
-
-def parse_wageralert_details(content):
-    customer_ref_pattern = r'Customer Ref: (\w+)'
-    details_pattern = r"Knockback Details:([\s\S]*?)\n\nCustomer's Bets Details:"
-    time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
-    bets_details_pattern = r"Customer's Bets Details:([\s\S]*?)\n\nCustomer's Wagers Details:"
-    wagers_details_pattern = r"Customer's Wagers Details:([\s\S]*?)\n\nCustomer's services reference no:"
-
-    customer_ref_match = re.search(customer_ref_pattern, content)
-    customer_ref = customer_ref_match.group(1) if customer_ref_match else None
-
-    knockback_excluded_keys = ['- Wager Type', '- Liability Failure Code', '- Wager Number (if available)', '- Error Code']
-    knockback_id, knockback_details = extract_details(content, details_pattern, knockback_excluded_keys)
-
-    time_match = re.search(time_pattern, content)
-    time = time_match.group(1) if time_match else None
-
-    bets_excluded_keys = ['- Event File', '- Event Group', '- Event Index', '- Selection Index']
-    _, bets_details = extract_details(content, bets_details_pattern, bets_excluded_keys)
-
-    wagers_excluded_keys = []
-    _, wagers_details = extract_details(content, wagers_details_pattern, wagers_excluded_keys)
-
-    details = {**knockback_details, **bets_details, **wagers_details}
-    details = {key.replace('-', '').strip(): value for key, value in details.items()}
-
-    return customer_ref, knockback_id, time, details
-
-def parse_sms_details(bet_text):
-    bet_text = bet_text.encode("ascii", "ignore").decode()
-
-    wager_number_pattern = r"Wager Number = (\d+)"
-    customer_reference_pattern = r"Customer Reference: (\w+)"
-    mobile_number_pattern = r"Mobile Number: (\d+)"
-    sms_wager_text_pattern = r"SMS Wager Text:((?:.*\n?)+)"
-
-    wager_number_match = re.search(wager_number_pattern, bet_text)
-    customer_reference_match = re.search(customer_reference_pattern, bet_text)
-    mobile_number_match = re.search(mobile_number_pattern, bet_text)
-    sms_wager_text_match = re.search(sms_wager_text_pattern, bet_text)
-
-    wager_number = wager_number_match.group(1) if wager_number_match else None
-    customer_reference = customer_reference_match.group(1) if customer_reference_match else None
-    mobile_number = mobile_number_match.group(1) if mobile_number_match else None
-    sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
-
-    return wager_number, customer_reference, mobile_number, sms_wager_text
-
+####################################################################################
+## SET FOLDER PATH FOR RAW BET FILES
+####################################################################################
 def set_bet_folder_path():
     global path
     new_folder_path = filedialog.askdirectory()
     if new_folder_path:
         path = new_folder_path
 
+
+
+####################################################################################
+## SET BET DATABASE OR GENERATE A NEW BET DATABASE FOR THE DAY
+####################################################################################
 def load_database(app):
     print("\nLoading database")
     date = datetime.now().strftime('%Y-%m-%d')
@@ -178,34 +78,11 @@ def load_database(app):
         app.log_message('No database found. Creating a new one for ' + date)
         return []
 
-def add_bet(database, bet, app):
-    print("Adding a bet to the database")
-    if not any(bet['id'] == existing_bet['id'] for existing_bet in database):
-        database.append(bet)
-    else:
-        app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
 
-def save_database(database):
-    print("Saving database")
-    date = datetime.now().strftime('%Y-%m-%d')
 
-    filename = f'database/{date}-wager_database.json'
-    
-    with open(filename, 'w') as f:
-        json.dump(database, f, indent=4)
-    
-    order_bets(filename)
-
-def order_bets(filename):
-    print("Ordering bets")
-    with open(filename, 'r') as f:
-        data = json.load(f)
-
-    data_sorted = sorted(data, key=lambda x: x['time'])
-
-    with open(filename, 'w') as f:
-        json.dump(data_sorted, f, indent=4)
-
+####################################################################################
+## IDENTIFY BET TYPE AND PARSE TEXT ACCORDINGLY
+####################################################################################
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
         bet_text = file.read()
@@ -275,6 +152,194 @@ def process_file(file_path):
 
     save_database(database)
 
+
+
+####################################################################################
+## EXTRACT DATA POINTS FROM BET TEXT
+####################################################################################
+def parse_bet_details(bet_text):
+    bet_number_pattern = r"Wager Number - (\d+)"
+    customer_ref_pattern = r"Customer Reference - (\w+)"
+    customer_risk_pattern = r"Customer Risk Category - (\w+)?"
+    time_pattern = r"Bet placed on \d{2}/\d{2}/\d{4} (\d{2}:\d{2}:\d{2})"
+    selection_pattern = r"(.+?, .+?, .+?) (?:at|on) (\d+\.\d+|SP)?"
+    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
+    bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
+    odds_pattern = r"(?:at|on)\s+(\d+\.\d+|SP)"
+
+    customer_reference_match = re.search(customer_ref_pattern, bet_text)
+    customer_risk_match = re.search(customer_risk_pattern, bet_text)
+    timestamp_match = re.search(time_pattern, bet_text)
+    bet_number = re.search(bet_number_pattern, bet_text)
+    bet_details_match = re.search(bet_details_pattern, bet_text)
+    odds_match = re.search(odds_pattern, bet_text)
+    bet_type_match = re.search(bet_type_pattern, bet_text)
+    odds = odds_match.group(1) if odds_match else "evs"
+
+    if all(match is not None for match in [customer_reference_match, timestamp_match, bet_number, bet_details_match]):
+        selections = re.findall(selection_pattern, bet_text)
+        bet_type = None
+        parsed_selections = []
+        for selection, odds in selections:
+            if '-' in selection and ',' in selection.split('-')[1]:
+                unwanted_part = selection.split('-')[1].split(',')[0].strip()
+                selection = selection.replace(unwanted_part, '').replace('-', '').strip()
+                
+            selection = selection.replace('  , ', ' - ').strip()
+
+            if odds:
+                if odds != 'SP':
+                    odds = float(odds)
+            else:
+                odds = 'evs'
+            parsed_selections.append((selection.strip(), odds))
+
+        customer_risk_category = customer_risk_match.group(1).strip() if customer_risk_match and customer_risk_match.group(1) else "-"        
+        bet_no = bet_number.group(1).strip()
+        customer_reference = customer_reference_match.group(1).strip()
+        timestamp = re.search(r"(\d{2}:\d{2}:\d{2})", timestamp_match.group(1)).group(1)
+
+        if bet_details_match and bet_details_match.group(1):
+            bet_details = bet_details_match.group(1).strip()
+            if bet_details == 'Win Only':
+                bet_details = 'Win'
+            elif bet_details == 'Each Way':
+                bet_details = 'ew'        
+        unit_stake = bet_details_match.group(3).strip()
+        payment = bet_details_match.group(4).strip()
+        if bet_type_match:
+            bet_type_parts = bet_type_match.group(1).split(':')
+            if len(bet_type_parts) > 1:
+                bet_type = bet_type_parts[-1].strip()
+
+        return bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type
+    else:
+        return None, None, None, None, None, None, None, None, None
+
+
+
+####################################################################################
+## EXTRACT DATA POINTS FROM KNOCKBACK TEXT
+####################################################################################
+def parse_wageralert_details(content):
+    customer_ref_pattern = r'Customer Ref: (\w+)'
+    details_pattern = r"Knockback Details:([\s\S]*?)\n\nCustomer's Bets Details:"
+    time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
+    bets_details_pattern = r"Customer's Bets Details:([\s\S]*?)\n\nCustomer's Wagers Details:"
+    wagers_details_pattern = r"Customer's Wagers Details:([\s\S]*?)\n\nCustomer's services reference no:"
+
+    customer_ref_match = re.search(customer_ref_pattern, content)
+    customer_ref = customer_ref_match.group(1) if customer_ref_match else None
+
+    knockback_excluded_keys = ['- Wager Type', '- Liability Failure Code', '- Wager Number (if available)', '- Error Code']
+    knockback_id, knockback_details = extract_details(content, details_pattern, knockback_excluded_keys)
+
+    time_match = re.search(time_pattern, content)
+    time = time_match.group(1) if time_match else None
+
+    bets_excluded_keys = ['- Event File', '- Event Group', '- Event Index', '- Selection Index']
+    _, bets_details = extract_details(content, bets_details_pattern, bets_excluded_keys)
+
+    wagers_excluded_keys = []
+    _, wagers_details = extract_details(content, wagers_details_pattern, wagers_excluded_keys)
+
+    details = {**knockback_details, **bets_details, **wagers_details}
+    details = {key.replace('-', '').strip(): value for key, value in details.items()}
+
+    return customer_ref, knockback_id, time, details
+
+def extract_details(content, pattern, excluded_keys):
+    match = re.search(pattern, content)
+    details = {}
+    knockback_id = None
+    if match:
+        content = match.group(1).strip().replace('\n', ' ')
+        lines = content.split('- ')
+        knockback_id = lines.pop(0)
+        for line in lines:
+            parts = line.split(':')
+            if len(parts) >= 2:
+                key = '- ' + parts[0].strip()
+                value = ':'.join(parts[1:]).strip()
+                if key not in excluded_keys:
+                    details[key] = value
+    return knockback_id, details
+
+
+
+####################################################################################
+## EXTRACT DATA POINTS FROM SMS REQUEST TEXT 
+####################################################################################
+def parse_sms_details(bet_text):
+    bet_text = bet_text.encode("ascii", "ignore").decode()
+
+    wager_number_pattern = r"Wager Number = (\d+)"
+    customer_reference_pattern = r"Customer Reference: (\w+)"
+    mobile_number_pattern = r"Mobile Number: (\d+)"
+    sms_wager_text_pattern = r"SMS Wager Text:((?:.*\n?)+)"
+
+    wager_number_match = re.search(wager_number_pattern, bet_text)
+    customer_reference_match = re.search(customer_reference_pattern, bet_text)
+    mobile_number_match = re.search(mobile_number_pattern, bet_text)
+    sms_wager_text_match = re.search(sms_wager_text_pattern, bet_text)
+
+    wager_number = wager_number_match.group(1) if wager_number_match else None
+    customer_reference = customer_reference_match.group(1) if customer_reference_match else None
+    mobile_number = mobile_number_match.group(1) if mobile_number_match else None
+    sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
+
+    return wager_number, customer_reference, mobile_number, sms_wager_text
+
+
+
+####################################################################################
+## ADD BET TO DATABASE, SAVE DATABASE, ORDER DATABASE
+####################################################################################
+def add_bet(database, bet, app):
+    print("Adding a bet to the database")
+    if not any(bet['id'] == existing_bet['id'] for existing_bet in database):
+        database.append(bet)
+    else:
+        app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
+
+def save_database(database):
+    print("Saving database")
+    date = datetime.now().strftime('%Y-%m-%d')
+
+    filename = f'database/{date}-wager_database.json'
+    
+    with open(filename, 'w') as f:
+        json.dump(database, f, indent=4)
+    
+    order_bets(filename)
+
+def order_bets(filename):
+    print("Ordering bets")
+    with open(filename, 'r') as f:
+        data = json.load(f)
+
+    data_sorted = sorted(data, key=lambda x: x['time'])
+
+    with open(filename, 'w') as f:
+        json.dump(data_sorted, f, indent=4)
+
+
+
+####################################################################################
+## REPROCESS ALL RAW BET TEXTS IN FOLDER
+####################################################################################
+def reprocess_file(app):
+    print("Reprocessing file")
+    date = datetime.now().strftime('%Y-%m-%d')
+
+    filename = f'database/{date}-wager_database.json'
+
+    if os.path.exists(filename):
+        os.remove(filename)
+        app.log_message('Existing database deleted. Will begin to process todays bets....\n\n')
+    else:
+        app.log_message('No existing database found. Will begin processing todays bets...\n\n')
+
 def process_existing_bets(directory, app):
     database = load_database(app)
 
@@ -293,18 +358,11 @@ def process_existing_bets(directory, app):
     save_database(database)
     app.log_message('Bet processing complete. Waiting for new files...\n')
 
-def reprocess_file(app):
-    print("Reprocessing file")
-    date = datetime.now().strftime('%Y-%m-%d')
 
-    filename = f'database/{date}-wager_database.json'
 
-    if os.path.exists(filename):
-        os.remove(filename)
-        app.log_message('Existing database deleted. Will begin to process todays bets....\n\n')
-    else:
-        app.log_message('No existing database found. Will begin processing todays bets...\n\n')
-
+####################################################################################
+## GET VIP CLIENTS & DAILY REPORTING FROM GOOGLE SHEETS API
+####################################################################################
 def get_vip_clients(app):
     spreadsheet = gc.open('Management Tool')
     worksheet = spreadsheet.get_worksheet(4)
@@ -313,17 +371,6 @@ def get_vip_clients(app):
     vip_clients = [row[0] for row in data if row[0]]
     
     return vip_clients
-
-def get_new_registrations(app):
-    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
-
-    if response.status_code == 200:
-        data = response.json()
-
-        persons = data.get('data', [])
-        newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
-    
-    return newreg_clients
 
 def get_reporting_data(app):
     current_month = datetime.now().strftime('%B')
@@ -347,55 +394,100 @@ def get_reporting_data(app):
     
     return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
 
+
+
+####################################################################################
+## GET NEW REGISTRATIONS FROM PIPEDRIVE API
+####################################################################################
+def get_new_registrations(app):
+    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
+
+    if response.status_code == 200:
+        data = response.json()
+
+        persons = data.get('data', [])
+        newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
+    
+    return newreg_clients
+
+
+
+####################################################################################
+## GET DAILY RACECARDS FOR HORSES & GREYHOUNDS FROM RAPIDAPI
+####################################################################################
 def get_racecards(app):
     current_date = datetime.now().strftime('%Y-%m-%d')
 
+    with open('src/creds.json') as f:
+        creds = json.load(f)
+
+    # Retrieve the RapidAPI key
+    rapidapi_key = creds['X-RapidAPI-Key']
+
     headers = {
-        "X-RapidAPI-Key": "22f72e5c1amsha91beaa0531671ep173453jsnad4cb1bce081",
+        "X-RapidAPI-Key": rapidapi_key,
     }
 
     # Greyhound data
     url = "https://greyhound-racing-uk.p.rapidapi.com/racecards"
     headers["X-RapidAPI-Host"] = "greyhound-racing-uk.p.rapidapi.com"
-    response = requests.get(url, headers=headers, params={"date": current_date})
-    greyhound_data = response.json()
+    try:
+        response = requests.get(url, headers=headers, params={"date": current_date})
+        response.raise_for_status()
+        greyhound_data = response.json()
 
-    greyhound_races = []
-    for race in greyhound_data:
-        time_only = race['date'].split(' ')[1] 
-        greyhound_races.append({
-            'track': race['dogTrack'],
-            'time': time_only,
-        })
+        greyhound_races = []
+        for race in greyhound_data:
+            time_only = race['date'].split(' ')[1] 
+            greyhound_races.append({
+                'track': race['dogTrack'],
+                'time': time_only,
+            })
+
+    except requests.exceptions.RequestException as e:
+        app.log_message(f"Error retrieving greyhound racecards: {e}")
+        greyhound_races = []
 
     # Horse racing data
     url = "https://horse-racing.p.rapidapi.com/racecards"
     headers["X-RapidAPI-Host"] = "horse-racing.p.rapidapi.com"
-    response = requests.get(url, headers=headers, params={"date": current_date})
-    horse_racing_data = response.json()
+    try:
+        response = requests.get(url, headers=headers, params={"date": current_date})
+        response.raise_for_status()
+        horse_racing_data = response.json()
 
-    horse_races = []
-    for race in horse_racing_data:
-        time_with_seconds = race['date'].split(' ')[1] 
-        time_only = ':'.join(time_with_seconds.split(':')[:2])  
-        horse_races.append({
-            'course': race['course'],
-            'time': time_only,
-        })
+        horse_races = []
+        for race in horse_racing_data:
+            time_with_seconds = race['date'].split(' ')[1] 
+            time_only = ':'.join(time_with_seconds.split(':')[:2])  
+            horse_races.append({
+                'course': race['course'],
+                'time': time_only,
+            })
 
+    except requests.exceptions.RequestException as e:
+        app.log_message(f"Error retrieving horse racing racecards: {e}")
+        horse_races = []
+    print(len(greyhound_races), len(horse_races))
     return greyhound_races, horse_races
 
 def update_racecards():
-    greyhound_races, horse_races = get_racecards(app)
+    with file_lock:
+        greyhound_races, horse_races = get_racecards(app)
 
-    with open('src/data.json', 'r+') as f:
-        data = json.load(f)
-        data['greyhound_racecards'] = greyhound_races
-        data['horse_racecards'] = horse_races
-        f.seek(0)
-        json.dump(data, f, indent=4)
-        f.truncate()
+        with open('src/data.json', 'r+') as f:
+            data = json.load(f)
+            data['greyhound_racecards'] = greyhound_races
+            data['horse_racecards'] = horse_races
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
 
+
+
+####################################################################################
+## GET ODDSMONKEY EMAILS FROM GMAIL API, EXTRACT SELECTIONS
+####################################################################################
 def get_oddsmonkey_selections(app, num_messages=None, query=''):
     creds = None
 
@@ -488,7 +580,23 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
             print(e)
 
     return all_selections
-    
+
+def update_todays_oddsmonkey_selections():
+    with file_lock:
+        try:
+            today = date.today().strftime('%Y/%m/%d')
+            todays_selections = get_oddsmonkey_selections(app, query=f'after:{today}')
+
+            with open('src/data.json', 'r+') as f:
+                data = json.load(f)
+                data['todays_oddsmonkey_selections'] = todays_selections
+                f.seek(0)
+                json.dump(data, f, indent=4)
+                f.truncate()
+
+        except Exception as e:
+            print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
+
 def extract_oddsmonkey_selections(td_tags):
     selections = {}
 
@@ -514,62 +622,11 @@ def extract_oddsmonkey_selections(td_tags):
 
     return selections
 
-def update_todays_oddsmonkey_selections():
-    try:
-        today = date.today().strftime('%Y/%m/%d')
-        todays_selections = get_oddsmonkey_selections(app, query=f'after:{today}')
 
-        with open('src/data.json', 'r+') as f:
-            data = json.load(f)
-            data['todays_oddsmonkey_selections'] = todays_selections
-            f.seek(0)
-            json.dump(data, f, indent=4)
-            f.truncate()
 
-    except Exception as e:
-        print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
-
-def update_data_file(app):
-    try:
-        vip_clients = get_vip_clients(app)
-        newreg_clients = get_new_registrations(app)
-        daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
-        oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
-        #closures = get_closures(app)
-
-        with open('src/data.json', 'r+') as f:
-            data = json.load(f)
-            data.update({
-                'vip_clients': vip_clients,
-                'new_registrations': newreg_clients,
-                'daily_turnover': daily_turnover,
-                'daily_profit': daily_profit,
-                'daily_profit_percentage': daily_profit_percentage,
-                'last_updated_time': last_updated_time,
-                'oddsmonkey_selections': oddsmonkey_selections,
-                #'closures': closures, 
-            })
-            f.seek(0)
-            json.dump(data, f, indent=4)
-            f.truncate()
-        
-        app.log_message(" -- Data file updated -- ")
-
-    except Exception as e:
-        app.log_message(f"An error occurred while updating the data file: {e}")
-
-def run_get_data(app):
-    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
-    get_data_thread.start()
-
-def run_update_todays_oddsmonkey_selections():
-    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
-    update_todays_oddsmonkey_selections_thread.start()
-
-def run_update_racecards():
-    update_racecards_thread = threading.Thread(target=update_racecards)
-    update_racecards_thread.start()
-
+####################################################################################
+## GET ACCOUNT CLOSURE REQUESTS FROM GMAIL API
+####################################################################################
 def get_closures(app):
     creds = None
     closures = []
@@ -680,7 +737,7 @@ def get_closures(app):
             first_name = first_name_tag.get_text() if first_name_tag else None
             last_name = last_name_tag.get_text() if last_name_tag else None
             username = username_tag.get_text().upper() if username_tag else None
-
+            print("user", username)
 
             closure_data = {
                 'email_id': email_id,
@@ -696,12 +753,58 @@ def get_closures(app):
 
             closures.append(closure_data)
 
-        # Write the updated closures back to the JSON file
-        with open('src/data.json', 'w') as f:
-            json.dump({'closures': closures}, f)
+    return closures
 
-        return closures
 
+
+####################################################################################
+## WRITE API DATA TO DATA.JSON
+####################################################################################
+def update_data_file(app):
+    with file_lock:
+        try:
+            # Load existing data
+            with open('src/data.json', 'r') as f:
+                data = json.load(f)
+
+            # Update data
+            data['vip_clients'] = get_vip_clients(app)
+            data['new_registrations'] = get_new_registrations(app)
+            data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'] = get_reporting_data(app)
+            data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
+            data['closures'] = get_closures(app)
+
+            # Write updated data back to file
+            with open('src/data.json', 'w') as f:
+                json.dump(data, f, indent=4)
+            
+            app.log_message(" -- Data file updated -- ")
+
+        except Exception as e:
+            app.log_message(f"An error occurred while updating the data file: {e}")
+
+
+
+####################################################################################
+## THREADING FUNCTIONS
+####################################################################################
+def run_get_data(app):
+    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
+    get_data_thread.start()
+
+def run_update_todays_oddsmonkey_selections():
+    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
+    update_todays_oddsmonkey_selections_thread.start()
+
+def run_update_racecards():
+    update_racecards_thread = threading.Thread(target=update_racecards)
+    update_racecards_thread.start()
+
+
+
+####################################################################################
+## GENERATE TKINTER UI
+####################################################################################
 class Application(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -770,6 +873,11 @@ class Application(tk.Tk):
     def on_destroy(self, event):
         self.stop_main_loop = True
 
+
+
+####################################################################################
+## FILE HANDLER FOR INCOMING BETS USING WATCHDOG OBSERVER
+####################################################################################
 class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         global last_processed_time
@@ -785,6 +893,11 @@ class FileHandler(FileSystemEventHandler):
         else: 
             print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
 
+
+
+####################################################################################
+## MAIN FUNCTIONS CONTAINING MAIN LOOP
+####################################################################################
 def main(app):
     global path, last_processed_time
     event_handler = FileHandler()
@@ -794,7 +907,7 @@ def main(app):
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     run_get_data(app)
     run_update_racecards()
-    #run_update_todays_oddsmonkey_selections()
+    run_update_todays_oddsmonkey_selections()
 
     schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(6).hours.do(run_update_racecards)

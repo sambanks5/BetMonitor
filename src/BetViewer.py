@@ -7,6 +7,8 @@
 ## SCREEN FOR RISK CLIENTS, OTHER VARLIOS QOL IMPROVEMENTS
 ####################################################################################
 
+
+
 import os
 import re
 import threading
@@ -17,7 +19,6 @@ import random
 import gspread
 import datetime
 import time
-import logging
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
@@ -32,7 +33,8 @@ from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
-import tkinter.font
+
+
 
 ####################################################################################
 ## DEFAULT VALUES & GLOBAL VARIABLES BECAUSE LAZINESS
@@ -1326,14 +1328,6 @@ def open_factoring_wizard():
 def display_closure_requests():
     global closures_current_page, requests_per_page, blacklist
 
-    confirm_betty_update_bool = tk.BooleanVar()
-    confirm_betty_update_bool.set(False)  # Set the initial state to False
-
-    send_confirmation_email_bool = tk.BooleanVar()
-    send_confirmation_email_bool.set(True)  # Set the initial state to True
-
-    archive_email_bool = tk.BooleanVar()
-    archive_email_bool.set(False)  # Set the initial state to True
 
     def handle_request(request):
         # Define the mapping for the 'restriction' field
@@ -1455,10 +1449,6 @@ def display_closure_requests():
     with open('src/data.json', 'r') as f:
         data = json.load(f)
         requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
-
-    # Create a new frame for the requests
-    requests_frame = ttk.Frame(tab_5)
-    requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
     # Calculate the start and end indices for the current page
     start = closures_current_page * requests_per_page
@@ -1985,6 +1975,14 @@ if __name__ == "__main__":
     show_reporting_data_state = tk.BooleanVar()
     show_reporting_data_state.set(True)
 
+    confirm_betty_update_bool = tk.BooleanVar()
+    confirm_betty_update_bool.set(False)  # Set the initial state to False
+
+    send_confirmation_email_bool = tk.BooleanVar()
+    send_confirmation_email_bool.set(True)  # Set the initial state to True
+
+    archive_email_bool = tk.BooleanVar()
+    archive_email_bool.set(False)  # Set the initial state to True
 
 
     ### BET FEED
@@ -2115,7 +2113,10 @@ if __name__ == "__main__":
     tab_5 = ttk.Frame(notebook)
     notebook.add(tab_5, text="Requests")
 
-    # LABELFRAME
+    requests_frame = ttk.Frame(tab_5)
+    requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+
+    # RACE UPDATION
     race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
     race_updation_frame.place(relx=0.44, rely=0.66, relwidth=0.33, relheight=0.283)
 
