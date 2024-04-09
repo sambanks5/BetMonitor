@@ -531,23 +531,23 @@ def update_todays_oddsmonkey_selections():
 
 def update_data_file(app):
     try:
-        #vip_clients = get_vip_clients(app)
-        #newreg_clients = get_new_registrations(app)
-        #daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
-        #oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
-        closures = get_closures(app)  # Call the get_closures function
+        vip_clients = get_vip_clients(app)
+        newreg_clients = get_new_registrations(app)
+        daily_turnover, daily_profit, daily_profit_percentage, last_updated_time = get_reporting_data(app)
+        oddsmonkey_selections = get_oddsmonkey_selections(app, 5)
+        #closures = get_closures(app)
 
         with open('src/data.json', 'r+') as f:
             data = json.load(f)
             data.update({
-                #'vip_clients': vip_clients,
-                #'new_registrations': newreg_clients,
-                #'daily_turnover': daily_turnover,
-                #'daily_profit': daily_profit,
-                #'daily_profit_percentage': daily_profit_percentage,
-                #'last_updated_time': last_updated_time,
-                #'oddsmonkey_selections': oddsmonkey_selections,
-                'closures': closures, 
+                'vip_clients': vip_clients,
+                'new_registrations': newreg_clients,
+                'daily_turnover': daily_turnover,
+                'daily_profit': daily_profit,
+                'daily_profit_percentage': daily_profit_percentage,
+                'last_updated_time': last_updated_time,
+                'oddsmonkey_selections': oddsmonkey_selections,
+                #'closures': closures, 
             })
             f.seek(0)
             json.dump(data, f, indent=4)
@@ -574,6 +574,13 @@ def get_closures(app):
     creds = None
     closures = []
     label_ids = {}
+
+    # Load the existing closures from the JSON file
+    with open('src/data.json', 'r') as f:
+        existing_closures = json.load(f).get('closures', [])
+
+    # Create a dictionary mapping email IDs to 'completed' status
+    completed_status = {closure['email_id']: closure.get('completed', False) for closure in existing_closures}
 
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json')
@@ -684,11 +691,16 @@ def get_closures(app):
                 'Username': username,
                 'Restriction': restriction,
                 'Length': length,
+                'completed': completed_status.get(email_id, False),  # Preserve the 'completed' status
             }
-            
+
             closures.append(closure_data)
-    
-    return closures
+
+        # Write the updated closures back to the JSON file
+        with open('src/data.json', 'w') as f:
+            json.dump({'closures': closures}, f)
+
+        return closures
 
 class Application(tk.Tk):
     def __init__(self):
@@ -781,11 +793,12 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     run_get_data(app)
-    #run_update_racecards()
+    run_update_racecards()
+    #run_update_todays_oddsmonkey_selections()
 
     schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(6).hours.do(run_update_racecards)
-    schedule.every(1).hours.do(run_update_todays_oddsmonkey_selections)
+    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     while not app.stop_main_loop:
         # Run pending tasks

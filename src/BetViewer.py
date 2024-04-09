@@ -1,3 +1,12 @@
+####################################################################################
+##                                BETVIEWER.PY                                    
+
+
+## FORMAT AND DISPLAY INCOMING BETS, FIND RUNS ON SELECTIONS, TRACK RACE UPDATION,
+## DISPLAY NEXT 3 HORSE & GREYHOUND RACES, CREATE DAILY, CLIENT, STAFF REPORTS,
+## SCREEN FOR RISK CLIENTS, OTHER VARLIOS QOL IMPROVEMENTS
+####################################################################################
+
 import os
 import re
 import threading
@@ -13,6 +22,7 @@ import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext
+from dateutil.relativedelta import relativedelta
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -24,13 +34,30 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 import tkinter.font
 
-#Default Values for settings
+####################################################################################
+## DEFAULT VALUES & GLOBAL VARIABLES BECAUSE LAZINESS
+####################################################################################
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
-
 current_file = None
+selection_bets = {}
+oddsmonkey_selections = {}
+bet_info = {}  
+bet_feed_lock = threading.Lock()
+vip_clients = []
+newreg_clients = []
+courses_page = []
+current_page = 0
+courses_per_page = 6
+blacklist = set()
+closures_current_page = 0
+requests_per_page = 8
 
-# STAFF
+
+
+####################################################################################
+## INITIALISE STAFF NAMES AND CREDENTIALS
+####################################################################################
 user = ""
 USER_NAMES = {
     'GB': 'George',
@@ -42,34 +69,24 @@ USER_NAMES = {
     'EK': 'Ed',
 }
 
-# Main dictionary containing Selections
-selection_bets = {}
 
-oddsmonkey_selections = {}
 
-# Nested dictionary containing bet information per Selection
-bet_info = {}  
-
-bet_feed_lock = threading.Lock()
-
-vip_clients = []
-newreg_clients = []
-courses_page = []
-current_page = 0
-courses_per_page = 6
-blacklist = set()
-closures_current_page = 0
-requests_per_page = 8
-
+####################################################################################
+## INITIALISE API CREDENTIALS
+####################################################################################
 with open('src/creds.json') as f:
     data = json.load(f)
-
 pipedrive_api_token = data['pipedrive_api_key']
 pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={pipedrive_api_token}'
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
 gc = gspread.authorize(credentials)
 
+
+
+####################################################################################
+## GET DATA FROM DATA.JSON
+####################################################################################
 def get_newreg_clients():
     # Get New Registrations from pipedrive API
     global newreg_clients
@@ -117,12 +134,21 @@ def get_oddsmonkey_selections():
     print(oddsmonkey_selections.values())
     return oddsmonkey_selections
 
+
+
+####################################################################################
+## DISPLAY MESSAGE IN FEED IF ERROR
+####################################################################################
 def update_feed_text(message):
     feed_text.config(state="normal")
     feed_text.insert('end', message)
     feed_text.config(state="disabled")
 
-### REFRESH/UPDATE DISPLAY AND DICTIONARY
+
+
+####################################################################################
+## UPDATE/REFRESH DISPLAY
+####################################################################################
 def refresh_display():
     global current_file
     try:
@@ -135,13 +161,11 @@ def refresh_display():
     else:
         print("Refreshed Bets")
 
-### FUNCTION TO HANDLE REFRESHING DISPLAY EVERY 30 SECONDS
-def refresh_display_periodic():
-    if auto_refresh_state.get():
-        refresh_display()
 
-    root.after(30000, refresh_display_periodic)
 
+####################################################################################
+## GET JSON DATABASE
+####################################################################################
 def get_database(date_str=None):
 
     if date_str is None:
@@ -177,7 +201,12 @@ def get_database(date_str=None):
             messagebox.showerror("Error", error_message)
             return []
 
-### BET CHECK THREAD FUNCTIONS
+
+
+
+####################################################################################
+## FORMAT AND DISPLAY BETS, DISPLAY 'RISK' BETS
+####################################################################################
 def start_bet_feed(current_file=None):
     logo_label.unbind("<Button-1>")
 
@@ -262,7 +291,7 @@ def bet_feed(data=None):
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
 
-                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             elif customer_reference in vip_clients:
@@ -270,7 +299,7 @@ def bet_feed(data=None):
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
 
-                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             elif customer_reference in newreg_clients:
@@ -278,15 +307,15 @@ def bet_feed(data=None):
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "newreg")
 
-                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
 
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
 
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
-
-                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and float(sel[1]) > float(om_sel[1][1]) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):
+                
+                if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
                      
         feed_text.insert('end', separator)
@@ -301,6 +330,23 @@ def bet_feed(data=None):
     logo_label.bind("<Button-1>", lambda e: start_bet_feed())
     
     bet_runs(data)
+
+
+
+####################################################################################
+## DISPLAY 'RUNS ON SELECTIONS' PANEL
+####################################################################################
+def set_recent_bets(*args):
+    global DEFAULT_NUM_RECENT_FILES
+    DEFAULT_NUM_RECENT_FILES = combobox_var.get()
+    refresh_display()
+
+def set_num_run_bets(*args):
+    global DEFAULT_NUM_BETS_TO_RUN
+    new_value = int(num_run_bets_var.get())
+    if new_value is not None:
+        DEFAULT_NUM_BETS_TO_RUN = new_value
+    refresh_display()
 
 def bet_runs(data):
     global DEFAULT_NUM_BETS_TO_RUN
@@ -351,7 +397,43 @@ def bet_runs(data):
 
     runs_text.config(state=tk.DISABLED)
 
-### GET COURSES FROM API
+
+####################################################################################
+## DISPLAY NEXT 3 HORSE & GREYHOUND RACES
+####################################################################################
+def display_next_races():
+    horse_racecards, greyhound_racecards = get_racecards()
+
+    now = datetime.now().time()  
+
+    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+
+    next_horse_races = horse_racecards[:3]
+    next_greyhound_races = greyhound_racecards[:3]
+
+    for widget in next_races_frame.winfo_children():
+        widget.destroy()
+
+    horse_frame = Frame(next_races_frame)
+    horse_frame.pack(side='left', padx=5)
+
+    for i, race in enumerate(next_horse_races):
+        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
+
+    greyhound_frame = Frame(next_races_frame)
+    greyhound_frame.pack(side='right', padx=5)
+
+    for i, race in enumerate(next_greyhound_races):
+        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
+
+    root.after(60000, display_next_races)
+
+
+
+####################################################################################
+## RACE UPDATION TRACKER
+####################################################################################
 def get_courses():
     with open('src/creds.json') as f:
         creds = json.load(f)
@@ -409,35 +491,6 @@ def reset_update_times():
     
     display_courses()
 
-def display_next_races():
-    horse_racecards, greyhound_racecards = get_racecards()
-
-    now = datetime.now().time()  
-
-    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-
-    next_horse_races = horse_racecards[:3]
-    next_greyhound_races = greyhound_racecards[:3]
-
-    for widget in next_races_frame.winfo_children():
-        widget.destroy()
-
-    horse_frame = Frame(next_races_frame)
-    horse_frame.pack(side='left', padx=10)
-
-    for i, race in enumerate(next_horse_races):
-        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
-
-    greyhound_frame = Frame(next_races_frame)
-    greyhound_frame.pack(side='right', padx=10)
-
-    for i, race in enumerate(next_greyhound_races):
-        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
-
-    root.after(60000, display_next_races)
-
-### DISPLAY THE COURSES
 def display_courses():
     global courses_page, current_page
     for widget in race_updation_frame.winfo_children():
@@ -515,7 +568,6 @@ def display_courses():
     else:
         forward_button.grid()
 
-
 def back():
     global current_page
     if current_page > 0:
@@ -544,7 +596,6 @@ def add_course():
 
         display_courses()
 
-### REMOVE COURSE FROM COURSES LIST
 def remove_course(course):
     with open('update_times.json', 'r') as f:
         data = json.load(f)
@@ -557,7 +608,6 @@ def remove_course(course):
 
     display_courses()
 
-### HANDLE UPDATE OF COURSE
 def update_course(course):
     global user
     if not user:
@@ -580,7 +630,6 @@ def update_course(course):
 
     display_courses()
 
-### LOG ALL COURSE UPDATES TO FILE
 def log_update(course, time, user):
     now = datetime.now()
     date_string = now.strftime('%d-%m-%Y')
@@ -609,7 +658,11 @@ def log_update(course, time, user):
     with open(log_file, 'w') as f:
         f.writelines(data)
 
-### CREATE REPORT ON DAILY ACTIVITY
+
+
+####################################################################################
+## CREATE DAILY, CLIENT, STAFF REPORTS & SCREEN FOR RISK CLIENTS
+####################################################################################
 def create_daily_report(current_file=None):
     data = get_database(current_file)
     report_output = ""
@@ -1104,47 +1157,6 @@ def find_traders():
 
     return users_without_risk_category, results
 
-def add_watchlist():
-    watchlist_window = tk.Toplevel(root)
-    watchlist_window.title("Add Watchlist")
-    watchlist_window.geometry("290x510")
-    watchlist_window.iconbitmap('src/splash.ico')
-
-    try:
-        with open('watchlist.json', 'r') as file:
-            current_watchlist = json.load(file)
-    except FileNotFoundError:
-        current_watchlist = []
-
-    Label(watchlist_window, text="Current Watchlist:").pack(padx=2, pady=5)
-    watchlist_textbox = Text(watchlist_window)
-    watchlist_textbox.pack(padx=2, pady=2)
-    for client in current_watchlist:
-        watchlist_textbox.insert(tk.END, client + '\n')
-    watchlist_textbox.config(state=tk.DISABLED)
-
-    new_watchlist = Entry(watchlist_window)
-    new_watchlist.pack( padx=5, pady=5, anchor='s')
-
-    def save_watchlist():
-        watchlist = new_watchlist.get().upper()
-        # Check if the watchlist is not empty
-        if watchlist.strip():
-            # If the watchlist is not empty, save it
-            current_watchlist.append(watchlist)
-            #watchlist_clients.append(watchlist)
-            with open('watchlist.json', 'w') as file:
-                json.dump(current_watchlist, file)
-            new_watchlist.delete(0, tk.END)
-            watchlist_window.destroy()
-            refresh_display()
-            add_watchlist()
-        else:
-            # If the watchlist is empty, show an error message
-            messagebox.showerror("Error", "Box can't be empty")
-
-    Button(watchlist_window, text="Save", command=save_watchlist).pack( padx=5, pady=5, anchor='s')
-
 def update_traders_report():
     users_without_risk_category, oddsmonkey_traders = find_traders()
     username_counts = Counter(trader['username'] for trader in oddsmonkey_traders)
@@ -1170,7 +1182,11 @@ def update_traders_report():
 
     traders_report_ticket.config(state='disabled')
 
-### GET FACTORING DATA FROM GOOGLE SHEETS USING API
+
+
+####################################################################################
+## GET & DISPLAY 'FACTORING' SHEET, HANDLE NEW FACTORING ENTRIES
+####################################################################################
 def factoring_sheet():
     tree.delete(*tree.get_children())
     spreadsheet = gc.open('Factoring Diary')
@@ -1182,7 +1198,6 @@ def factoring_sheet():
     for row in data[2:]:
         tree.insert("", "end", values=[row[0], row[1], row[2], row[3], row[4]])
 
-### WIZARD TO ADD FACTORING TO FACTORING DIARY
 def open_factoring_wizard():
     global user
     if not user:
@@ -1303,6 +1318,11 @@ def open_factoring_wizard():
     submit_button = ttk.Button(wizard_window_frame, text="Submit", command=handle_submit, cursor="hand2")
     submit_button.pack(padx=5, pady=5)
 
+
+
+####################################################################################
+## DISPLAY CLOSURE (EXCLUSION) REQUESTS, SEND CONFIRMATION EMAILS & REPORT
+####################################################################################
 def display_closure_requests():
     global closures_current_page, requests_per_page, blacklist
 
@@ -1313,67 +1333,128 @@ def display_closure_requests():
     send_confirmation_email_bool.set(True)  # Set the initial state to True
 
     archive_email_bool = tk.BooleanVar()
-    archive_email_bool.set(True)  # Set the initial state to True
+    archive_email_bool.set(False)  # Set the initial state to True
 
     def handle_request(request):
+        # Define the mapping for the 'restriction' field
+        restriction_mapping = {
+            'Further Options': 'Self Exclusion'
+        }
+
+        # Map the 'restriction' field
+        request['Restriction'] = restriction_mapping.get(request['Restriction'], request['Restriction'])
+
+        # Get the current date
+        current_date = datetime.now()
+
+        # Convert the 'Length' string to a number of years or days
+        length_mapping = {
+            'One Day': timedelta(days=1),
+            'One Week': timedelta(weeks=1),
+            'Two Weeks': timedelta(weeks=2),
+            'Four Weeks': timedelta(weeks=4),
+            'Six Weeks': timedelta(weeks=6),
+            '6 Months': relativedelta(months=6),
+            'One Year': relativedelta(years=1),
+            'Two Years': relativedelta(years=2),
+            'Three Years': relativedelta(years=3),
+            'Four Years': relativedelta(years=4),
+            'Five Years': relativedelta(years=5),
+            # Add more mappings if necessary
+        }
+        length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
+
+        # Calculate the reopen date
+        reopen_date = current_date + length_in_time
+
+
+        # Format the string to be copied to the clipboard
+        copy_string = f"{request['Restriction']}"
+
+        # Add the 'Length' to the string if it's not 'None' or 'Null'
+        if request['Length'] not in [None, 'None', 'Null']:
+            copy_string += f" {request['Length']}"
+
+        copy_string += f" {current_date.strftime('%d/%m/%Y')}"
+        copy_string = copy_string.upper()
+
+        # If the restriction is 'Take-a-break' or 'Self Exclusion', add the reopen date to the string
+        if request['Restriction'] in ['Take-A-Break', 'Self Exclusion']:
+            copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
+
+        # Add the user to the string
+        copy_string += f" {user}"
+
+        # Copy the string to the clipboard
+        pyperclip.copy(copy_string)
 
         def handle_submit():
             if confirm_betty_update_bool.get():
-                if send_confirmation_email_bool.get():
-                    print("sending email")
-                    send_email(request['Username'], request['Restriction'], request['Length'])
-                if archive_email_bool.get():
-                    print("archiving email")
-                    archive_email(request['email_id'])
-                
-                report_closure_requests(request['Restriction'], request['Username'], request['Length'])
+                try:
+                    if send_confirmation_email_bool.get():
+                        threading.Thread(target=send_email, args=(request['Username'], request['Restriction'], request['Length'])).start()
+                except Exception as e:
+                    print(f"Error sending email: {e}")
+
+                try:
+                    if archive_email_bool.get():
+                        threading.Thread(target=archive_email, args=(request['email_id'],)).start()
+                except Exception as e:
+                    print(f"Error archiving email: {e}")
+
+                try:
+                    threading.Thread(target=report_closure_requests, args=(request['Restriction'], request['Username'], request['Length'])).start()
+                except Exception as e:
+                    print(f"Error reporting closure requests: {e}")
+
+                # Mark the request as completed
+                request['completed'] = True
+
+                # Write the updated data back to 'data.json'
+                with open('src/data.json', 'w') as f:
+                    json.dump(data, f, indent=4)
 
             else:
                 messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
 
             handle_closure_request.destroy()
-            blacklist.add(request['Username'])
             display_closure_requests()
 
 
         handle_closure_request = tk.Toplevel(root)
-        handle_closure_request.geometry("270x400")
-        handle_closure_request.title("Handle Closure Request")
+        handle_closure_request.geometry("270x410")
+        handle_closure_request.title("Closure Request")
         handle_closure_request.iconbitmap('src/splash.ico')
         screen_width = handle_closure_request.winfo_screenwidth()
         handle_closure_request.geometry(f"+{screen_width - 350}+50")
         
-
         handle_closure_request_frame = ttk.Frame(handle_closure_request, style='Card')
-        handle_closure_request_frame.place(x=5, y=5, width=260, height=390)
-        ## Display username from requests
-        username = ttk.Label(handle_closure_request_frame, text=f"Username: {request['Username']}")
+        handle_closure_request_frame.place(x=5, y=5, width=260, height=400)
+
+        username = ttk.Label(handle_closure_request_frame, text=f"Username: {request['Username']}\nRestriction: {request['Restriction']}\nLength: {request['Length'] if request['Length'] not in [None, 'Null'] else '-'}",  anchor='center', justify='center')
         username.pack(padx=5, pady=5)
 
-        confirm_betty_update = ttk.Checkbutton(handle_closure_request_frame, text='Updated Client in Betty', variable=confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
-        confirm_betty_update.place(x=40, y=30)
+        confirm_betty_update = ttk.Checkbutton(handle_closure_request_frame, text='Confirm Closed on Betty', variable=confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
+        confirm_betty_update.place(x=10, y=80)
 
-        send_confirmation_email = ttk.Checkbutton(handle_closure_request_frame, text='Send Confirmation Email', variable=send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
-        send_confirmation_email.place(x=40, y=60)
+        send_confirmation_email = ttk.Checkbutton(handle_closure_request_frame, text='Send Pipedrive Confirmation Email', variable=send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+        send_confirmation_email.place(x=10, y=110)
 
-        archive_email_check = ttk.Checkbutton(handle_closure_request_frame, text='Archive Email & Add to Management Tool', variable=archive_email_bool, onvalue=True, offvalue=False, cursor="hand2")
-        archive_email_check.place(x=40, y=90)
+        if user == 'DF':
+            archive_email_check = ttk.Checkbutton(handle_closure_request_frame, text='Archive Email Request', variable=archive_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+            archive_email_check.place(x=10, y=140)
 
         submit_button = ttk.Button(handle_closure_request_frame, text="Submit", command=handle_submit, cursor="hand2")
-        submit_button.place(x=80, y=130)
+        submit_button.place(x=80, y=190)
 
-        text_area = scrolledtext.ScrolledText(handle_closure_request_frame)
-        text_area['font'] = ('helvetica', '12')
-        text_area.place(x=5, y=200, width=250, height=100)
-
-
-
+        ## Labels
+        closure_request_label = ttk.Label(handle_closure_request_frame, text=f"Close on Betty before anything else!\n\nPlease double check:\n- Request details above are correct\n- Confirmation email was sent to client.\n\nReport to Sam any errors.", anchor='center', justify='center')
+        closure_request_label.place(x=10, y=240)
 
     # Read the data from data.json
     with open('src/data.json', 'r') as f:
         data = json.load(f)
-        requests = [request for request in data.get('closures', []) if request['Username'] not in blacklist]
-
+        requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
 
     # Create a new frame for the requests
     requests_frame = ttk.Frame(tab_5)
@@ -1399,8 +1480,8 @@ def display_closure_requests():
         length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
 
         # Create a label with the request data
-        request_label = ttk.Label(requests_frame, text=f"{request['Username']} | {restriction} | {length}", width=40)
-        request_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+        request_label = ttk.Label(requests_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
+        request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
 
         # Create a tick button
         tick_button = ttk.Button(requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
@@ -1589,6 +1670,10 @@ def report_closure_requests(restriction, username, length):
         print("Error: Invalid restriction")
 
 
+
+####################################################################################
+## REPORT A CREDITED FREE BET
+####################################################################################
 def report_freebet():
     current_month = datetime.now().strftime('%B')
     global user
@@ -1661,20 +1746,11 @@ def report_freebet():
     submit_button = ttk.Button(report_freebet_frame, text="Submit", command=handle_submit, cursor="hand2")
     submit_button.pack(padx=5, pady=5)
 
-### OPTIONS SETTINGS
-def set_recent_bets(*args):
-    global DEFAULT_NUM_RECENT_FILES
-    DEFAULT_NUM_RECENT_FILES = combobox_var.get()
-    refresh_display()
 
-def set_num_run_bets(*args):
-    global DEFAULT_NUM_BETS_TO_RUN
-    new_value = int(num_run_bets_var.get())
-    if new_value is not None:
-        DEFAULT_NUM_BETS_TO_RUN = new_value
-    refresh_display()
 
-### STAFF LOGIN FOR REPORTING AND FACTORING
+####################################################################################
+## STAFF LOGIN TO TRACK UPDATES
+####################################################################################
 def user_login():
     global user
     global full_name
@@ -1692,7 +1768,11 @@ def user_login():
 
     login_label.config(text=f'Logged in as {full_name}')
 
-### SETTINGS WINDOW
+
+
+####################################################################################
+## SETTINGS WINDOW
+####################################################################################
 def open_settings():
     def load_database(event):
         global current_file
@@ -1764,7 +1844,11 @@ def open_settings():
 
     databases_combobox.bind('<<ComboboxSelected>>', load_database)
 
-### PASSWORD GENERATOR FUNCTIONS
+
+
+####################################################################################
+## GENERATE TEMPORARY PASSWORD
+####################################################################################
 def generate_random_string():
     random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
     
@@ -1782,23 +1866,39 @@ def copy_to_clipboard():
     password_result_label.config(text=f"{generated_string}")
     copy_button.config(state=tk.NORMAL)
 
-### MENU BAR * OPTIONS ITEMS
+
+
+####################################################################################
+## MENU BAR 'ABOUT' AND 'HOWTO' 
+####################################################################################
 def about():
     messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.0")
 
 def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
 
+
+
+####################################################################################
+## PERIODIC FUNCTIONS & THREADING 
+####################################################################################
+def refresh_display_periodic():
+    if auto_refresh_state.get():
+        refresh_display()
+
+    root.after(30000, refresh_display_periodic)
+
 def factoring_sheet_periodic():
     global vip_clients, newreg_clients
     threading.Thread(target=run_factoring_sheet).start()
+    threading.Thread(target=display_closure_requests).start()
     threading.Thread(target=get_vip_clients).start()
     threading.Thread(target=get_newreg_clients).start()
     threading.Thread(target=get_reporting_data).start()
     threading.Thread(target=get_oddsmonkey_selections).start()
 
 
-    root.after(100000, factoring_sheet_periodic)
+    root.after(60000, factoring_sheet_periodic)
 
 def run_factoring_sheet():
     root.after(0, factoring_sheet)
@@ -1814,6 +1914,11 @@ def get_client_report_ref():
         client_report_user = client_report_user.upper()
         threading.Thread(target=create_client_report, args=(client_report_user, current_file)).start()
 
+
+
+####################################################################################
+## MAIN FUNCTION CONTAINING ROOT UI, MAIN LOOP & STARTUP FUNCTIONS
+####################################################################################
 if __name__ == "__main__":
 
     ### ROOT WINDOW
@@ -2046,10 +2151,8 @@ if __name__ == "__main__":
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
     get_courses()
     user_login()
-    display_closure_requests()
     display_next_races()
-    #factoring_sheet_periodic()
-
+    factoring_sheet_periodic()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
