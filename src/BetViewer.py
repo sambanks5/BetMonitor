@@ -205,7 +205,6 @@ def get_database(date_str=None):
 
 
 
-
 ####################################################################################
 ## FORMAT AND DISPLAY BETS, DISPLAY 'RISK' BETS
 ####################################################################################
@@ -219,6 +218,9 @@ def start_bet_feed(current_file=None):
 
 def bet_feed(data=None):
     global vip_clients, newreg_clients
+
+    bet_runs_thread = threading.Thread(target=bet_runs, args=(data,))
+    bet_runs_thread.start()
 
     with bet_feed_lock:
         if data is None:
@@ -331,8 +333,6 @@ def bet_feed(data=None):
 
     logo_label.bind("<Button-1>", lambda e: start_bet_feed())
     
-    bet_runs(data)
-
 
 
 ####################################################################################
@@ -351,7 +351,7 @@ def set_num_run_bets(*args):
     refresh_display()
 
 def bet_runs(data):
-    global DEFAULT_NUM_BETS_TO_RUN
+    global DEFAULT_NUM_BETS_TO_RUN, DEFAULT_NUM_RECENT_FILES
     num_bets = DEFAULT_NUM_BETS_TO_RUN
 
     selection_bets = data
@@ -798,7 +798,7 @@ def create_daily_report(current_file=None):
     wageralert_counter = Counter(wageralert_clients)
     top_wageralert_clients = wageralert_counter.most_common(3)
     sms_counter = Counter(sms_clients)
-    top_sms_clients = sms_counter.most_common(3)
+    top_sms_clients = sms_counter.most_common(5)
 
     separator = "\n---------------------------------------------------------------------------------\n"
 
@@ -1105,7 +1105,6 @@ def find_traders():
             for selection in details['selections']:
                 selection_name = selection[0]
                 odds = selection[1]
-                #print(selection_name, odds)
 
                 if isinstance(odds, str):
                     if odds == 'SP':
@@ -1122,10 +1121,8 @@ def find_traders():
                 selection_to_users[selection_tuple].add((customer_reference, customer_risk_category))
                 selection_to_odds[selection_tuple].append((customer_reference, odds))
 
-                # Check if the selection is in today's Oddsmonkey selections
                 actual_selection = selection_name.split(' - ')[-1] if ' - ' in selection_name else selection_name.split(', ')[-1]
 
-                # Get all selection names from todays_oddsmonkey_selections
                 selection_names = [selection[0] for selection in todays_oddsmonkey_selections.values()]
 
                 if actual_selection in selection_names:
@@ -1146,7 +1143,6 @@ def find_traders():
         if len(users_with_risk_category) / len(users) > 0.5:
             users_without_risk_category.update(users_without_risk_category_for_selection)
 
-    ## Remove exempted users
     try:
         with open('vip.json', 'r') as file:
             exemptions = json.load(file)
@@ -1155,14 +1151,197 @@ def find_traders():
     
     users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
 
-    print(results)
-
     return users_without_risk_category, results
+
+def find_rg_issues():
+    data = get_database()
+    user_scores = {}
+    virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
+
+    for bet in data:
+        wager_type = bet.get('type', '').lower()
+        if wager_type == 'bet':
+            details = bet.get('details', {})
+            bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
+            customer_reference = bet.get('customer_ref', '')
+            stake = float(details.get('unit_stake', '£0').replace('£', ''))
+
+            if customer_reference not in user_scores:
+                user_scores[customer_reference] = {
+                    'bets': [],
+                    'odds': [],  # New field for storing odds
+                    'total_bets': 0,
+                    'score': 0,
+                    'average_stake': 0,
+                    'max_stake': stake,
+                    'min_stake': stake,
+                    'total_stake': 0,
+                    'virtual_bets': 0,
+                    'early_bets': 0,  # New field for early hours bets
+                    'scores': {
+                        'num_bets': 0,
+                        'long_period': 0,
+                        'stake_increase': 0,
+                        'high_total_stake': 0,
+                        'virtual_events': 0,
+                        'chasing_losses': 0,  # New field for chasing losses score
+                        'early_hours': 0  # New field for early hours score
+                    }
+                }
+
+            # Add the bet to the user's list of bets
+            user_scores[customer_reference]['bets'].append((bet_time.strftime("%H:%M:%S"), stake))
+
+            # Add the odds to the user's list of odds
+            selections = details.get('selections', [])
+            for selection in selections:
+                odds = selection[1]
+                if isinstance(odds, str):
+                    if odds.lower() == 'evs':
+                        odds = 2.0
+                    elif odds.lower() == 'sp':
+                        continue
+                    else:
+                        try:
+                            odds = float(odds)
+                        except ValueError:
+                            continue
+                user_scores[customer_reference]['odds'].append(odds)
+                if any(event in selection[0] for event in virtual_events):
+                    user_scores[customer_reference]['virtual_bets'] += 1
+                    break
+
+            # Increase the total number of bets
+            user_scores[customer_reference]['total_bets'] += 1
+
+            # Update the total stake
+            user_scores[customer_reference]['total_stake'] += stake
+
+            # Check if the bet is on a virtual event
+            selections = details.get('selections', [])
+            for selection in selections:
+                if any(event in selection[0] for event in virtual_events):
+                    user_scores[customer_reference]['virtual_bets'] += 1
+                    break
+
+            # Skip this iteration if the user has placed fewer than 6 bets
+            if len(user_scores[customer_reference]['bets']) < 6:
+                continue
+
+            # Update the max and min stakes
+            user_scores[customer_reference]['max_stake'] = max(user_scores[customer_reference]['max_stake'], stake)
+            user_scores[customer_reference]['min_stake'] = min(user_scores[customer_reference]['min_stake'], stake)
+
+            # Calculate the new average stake
+            total_stake = sum(stake for _, stake in user_scores[customer_reference]['bets'])
+            user_scores[customer_reference]['average_stake'] = total_stake / len(user_scores[customer_reference]['bets'])
+
+            # Add a point if the user has placed more than 10 bets
+            if len(user_scores[customer_reference]['bets']) > 10 and user_scores[customer_reference]['scores']['num_bets'] == 0:
+                user_scores[customer_reference]['scores']['num_bets'] = 1
+
+            # Add a point if the user has been gambling for a long period of time
+            first_bet_time = datetime.strptime(user_scores[customer_reference]['bets'][0][0], "%H:%M:%S")
+            if (bet_time - first_bet_time).total_seconds() > 2 * 60 * 60 and user_scores[customer_reference]['scores']['long_period'] == 0:  # 2 hours
+                user_scores[customer_reference]['scores']['long_period'] = 1
+
+            # Add a point if the user has increased their stake over the average
+            half = len(user_scores[customer_reference]['bets']) // 2
+            first_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][:half]]
+            second_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][half:]]
+            if len(first_half_stakes) > 0 and len(second_half_stakes) > 0:
+                first_half_avg = sum(first_half_stakes) / len(first_half_stakes)
+                second_half_avg = sum(second_half_stakes) / len(second_half_stakes)
+                if second_half_avg > first_half_avg and user_scores[customer_reference]['scores']['stake_increase'] == 0:
+                    user_scores[customer_reference]['scores']['stake_increase'] = 1
+
+            # Add a point if the user's total stake is over £1000
+            if user_scores[customer_reference]['total_stake'] > 1000 and user_scores[customer_reference]['scores']['high_total_stake'] == 0:
+                user_scores[customer_reference]['scores']['high_total_stake'] = 1
+
+            # Add a point if the user has placed a bet on a virtual event
+            if user_scores[customer_reference]['virtual_bets'] > 0 and user_scores[customer_reference]['scores']['virtual_events'] == 0:
+                user_scores[customer_reference]['scores']['virtual_events'] = 1
+
+            # Check if the bet is placed during early hours
+            if 0 <= bet_time.hour < 7:
+                user_scores[customer_reference]['early_bets'] += 1
+
+    # After processing all bets, calculate the early hours score
+    for user, scores in user_scores.items():
+        if scores['early_bets'] > 3:
+            scores['scores']['early_hours'] = 1
+
+    # After processing all bets, calculate the chasing losses score
+    for user, scores in user_scores.items():
+        num_bets = len(scores['bets'])
+        if num_bets >= 5:  # Only calculate if the user has placed at least 5 bets
+            split_index = int(num_bets * 0.7)  # Calculate the index to split at 70%
+            early_odds = scores['odds'][:split_index]
+            late_odds = scores['odds'][split_index:]
+            if early_odds and late_odds:  # Check that both lists are not empty
+                early_avg = sum(early_odds) / len(early_odds)
+                late_avg = sum(late_odds) / len(late_odds)
+                if late_avg - early_avg > 4:  # Set the threshold as needed
+                    scores['scores']['chasing_losses'] = 1
+
+
+    # Update the total score
+    for user, scores in user_scores.items():
+        scores['score'] = sum(scores['scores'].values())
+
+
+    # Filter out the users who have a score of 0
+    user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
+    # print(user_scores)
+    return user_scores
+
+def update_rg_report():
+    user_scores = find_rg_issues()
+
+    # Sort the user_scores dictionary by total score
+    user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
+
+    # Create a dictionary to map the keys to more descriptive sentences
+    key_descriptions = {
+        'num_bets': 'High Number of Bets',
+        'stake_increase': 'Stakes Increasing',
+        'virtual_events': 'Bets on Virtual events',
+        'chasing_losses': 'Odds Increasing, Possibly Chasing Losses',
+        'high_total_stake': 'High Total Stake',
+        'early_hours': 'Active in the Early Hours'
+    }
+
+    report_output = ""
+    report_output += f"          RESPONSIBLE GAMBLING REPORT\n\n"
+
+    for user, scores in user_scores.items():
+        report_output += f"-----------------------------------------------------------------\n"
+        report_output += f"\n{user} - Risk Score: {scores['score']}\n"
+        report_output += f"Bets: {scores['total_bets']}  |  "
+        report_output += f"Total Stake: £{scores['total_stake']:.2f}\n"
+        report_output += f"Avg Stake: £{scores['average_stake']:.2f}  |  "
+        report_output += f"Max: £{scores['max_stake']:.2f}  |  "
+        report_output += f"Min: £{scores['min_stake']:.2f}\n"
+        report_output += f"Virtual Bets: {scores['virtual_bets']}  |  "
+        report_output += f"Early Hours Bets: {scores['early_bets']}\n"
+        
+        # Print the keys from the 'scores' dictionary that have a value of 1
+        report_output += f"\nThis score is due to:\n"
+        for key, value in scores['scores'].items():
+            if value == 1:
+                report_output += f"- {key_descriptions.get(key, key)}\n"
+        report_output += "\n"
+
+    traders_report_ticket.config(state='normal')
+    traders_report_ticket.delete('1.0', tk.END)
+    traders_report_ticket.insert(tk.END, report_output)
+    traders_report_ticket.config(state='disabled')
 
 def update_traders_report():
     users_without_risk_category, oddsmonkey_traders = find_traders()
     username_counts = Counter(trader['username'] for trader in oddsmonkey_traders)
-    top_users = username_counts.most_common(4)
+    top_users = username_counts.most_common(6)
 
 
     users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
@@ -1176,7 +1355,7 @@ def update_traders_report():
 
     traders_report_ticket.insert(tk.END, "\n\nTop 4 users taking higher odds than Oddsmonkey:\n")
     for user, count in top_users:
-        traders_report_ticket.insert(tk.END, f"Username: {user}, Count: {count}\n")
+        traders_report_ticket.insert(tk.END, f"{user}, Count: {count}\n")
 
     traders_report_ticket.insert(tk.END, "\n\nList of users taking higher odds than Oddsmonkey:\n")
     for trader in oddsmonkey_traders:
@@ -1327,8 +1506,6 @@ def open_factoring_wizard():
 ####################################################################################
 def display_closure_requests():
     global closures_current_page, requests_per_page, blacklist
-
-
     def handle_request(request):
         # Define the mapping for the 'restriction' field
         restriction_mapping = {
@@ -1410,9 +1587,10 @@ def display_closure_requests():
 
             else:
                 messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
-
-            handle_closure_request.destroy()
+            
             display_closure_requests()
+            blacklist.add(request['Username'])
+            handle_closure_request.destroy()
 
 
         handle_closure_request = tk.Toplevel(root)
@@ -1865,7 +2043,7 @@ def about():
     messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.0")
 
 def howTo():
-    messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 30s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
+    messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 20s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
 
 
 
@@ -1880,7 +2058,7 @@ def refresh_display_periodic():
 
 def factoring_sheet_periodic():
     global vip_clients, newreg_clients
-    threading.Thread(target=run_factoring_sheet).start()
+    threading.Thread(target=factoring_sheet).start()
     threading.Thread(target=display_closure_requests).start()
     threading.Thread(target=get_vip_clients).start()
     threading.Thread(target=get_newreg_clients).start()
@@ -1889,9 +2067,6 @@ def factoring_sheet_periodic():
 
 
     root.after(60000, factoring_sheet_periodic)
-
-def run_factoring_sheet():
-    root.after(0, factoring_sheet)
 
 def run_create_daily_report():
     global current_file
@@ -2089,7 +2264,7 @@ if __name__ == "__main__":
     # BUTTONS AND TOOLTIP LABEL FOR FACTORING TAB
     add_restriction_button = ttk.Button(tab_3, text="Add", command=open_factoring_wizard, cursor="hand2")
     add_restriction_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
-    refresh_factoring_button = ttk.Button(tab_3, text="Refresh", command=run_factoring_sheet, cursor="hand2")
+    refresh_factoring_button = ttk.Button(tab_3, text="Refresh", command=factoring_sheet, cursor="hand2")
     refresh_factoring_button.grid(row=1, column=0, pady=(5, 10), sticky="w")
     # factoring_label = ttk.Label(tab_3, text="Click 'Add' to report a new customer restriction.")
     # factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
@@ -2108,6 +2283,9 @@ if __name__ == "__main__":
 
     find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report, cursor="hand2")
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
+    
+    find_rg_risk_button = ttk.Button(tab_4, text="Scan for RG Issues", command=update_rg_report, cursor="hand2")
+    find_rg_risk_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
 
     ### CLOSURE REQUESTS TAB
     tab_5 = ttk.Frame(notebook)
@@ -2150,8 +2328,8 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     display_next_races()
     factoring_sheet_periodic()
 

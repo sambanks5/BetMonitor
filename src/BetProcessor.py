@@ -18,6 +18,7 @@ import threading
 import gspread
 import requests
 import base64
+import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, Label
 from PIL import ImageTk, Image
@@ -618,14 +619,12 @@ def extract_oddsmonkey_selections(td_tags):
         # Add the selection to the selections dictionary
         selections[event] = selection, lay_odds
 
-    print(selections)
-
     return selections
 
 
 
 ####################################################################################
-## GET ACCOUNT CLOSURE REQUESTS FROM GMAIL API
+## GET ACCOUNT CLOSURE REQUESTS & DEPOSITS FROM GMAIL API
 ####################################################################################
 def get_closures(app):
     creds = None
@@ -754,6 +753,147 @@ def get_closures(app):
             closures.append(closure_data)
 
     return closures
+
+def get_deposits(app):
+    creds = None
+    messages_data = []
+    label_ids = {}
+
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json')
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    # Call the Gmail API
+    service = build('gmail', 'v1', credentials=creds)
+
+    results = service.users().labels().list(userId='me').execute()
+    labels = results.get('labels', [])
+
+    # Find the IDs of the labels
+    for label_name in ['DEPOSIT', 'DEPOSIT/PAYPAL']:
+        for label in labels:
+            if label['name'] == label_name:
+                print(label['name'])
+                label_ids[label_name] = label['id']
+                break
+
+    # Load the existing messages from the JSON file
+    if os.path.exists('src/deposits.json'):
+        with open('src/deposits.json', 'r') as f:
+            existing_messages = json.load(f)
+    else:
+        existing_messages = []
+
+    existing_ids = {message['ID'] for message in existing_messages}
+
+    start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for label_name, label_id in label_ids.items():
+        if label_id is None:
+            print(f"Label '{label_name}' not found")
+            continue
+
+        page_token = None
+        try:
+            while True:
+                print(f'Label ID: {label_id}, Page token: {page_token}')
+                results = service.users().messages().list(userId='me', labelIds=[label_id], pageToken=page_token).execute()
+                messages = results.get('messages', [])
+                page_token = results.get('nextPageToken')
+                print(f'Next page token: {page_token}')
+
+                if messages:
+                    print(messages[-1]['id'])
+                    last_message = service.users().messages().get(userId='me', id=messages[-1]['id']).execute()
+                    last_message_time = datetime.fromtimestamp(int(last_message['internalDate']) // 1000)
+                    if last_message_time < start_of_day:
+                        break
+                    if email_time < start_of_day:
+                        continue
+
+                
+                print(f'Number of messages: {len(messages)}')
+
+                for message in messages:
+                    print("test2")
+                    print(message['id'])
+                    # Get the message details
+                    msg = service.users().messages().get(userId='me', id=message['id']).execute()
+                    payload = msg['payload']
+                    # Get the message body
+                    parts = payload.get('parts')
+                    if parts is not None:
+                        part = parts[0]
+                        data = part['body']['data']
+                    else:
+                        # If there are no parts, get the body from the 'body' field
+                        data = payload['body']['data']
+
+                    data = data.replace("-","+").replace("_","/")
+                    decoded_data = base64.b64decode(data)
+
+                    soup = BeautifulSoup(decoded_data , "lxml")
+
+                    # Get the email time from the Gmail API
+                    email_time = datetime.fromtimestamp(int(msg['internalDate']) // 1000)
+                    print(email_time)
+                    if email_time < thirty_minutes_ago:
+                        continue
+
+                    email_time_str = email_time.strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Parse the email based on its label and add the type, time, and ID
+                    if label_name == 'DEPOSIT':
+                        parsed_data = parse_card_email(soup.prettify())
+                        parsed_data['Type'] = 'Card'
+                    elif label_name == 'DEPOSIT/PAYPAL':
+                        parsed_data = parse_paypal_email(soup.prettify())
+                        parsed_data['Type'] = 'PayPal'
+
+                    email_time_str = email_time.strftime('%Y-%m-%d %H:%M:%S')
+                    parsed_data['Time'] = email_time_str
+                    parsed_data['ID'] = msg['id']
+
+                    # Only add the message to the list if its ID is not already in the JSON file
+                    if msg['id'] not in existing_ids:
+                        messages_data.append(parsed_data)
+
+                if not page_token:
+                    break
+        except Exception as e:
+            print(f"An error occurred while processing deposits: {e}")
+
+    # Write the data to a JSON file
+    with open('src/deposits.json', 'w') as f:
+        json.dump(messages_data, f, indent=4)
+
+    return messages_data
+
+def parse_card_email(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    text = soup.get_text(separator=' ')
+    # Extract the customer ID, amount and date & time
+    customer_id = re.search(r"Customer ID - {'merchantCustomerId': '(.*?)'", text).group(1)
+    amount = re.search(r"Amount - (\d+\.\d+)", text).group(1)
+    date_time = re.search(r"Date & Time - (.*?)\+0000", text).group(1)
+    return {'Username': customer_id, 'Amount': amount, 'Time': date_time}
+
+def parse_paypal_email(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    text = soup.get_text(separator=' ')
+    # Extract the username and amount
+    username = re.search(r"Username: (.*?)\n", text).group(1)
+    amount = re.search(r"Amount: (\d+\.\d+)\n", text).group(1)
+    return {'Username': username, 'Amount': amount}
 
 
 
@@ -905,13 +1045,14 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    run_get_data(app)
-    run_update_racecards()
-    run_update_todays_oddsmonkey_selections()
+    get_deposits(app)
+    #run_get_data(app)
+    #run_update_racecards()
+    #run_update_todays_oddsmonkey_selections()
 
-    schedule.every(2).minutes.do(run_get_data, app)
-    schedule.every(6).hours.do(run_update_racecards)
-    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    #schedule.every(2).minutes.do(run_get_data, app)
+    #schedule.every(6).hours.do(run_update_racecards)
+    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     while not app.stop_main_loop:
         # Run pending tasks
