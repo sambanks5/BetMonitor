@@ -29,6 +29,7 @@ from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from pytz import timezone
 from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta
@@ -113,10 +114,14 @@ def get_reporting_data():
         daily_profit = data.get('daily_profit', 0)
         daily_profit_percentage = data.get('daily_profit_percentage', 0)
         last_updated_time = data.get('last_updated_time', '')
+        total_deposits = data.get('deposits_summary', {}).get('total_deposits', 0)
+        total_sum = data.get('deposits_summary', {}).get('total_sum', 0)
 
-    #reporting_data = f"Daily Turnover: {daily_turnover} | Daily Profit: {daily_profit} | Profit Percentage: {daily_profit_percentage} | Last Updated: {last_updated_time}"
+    avg_deposit = total_sum / total_deposits if total_deposits else 0
+    total_sum = f"£{total_sum:,.2f}"
+    avg_deposit = f"£{avg_deposit:,.2f}"
 
-    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
+    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit
 
 def get_racecards():
     with open('src/data.json') as f:
@@ -132,8 +137,6 @@ def get_oddsmonkey_selections():
         data = json.load(f)
         oddsmonkey_selections = data.get('oddsmonkey_selections', [])
 
-    print("Oddsmonkey Selections:", oddsmonkey_selections)
-    print(oddsmonkey_selections.values())
     return oddsmonkey_selections
 
 
@@ -227,16 +230,13 @@ def bet_feed(data=None):
             data = get_database()
 
     risk_bets = ""
-    separator = '\n----------------------------------------------------------------------------------\n'
-
-    separator2 = '==================================================\n'
+    separator = '\n-------------------------------------------------------------------------------------\n'
 
     if feed_colours.get():
         feed_text.tag_configure("risk", foreground="#8f0000")
         feed_text.tag_configure("newreg", foreground="purple")
         feed_text.tag_configure("vip", foreground="#009685")
         feed_text.tag_configure("sms", foreground="orange")
-        feed_text.tag_configure("reporting", foreground="#510094")
         feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
     else:
         feed_text.tag_configure("risk", foreground="black")
@@ -248,8 +248,17 @@ def bet_feed(data=None):
     feed_text.delete('1.0', tk.END)
 
     if show_reporting_data_state.get():
-        turnover, profit, profit_percentage, last_updated_time = get_reporting_data()
-        feed_text.insert('1.0', f"Reporting data as of {last_updated_time} for Horses & Greyhounds\nTurnover: {turnover} | Profit: {profit} | Percentage: {profit_percentage}\n{separator2}\n", "reporting")
+        turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit = get_reporting_data()
+        activity_summary_text.delete('1.0', tk.END)
+
+        total_bets = sum(1 for bet in data if bet.get('type', '').lower() == 'bet')
+        total_knockbacks = sum(1 for bet in data if bet.get('type', '').lower() == 'wager knockback')
+        percentage = total_knockbacks / total_bets * 100 if total_bets else 0
+
+        activity_summary_text.tag_configure("activity", foreground="#510094", font=("Helvetica", 9, "bold"), justify="center")
+        activity_summary_text.config(state="normal")
+        activity_summary_text.insert('1.0', f"Total Bets: {total_bets} | Total Knockbacks: {total_knockbacks} | Percentage: {percentage:.2f}%\nTurnover: {turnover} | Profit: {profit} | Percentage: {profit_percentage}\nDeposits: {total_deposits} | Deposits Total: {total_sum} | Average: {avg_deposit}", "activity")
+        activity_summary_text.config(state="disabled")
 
     for bet in data:
         wager_type = bet.get('type', '').lower()
@@ -406,12 +415,23 @@ def bet_runs(data):
 def display_next_races():
     horse_racecards, greyhound_racecards = get_racecards()
 
-    now = datetime.now().time()  
+    now = datetime.now()  
 
-    horse_racecards = sorted([race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-    greyhound_racecards = sorted([race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now], key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    # Separate horse races into upcoming and just started
+    upcoming_horse_races = [race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now.time()]
+    just_started_horse_races = [race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() <= now.time() and datetime.strptime(race['time'], '%H:%M').time() > (now - timedelta(minutes=5)).time()]
 
-    next_horse_races = horse_racecards[:3]
+    # Sort the races
+    upcoming_horse_races = sorted(upcoming_horse_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    just_started_horse_races = sorted(just_started_horse_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time(), reverse=True)
+
+    # Sort the greyhound races and get the next 3
+    upcoming_greyhound_races = [race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now.time()]
+    greyhound_racecards = sorted(upcoming_greyhound_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+
+    # Get the next 3 races, prioritizing just started races
+    next_horse_races = just_started_horse_races + upcoming_horse_races[:max(0, 4-len(just_started_horse_races))]
+
     next_greyhound_races = greyhound_racecards[:3]
 
     for widget in next_races_frame.winfo_children():
@@ -421,16 +441,19 @@ def display_next_races():
     horse_frame.pack(side='left', padx=5)
 
     for i, race in enumerate(next_horse_races):
-        Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
-
+        # If the race has just started, display it in purple
+        if race in just_started_horse_races:
+            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 9, "bold"), foreground='purple').pack(side='left', padx=11)
+        else:
+            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
+    
     greyhound_frame = Frame(next_races_frame)
     greyhound_frame.pack(side='right', padx=5)
 
     for i, race in enumerate(next_greyhound_races):
-        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 10, "bold")).pack(side='left', padx=11)
+        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
 
     root.after(60000, display_next_races)
-
 
 
 ####################################################################################
@@ -1164,30 +1187,38 @@ def find_rg_issues():
             details = bet.get('details', {})
             bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
             customer_reference = bet.get('customer_ref', '')
-            stake = float(details.get('unit_stake', '£0').replace('£', ''))
+            stake = float(details.get('unit_stake', '£0').replace('£', '').replace(',', ''))
 
             if customer_reference not in user_scores:
                 user_scores[customer_reference] = {
                     'bets': [],
-                    'odds': [],  # New field for storing odds
+                    'odds': [],
                     'total_bets': 0,
                     'score': 0,
                     'average_stake': 0,
-                    'max_stake': stake,
-                    'min_stake': stake,
+                    'max_stake': 0,
+                    'min_stake': float('inf'),
+                    'deposits': [],  # New field for storing deposits
+                    'min_deposit': None,  # Initialize to None
+                    'max_deposit': 0,
+                    'total_deposit': 0,
                     'total_stake': 0,
                     'virtual_bets': 0,
-                    'early_bets': 0,  # New field for early hours bets
+                    'early_bets': 0,
                     'scores': {
                         'num_bets': 0,
                         'long_period': 0,
                         'stake_increase': 0,
                         'high_total_stake': 0,
                         'virtual_events': 0,
-                        'chasing_losses': 0,  # New field for chasing losses score
-                        'early_hours': 0  # New field for early hours score
-                    }
+                        'chasing_losses': 0,
+                        'early_hours': 0,
+                        'high_deposit_total': 0,
+                        'frequent_deposits': 0,
+                        'increasing_deposits': 0,
+                        'changed_payment_type': 0,
                 }
+            }
 
             # Add the bet to the user's list of bets
             user_scores[customer_reference]['bets'].append((bet_time.strftime("%H:%M:%S"), stake))
@@ -1216,13 +1247,6 @@ def find_rg_issues():
 
             # Update the total stake
             user_scores[customer_reference]['total_stake'] += stake
-
-            # Check if the bet is on a virtual event
-            selections = details.get('selections', [])
-            for selection in selections:
-                if any(event in selection[0] for event in virtual_events):
-                    user_scores[customer_reference]['virtual_bets'] += 1
-                    break
 
             # Skip this iteration if the user has placed fewer than 6 bets
             if len(user_scores[customer_reference]['bets']) < 6:
@@ -1267,6 +1291,112 @@ def find_rg_issues():
             if 0 <= bet_time.hour < 7:
                 user_scores[customer_reference]['early_bets'] += 1
 
+
+    now_local = datetime.now(timezone('Europe/London'))
+    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+
+    # Load the existing messages from the JSON file for today's date
+    if os.path.exists(today_filename):
+        with open(today_filename, 'r') as f:
+            deposits = json.load(f)
+        
+
+    # Create a dictionary to store deposit information for each user
+    deposit_info = defaultdict(lambda: {'total': 0, 'times': [], 'amounts': [], 'types': set()})
+
+    # Iterate over the deposits
+    for deposit in deposits:
+        username = deposit['Username'].upper()
+        amount = float(deposit['Amount'])
+        time = datetime.strptime(deposit['Time'], "%Y-%m-%d %H:%M:%S")
+        type_ = deposit['Type']
+
+        # Check if the user exists in the user_scores dictionary
+        if username not in user_scores:
+            user_scores[username] = {
+                'bets': [],
+                'odds': [],
+                'total_bets': 0,
+                'score': 0,
+                'average_stake': 0,
+                'max_stake': 0,
+                'min_stake': float('inf'),
+                'deposits': [],  # New field for storing deposits
+                'min_deposit': None,  # Initialize to None
+                'max_deposit': 0,
+                'total_deposit': 0,
+                'total_stake': 0,
+                'virtual_bets': 0,
+                'early_bets': 0,
+                'scores': {
+                    'num_bets': 0,
+                    'long_period': 0,
+                    'stake_increase': 0,
+                    'high_total_stake': 0,
+                    'virtual_events': 0,
+                    'chasing_losses': 0,
+                    'early_hours': 0,
+                    'high_deposit_total': 0,
+                    'frequent_deposits': 0,
+                    'increasing_deposits': 0,
+                    'changed_payment_type': 0,
+                }
+            }
+
+        # Update the user's deposit information
+        deposit_info[username]['total'] += amount
+        deposit_info[username]['times'].append(time)
+        deposit_info[username]['amounts'].append(amount)
+        deposit_info[username]['types'].add(type_)
+
+        user_scores[username]['deposits'].append(amount)
+
+        # Check if the user's total deposit amount is over £500
+        if deposit_info[username]['total'] > 500:
+            if username not in user_scores:
+                user_scores[username] = {
+                    'scores': {
+                        'high_deposit_total': 0,
+                        # Initialize other fields as needed
+                    }
+                }
+            user_scores[username]['scores']['high_deposit_total'] = 1
+
+        # Check if the user has deposited more than 4 times in an hour
+        deposit_info[username]['times'].sort()
+        for i in range(4, len(deposit_info[username]['times'])):
+            if (deposit_info[username]['times'][i] - deposit_info[username]['times'][i-4]).total_seconds() <= 3600:
+                if username not in user_scores:
+                    user_scores[username] = {'scores': {'frequent_deposits': 0}}
+                user_scores[username]['scores']['frequent_deposits'] = 1
+                break
+
+        # Check if the user's deposits have increased more than twice
+        increases = 0
+        for i in range(2, len(deposit_info[username]['amounts'])):
+            if deposit_info[username]['amounts'][i] > deposit_info[username]['amounts'][i-1] > deposit_info[username]['amounts'][i-2]:
+                increases += 1
+        if increases >= 2:
+            if username not in user_scores:
+                user_scores[username] = {'scores': {'increasing_deposits': 0}}
+            user_scores[username]['scores']['increasing_deposits'] = 1
+
+        # Check if the user has changed payment type
+        if len(deposit_info[username]['types']) > 1:
+            if username not in user_scores:
+                user_scores[username] = {'scores': {'changed_payment_type': 0}}
+            user_scores[username]['scores']['changed_payment_type'] = 1
+
+    for username, info in user_scores.items():
+        if info['deposits']:  # Check if the list is not empty
+            info['min_deposit'] = min(info['deposits'])
+            info['max_deposit'] = max(info['deposits'])
+        else:
+            info['min_deposit'] = 0
+            info['max_deposit'] = 0
+        info['total_deposit'] = deposit_info[username]['total']
+
+
     # After processing all bets, calculate the early hours score
     for user, scores in user_scores.items():
         if scores['early_bets'] > 3:
@@ -1293,7 +1423,6 @@ def find_rg_issues():
 
     # Filter out the users who have a score of 0
     user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
-    # print(user_scores)
     return user_scores
 
 def update_rg_report():
@@ -1309,29 +1438,35 @@ def update_rg_report():
         'virtual_events': 'Bets on Virtual events',
         'chasing_losses': 'Odds Increasing, Possibly Chasing Losses',
         'high_total_stake': 'High Total Stake',
-        'early_hours': 'Active in the Early Hours'
+        'early_hours': 'Active in the Early Hours',
+        'high_deposit_total': 'Total Deposits Over £500',
+        'frequent_deposits': 'More than 4 Deposits in an Hour',
+        'increasing_deposits': 'Deposits Increasing',
+        'changed_payment_type': 'Changed Payment Type'
     }
 
     report_output = ""
-    report_output += f"          RESPONSIBLE GAMBLING REPORT\n\n"
+    report_output += f"          RESPONSIBLE GAMBLING SCREENER\n\n"
 
     for user, scores in user_scores.items():
-        report_output += f"-----------------------------------------------------------------\n"
-        report_output += f"\n{user} - Risk Score: {scores['score']}\n"
-        report_output += f"Bets: {scores['total_bets']}  |  "
-        report_output += f"Total Stake: £{scores['total_stake']:.2f}\n"
-        report_output += f"Avg Stake: £{scores['average_stake']:.2f}  |  "
-        report_output += f"Max: £{scores['max_stake']:.2f}  |  "
-        report_output += f"Min: £{scores['min_stake']:.2f}\n"
-        report_output += f"Virtual Bets: {scores['virtual_bets']}  |  "
-        report_output += f"Early Hours Bets: {scores['early_bets']}\n"
-        
-        # Print the keys from the 'scores' dictionary that have a value of 1
-        report_output += f"\nThis score is due to:\n"
-        for key, value in scores['scores'].items():
-            if value == 1:
-                report_output += f"- {key_descriptions.get(key, key)}\n"
-        report_output += "\n"
+        if scores['score'] > 1:
+            report_output += f"-----------------------------------------------------------------\n"
+            report_output += f"\n{user} - Risk Score: {scores['score']}\n"
+            report_output += f"This score is due to:\n"
+            for key, value in scores['scores'].items():
+                if value == 1:
+                    report_output += f"- {key_descriptions.get(key, key)}\n"
+            report_output += f"\nBets: {scores['total_bets']}  |  "
+            report_output += f"Total Stake: £{scores['total_stake']:.2f}\n"
+            report_output += f"Avg Stake: £{scores['average_stake']:.2f}  |  "
+            report_output += f"Max: £{scores['max_stake']:.2f}  |  "
+            report_output += f"Min: £{scores['min_stake']:.2f}\n"
+            report_output += f"Virtual Bets: {scores['virtual_bets']}  |  "
+            report_output += f"Early Hours Bets: {scores['early_bets']}\n"
+            report_output += f"Deposits: £{scores['total_deposit']:.2f}  |  "
+            report_output += f"Max: £{scores['max_deposit']:.2f}  |  "
+            report_output += f"Min: £{scores['min_deposit']:.2f}\n"
+            report_output += "\n"
 
     traders_report_ticket.config(state='normal')
     traders_report_ticket.delete('1.0', tk.END)
@@ -1348,18 +1483,19 @@ def update_traders_report():
 
     traders_report_ticket.config(state='normal')
     traders_report_ticket.delete('1.0', tk.END)
-    traders_report_ticket.insert(tk.END, "\tBETA - Most will be wrong\n\n")
+    traders_report_ticket.insert(tk.END, "                      TRADERS SCREENER\n\n")
+    traders_report_ticket.insert(tk.END, "-----------------------------------------------------------------\n") 
 
-    traders_report_ticket.insert(tk.END, "No Risk Clients wagering on selections containing multiple risk users:\n\n")
+    traders_report_ticket.insert(tk.END, "Clients backing selections shown on OddsMonkey above the lay price:\n")
+    for user, count in top_users:
+        traders_report_ticket.insert(tk.END, f"\t{user}, Count: {count}\n")
+
+    traders_report_ticket.insert(tk.END, "\nClients wagering on selections containing multiple risk users:\n\n")
     traders_report_ticket.insert(tk.END, users_without_risk_category_str)
 
-    traders_report_ticket.insert(tk.END, "\n\nTop 4 users taking higher odds than Oddsmonkey:\n")
-    for user, count in top_users:
-        traders_report_ticket.insert(tk.END, f"{user}, Count: {count}\n")
-
-    traders_report_ticket.insert(tk.END, "\n\nList of users taking higher odds than Oddsmonkey:\n")
-    for trader in oddsmonkey_traders:
-        traders_report_ticket.insert(tk.END, f"{trader['username']}, Selection: {trader['selection_name']}\nOdds Taken: {trader['user_odds']}, Lay Odds: {trader['oddsmonkey_odds']}\n\n")
+    #traders_report_ticket.insert(tk.END, "\n\nList of users taking higher odds than Oddsmonkey:\n")
+    #for trader in oddsmonkey_traders:
+    #    traders_report_ticket.insert(tk.END, f"{trader['username']}, Selection: {trader['selection_name']}\nOdds Taken: {trader['user_odds']}, Lay Odds: {trader['oddsmonkey_odds']}\n\n")
 
     traders_report_ticket.config(state='disabled')
 
@@ -1506,6 +1642,13 @@ def open_factoring_wizard():
 ####################################################################################
 def display_closure_requests():
     global closures_current_page, requests_per_page, blacklist
+
+
+    # Clear the old requests from the UI
+    for widget in requests_frame.winfo_children():
+        widget.destroy()
+
+
     def handle_request(request):
         # Define the mapping for the 'restriction' field
         restriction_mapping = {
@@ -1531,13 +1674,11 @@ def display_closure_requests():
             'Three Years': relativedelta(years=3),
             'Four Years': relativedelta(years=4),
             'Five Years': relativedelta(years=5),
-            # Add more mappings if necessary
         }
         length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
 
         # Calculate the reopen date
         reopen_date = current_date + length_in_time
-
 
         # Format the string to be copied to the clipboard
         copy_string = f"{request['Restriction']}"
@@ -1585,12 +1726,18 @@ def display_closure_requests():
                 with open('src/data.json', 'w') as f:
                     json.dump(data, f, indent=4)
 
+                # Add the user to the blacklist
+                blacklist.add(request['Username'])
+
+                # Destroy the request window
+                handle_closure_request.destroy()
+
+                # Redisplay the closure requests
+                if request['completed']:
+                    display_closure_requests()
+
             else:
                 messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
-            
-            display_closure_requests()
-            blacklist.add(request['Username'])
-            handle_closure_request.destroy()
 
 
         handle_closure_request = tk.Toplevel(root)
@@ -1680,6 +1827,7 @@ def closures_forward():
     global closures_current_page, requests_per_page
     with open('src/data.json', 'r') as f:
         data = json.load(f)
+
     total_requests = len([request for request in data.get('closures', []) if request['Username'] not in blacklist])
     if (closures_current_page + 1) * requests_per_page < total_requests:
         closures_current_page += 1
@@ -2040,7 +2188,7 @@ def copy_to_clipboard():
 ## MENU BAR 'ABOUT' AND 'HOWTO' 
 ####################################################################################
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.0")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.2")
 
 def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 20s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
@@ -2088,7 +2236,7 @@ if __name__ == "__main__":
 
     ### ROOT WINDOW
     root = tk.Tk()
-    root.title("Bet Viewer v8.0")
+    root.title("Bet Viewer v8.2")
     root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
@@ -2163,8 +2311,7 @@ if __name__ == "__main__":
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
     feed_frame.place(relx=0.44, rely=0.01, relwidth=0.55, relheight=0.64)
-    feed_text = tk.Text(feed_frame, font=("Arial", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
-    # Rest of the code...
+    feed_text = tk.Text(feed_frame, font=("Helvetica", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
 
     feed_text.config(state='disabled')
     feed_text.pack(fill='both', expand=True)
@@ -2174,22 +2321,26 @@ if __name__ == "__main__":
 
     ### RUNS ON SELECTIONS
     runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
-    runs_frame.place(relx=0.01, rely=0.01, relwidth=0.42, relheight=0.52)
-    runs_text=tk.Text(runs_frame, font=("Arial", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    runs_frame.place(relx=0.01, rely=0.01, relwidth=0.42, relheight=0.45)
+    runs_frame.grid_columnconfigure(0, weight=1)
+    runs_frame.grid_rowconfigure(0, weight=1)
+    runs_frame.grid_columnconfigure(1, weight=0)
+    runs_text = tk.Text(runs_frame, font=("Arial", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
     runs_text.config(state='disabled') 
-    runs_text.pack(fill='both', expand=True)
+    runs_text.grid(row=0, column=0, sticky='nsew')
 
     spinbox_frame = ttk.Frame(runs_frame)
-    spinbox_frame.pack(side='bottom')
+    spinbox_frame.grid(row=1, column=0, sticky='ew')
+
 
     spinbox_label = ttk.Label(spinbox_frame, text='Bets to a run: ')
-    spinbox_label.grid(row=0, column=0, sticky='e')
+    spinbox_label.grid(row=0, column=0, sticky='e', padx=6)
 
     spinbox = ttk.Spinbox(spinbox_frame, from_=2, to=10, textvariable=num_run_bets_var, width=2)
     spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
 
     combobox_label = ttk.Label(spinbox_frame, text=' Number of bets: ')
-    combobox_label.grid(row=0, column=2, sticky='w')
+    combobox_label.grid(row=0, column=2, sticky='w', padx=6)
 
     combobox_values = [20, 50, 100, 300, 1000, 2000]
     combobox_var = tk.IntVar(value=50)   
@@ -2197,12 +2348,18 @@ if __name__ == "__main__":
     combobox.grid(row=0, column=3, pady=(0, 3), sticky='w')
     combobox_var.trace("w", set_recent_bets)
 
-    runs_scroll = ttk.Scrollbar(runs_text, orient='vertical', command=runs_text.yview, cursor="hand2")
-    runs_scroll.pack(side="right", fill="y")
+    runs_scroll = ttk.Scrollbar(runs_frame, orient='vertical', command=runs_text.yview, cursor="hand2")
+    runs_scroll.grid(row=0, column=1, sticky='ns')
 
     runs_text.configure(yscrollcommand=runs_scroll.set)
-
-
+    
+    ### ACTIVITY SUMMARY FRAME
+    activity_summary_frame = ttk.Frame(root, style='Card', padding=1)
+    activity_summary_frame.place(relx=0.01, rely=0.466, relwidth=0.42, relheight=0.072)
+    activity_summary_text=tk.Text(activity_summary_frame, font=("Arial", 11), wrap='word', padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    activity_summary_text.config(state='disabled') 
+    activity_summary_text.pack(fill='both', expand=True)
+    
     ### NOTEBOOK FRAME
     notebook_frame = ttk.Frame(root)
     notebook_frame.place(relx=0.005, rely=0.54, relwidth=0.43, relheight=0.41)
@@ -2222,7 +2379,8 @@ if __name__ == "__main__":
     tab_2.grid_rowconfigure(1, weight=1)
     tab_2.grid_columnconfigure(0, weight=1)
     report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
-    report_ticket.insert('1.0', "User Report - view a report for a specific client, including their bet history.\n\nStaff Report - view a report on staff activity.\n\nDaily Report - generate a report for the days betting activity.")    
+    report_ticket.tag_configure("center", justify='center')
+    report_ticket.insert('1.0', "User Report\nGenerate a report for a specific client, including their bet history.\n\nStaff Report\nGenerate a report on staff activity.\n\nDaily Report\nGenerate a report for the days betting activity.", "center")    
     report_ticket.config(state='disabled')
     report_ticket.grid(row=0, column=0, sticky="nsew")
 
@@ -2260,14 +2418,13 @@ if __name__ == "__main__":
     tree.heading("#0", text="", anchor="w")
     tree.grid(row=0, column=0, sticky="nsew")
     tab_3.grid_columnconfigure(0, weight=1)
+    tab_3.grid_rowconfigure(0, weight=1)
 
     # BUTTONS AND TOOLTIP LABEL FOR FACTORING TAB
     add_restriction_button = ttk.Button(tab_3, text="Add", command=open_factoring_wizard, cursor="hand2")
     add_restriction_button.grid(row=1, column=0, pady=(5, 10), sticky="e")
     refresh_factoring_button = ttk.Button(tab_3, text="Refresh", command=factoring_sheet, cursor="hand2")
     refresh_factoring_button.grid(row=1, column=0, pady=(5, 10), sticky="w")
-    # factoring_label = ttk.Label(tab_3, text="Click 'Add' to report a new customer restriction.")
-    # factoring_label.grid(row=1, column=0, pady=(80, 0), sticky="s")
 
     notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
@@ -2278,6 +2435,8 @@ if __name__ == "__main__":
     tab_4.grid_rowconfigure(1, weight=1)
     tab_4.grid_columnconfigure(0, weight=1)
     traders_report_ticket = tk.Text(tab_4, font=("Helvetica", 11), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+    traders_report_ticket.tag_configure("center", justify='center')
+    traders_report_ticket.insert('1.0', "Scan for Risk\nGenerate report on potential 'risk' clients\n\nScan for RG Issues\nScreen daily betting and deposits activity for users showing signs of irresponsible gambling", "center")    
     traders_report_ticket.config(state='disabled')
     traders_report_ticket.grid(row=0, column=0, sticky="nsew")
 
@@ -2324,12 +2483,12 @@ if __name__ == "__main__":
     login_label.place(relx=0.18, rely=0.85)
 
     next_races_frame = ttk.Frame(root, style='Card')
-    next_races_frame.place(relx=0.015, rely=0.95, relwidth=0.97, relheight=0.047)
+    next_races_frame.place(relx=0.012, rely=0.95, relwidth=0.975, relheight=0.047)
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     display_next_races()
     factoring_sheet_periodic()
 

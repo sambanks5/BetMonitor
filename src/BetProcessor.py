@@ -31,6 +31,10 @@ from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from pytz import timezone
+from collections import defaultdict
+from itertools import groupby
+from operator import itemgetter
 from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 
@@ -47,6 +51,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
+last_run_time = None
 file_lock = threading.Lock()
 path = 'F:\BWW\Export'
 
@@ -786,16 +791,24 @@ def get_deposits(app):
                 label_ids[label_name] = label['id']
                 break
 
-    # Load the existing messages from the JSON file
-    if os.path.exists('src/deposits.json'):
-        with open('src/deposits.json', 'r') as f:
+    # Get the current date in your local time zone
+    now_local = datetime.now(timezone('Europe/London'))
+
+    # Format the current date and the next date as strings
+    date_str = now_local.strftime('%Y/%m/%d')
+    next_date_str = (now_local + timedelta(days=1)).strftime('%Y/%m/%d')
+    
+    # Define the filename for today's deposits
+    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+
+    # Load the existing messages from the JSON file for today's date
+    if os.path.exists(today_filename):
+        with open(today_filename, 'r') as f:
             existing_messages = json.load(f)
     else:
         existing_messages = []
 
     existing_ids = {message['ID'] for message in existing_messages}
-
-    start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     for label_name, label_id in label_ids.items():
         if label_id is None:
@@ -805,27 +818,16 @@ def get_deposits(app):
         page_token = None
         try:
             while True:
-                print(f'Label ID: {label_id}, Page token: {page_token}')
-                results = service.users().messages().list(userId='me', labelIds=[label_id], pageToken=page_token).execute()
+                results = service.users().messages().list(userId='me', labelIds=[label_id], pageToken=page_token, q=f'after:{date_str} before:{next_date_str}').execute()
                 messages = results.get('messages', [])
                 page_token = results.get('nextPageToken')
-                print(f'Next page token: {page_token}')
 
                 if messages:
-                    print(messages[-1]['id'])
                     last_message = service.users().messages().get(userId='me', id=messages[-1]['id']).execute()
                     last_message_time = datetime.fromtimestamp(int(last_message['internalDate']) // 1000)
-                    if last_message_time < start_of_day:
-                        break
-                    if email_time < start_of_day:
-                        continue
-
-                
-                print(f'Number of messages: {len(messages)}')
 
                 for message in messages:
-                    print("test2")
-                    print(message['id'])
+                    print(f"Processing message: {message['id']}")
                     # Get the message details
                     msg = service.users().messages().get(userId='me', id=message['id']).execute()
                     payload = msg['payload']
@@ -844,10 +846,7 @@ def get_deposits(app):
                     soup = BeautifulSoup(decoded_data , "lxml")
 
                     # Get the email time from the Gmail API
-                    email_time = datetime.fromtimestamp(int(msg['internalDate']) // 1000)
-                    print(email_time)
-                    if email_time < thirty_minutes_ago:
-                        continue
+                    email_time = datetime.fromtimestamp(int(msg['internalDate']) // 1000, tz=timezone('UTC'))
 
                     email_time_str = email_time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -865,16 +864,236 @@ def get_deposits(app):
 
                     # Only add the message to the list if its ID is not already in the JSON file
                     if msg['id'] not in existing_ids:
+                        print(f"Adding message: {msg['id']}")
                         messages_data.append(parsed_data)
+                    else:
+                        print(f"Skipping message: {msg['id']}")
 
                 if not page_token:
                     break
         except Exception as e:
             print(f"An error occurred while processing deposits: {e}")
+            
+    # Sort the messages by time
+    messages_data.sort(key=lambda x: datetime.strptime(x['Time'], '%Y-%m-%d %H:%M:%S'))
 
-    # Write the data to a JSON file
-    with open('src/deposits.json', 'w') as f:
-        json.dump(messages_data, f, indent=4)
+    # Group the messages by day
+    messages_by_day = defaultdict(list)
+    for message in messages_data:
+        date = message['Time'][:10]
+        messages_by_day[date].append(message)
+
+    # Write the messages for each day to a separate JSON file
+    for date, messages in messages_by_day.items():
+        filename = f'depositlogs/deposits_{date}.json'
+
+        # Read the existing messages for the day from the file, if it exists
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                existing_messages = json.load(f)
+        else:
+            existing_messages = []
+
+        # Append the new messages to the list
+        existing_messages.extend(messages)
+
+        # Write the updated list back to the file
+        with open(filename, 'w') as f:
+            json.dump(existing_messages, f, indent=4)
+
+    return messages_data
+
+def calculate_deposit_summary():
+    now_local = datetime.now(timezone('Europe/London'))
+    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+
+    # Load the existing messages from the JSON file for today's date
+    if os.path.exists(today_filename):
+        with open(today_filename, 'r') as f:
+            messages_data = json.load(f)
+    else:
+        messages_data = []
+
+    total_deposits = 0
+    total_sum = 0
+    deposits_by_user = defaultdict(int)
+    sum_by_user = defaultdict(int)
+
+    for message in messages_data:
+        user = message['Username']
+        amount = float(message['Amount'].replace(',', ''))
+        total_deposits += 1
+        total_sum += amount
+        deposits_by_user[user] += 1
+        sum_by_user[user] += amount
+
+    most_deposits_user = max(deposits_by_user, key=deposits_by_user.get) if deposits_by_user else None
+    most_sum_user = max(sum_by_user, key=sum_by_user.get) if sum_by_user else None
+
+    return {
+        'total_deposits': total_deposits,
+        'total_sum': total_sum,
+        'most_deposits_user': most_deposits_user,
+        'most_sum_user': most_sum_user,
+    }
+
+def reprocess_deposits(app):
+    creds = None
+    messages_data = []
+    label_ids = {}
+
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json')
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    # Call the Gmail API
+    service = build('gmail', 'v1', credentials=creds)
+
+    results = service.users().labels().list(userId='me').execute()
+    labels = results.get('labels', [])
+
+    # Find the IDs of the labels
+    for label_name in ['DEPOSIT', 'DEPOSIT/PAYPAL']:
+        for label in labels:
+            if label['name'] == label_name:
+                print(label['name'])
+                label_ids[label_name] = label['id']
+                break
+
+    # Get the current date in your local time zone
+    now_local = datetime.now(timezone('Europe/London'))
+
+    for i in range(7):
+        # Calculate the date for the day to process
+        day_to_process = now_local - timedelta(days=i)
+
+        # Format the date and the next date as strings
+        date_str = day_to_process.strftime('%Y/%m/%d')
+        next_date_str = (day_to_process + timedelta(days=1)).strftime('%Y/%m/%d')
+
+        # Define the filename for the day's deposits
+        day_filename = f'depositlogs/deposits_{day_to_process.strftime("%Y-%m-%d")}.json'
+
+        # Reset the list of existing messages and IDs for the day
+        existing_messages = []
+        existing_ids = set()
+        messages_data = []  # Reset the list of messages for the day
+
+        # Load the existing messages from the JSON file for today's date
+        if os.path.exists(day_filename):
+            with open(day_filename, 'r') as f:
+                existing_messages = json.load(f)
+        else:
+            existing_messages = []
+
+        existing_ids = {message['ID'] for message in existing_messages}
+
+        for label_name, label_id in label_ids.items():
+            if label_id is None:
+                print(f"Label '{label_name}' not found")
+                continue
+
+            page_token = None
+            try:
+                while True:
+                    print(f'Label ID: {label_id}, Page token: {page_token}')
+                    results = service.users().messages().list(userId='me', labelIds=[label_id], pageToken=page_token, q=f'after:{date_str} before:{next_date_str}').execute()
+                    messages = results.get('messages', [])
+                    page_token = results.get('nextPageToken')
+                    print(f'Next page token: {page_token}')
+
+                    if messages:
+                        print(messages[-1]['id'])
+                        last_message = service.users().messages().get(userId='me', id=messages[-1]['id']).execute()
+                        last_message_time = datetime.fromtimestamp(int(last_message['internalDate']) // 1000)
+                        print(f'Number of messages: {len(messages)}')
+
+                    for message in messages:
+                        print(f"Processing message: {message['id']}")
+                        # Get the message details
+                        msg = service.users().messages().get(userId='me', id=message['id']).execute()
+                        payload = msg['payload']
+                        # Get the message body
+                        parts = payload.get('parts')
+                        if parts is not None:
+                            part = parts[0]
+                            data = part['body']['data']
+                        else:
+                            # If there are no parts, get the body from the 'body' field
+                            data = payload['body']['data']
+
+                        data = data.replace("-","+").replace("_","/")
+                        decoded_data = base64.b64decode(data)
+
+                        soup = BeautifulSoup(decoded_data , "lxml")
+
+                        # Get the email time from the Gmail API
+                        email_time = datetime.fromtimestamp(int(msg['internalDate']) // 1000, tz=timezone('UTC'))
+                        print(email_time)
+
+                        email_time_str = email_time.strftime('%Y-%m-%d %H:%M:%S')
+
+                        # Parse the email based on its label and add the type, time, and ID
+                        if label_name == 'DEPOSIT':
+                            parsed_data = parse_card_email(soup.prettify())
+                            parsed_data['Type'] = 'Card'
+                        elif label_name == 'DEPOSIT/PAYPAL':
+                            parsed_data = parse_paypal_email(soup.prettify())
+                            parsed_data['Type'] = 'PayPal'
+
+                        email_time_str = email_time.strftime('%Y-%m-%d %H:%M:%S')
+                        parsed_data['Time'] = email_time_str
+                        parsed_data['ID'] = msg['id']
+
+                        # Only add the message to the list if its ID is not already in the JSON file
+                        if msg['id'] not in existing_ids:
+                            print(f"Adding message: {msg['id']}")
+                            messages_data.append(parsed_data)
+                        else:
+                            print(f"Skipping message: {msg['id']}")
+
+                    if not page_token:
+                        break
+            except Exception as e:
+                print(f"An error occurred while processing deposits: {e}")
+                
+        # Sort the messages by time
+        messages_data.sort(key=lambda x: datetime.strptime(x['Time'], '%Y-%m-%d %H:%M:%S'))
+
+        print(messages_data)
+
+        # Group the messages by day
+        messages_by_day = defaultdict(list)
+        for message in messages_data:
+            date = message['Time'][:10]
+            messages_by_day[date].append(message)
+
+        # Write the messages for each day to a separate JSON file
+        for date, messages in messages_by_day.items():
+            filename = f'depositlogs/deposits_{date}.json'
+
+            # Read the existing messages for the day from the file, if it exists
+            if os.path.exists(filename):
+                with open(filename, 'r') as f:
+                    existing_messages = json.load(f)
+            else:
+                existing_messages = []
+
+            # Append the new messages to the list
+            existing_messages.extend(messages)
+
+            # Write the updated list back to the file
+            with open(filename, 'w') as f:  # Use 'filename' instead of 'day_filename'
+                json.dump(existing_messages, f, indent=4)
 
     return messages_data
 
@@ -897,12 +1116,15 @@ def parse_paypal_email(html):
 
 
 
+
+
 ####################################################################################
 ## WRITE API DATA TO DATA.JSON
 ####################################################################################
 def update_data_file(app):
     with file_lock:
         try:
+            app.log_message(" --- Updating data file --- ")
             # Load existing data
             with open('src/data.json', 'r') as f:
                 data = json.load(f)
@@ -913,12 +1135,13 @@ def update_data_file(app):
             data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'] = get_reporting_data(app)
             data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
             data['closures'] = get_closures(app)
+            data['deposits_summary'] = calculate_deposit_summary()
 
             # Write updated data back to file
             with open('src/data.json', 'w') as f:
                 json.dump(data, f, indent=4)
             
-            app.log_message(" -- Data file updated -- ")
+            app.log_message(" --- Data file updated --- ")
 
         except Exception as e:
             app.log_message(f"An error occurred while updating the data file: {e}")
@@ -940,6 +1163,17 @@ def run_update_racecards():
     update_racecards_thread = threading.Thread(target=update_racecards)
     update_racecards_thread.start()
 
+def run_get_deposit_data(app):
+    global last_run_time
+    current_time = datetime.now()
+    if last_run_time is not None and (current_time - last_run_time).total_seconds() < 120:
+        print("Function just ran")
+        return
+    
+    last_run_time = current_time
+    get_deposit_data_thread = threading.Thread(target=get_deposits, args=(app,))
+    get_deposit_data_thread.start()
+
 
 
 ####################################################################################
@@ -949,7 +1183,7 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Bet Processor v4.0')
-        self.geometry('750x300')
+        self.geometry('820x300')
         
         self.iconbitmap('src/splash.ico')
         self.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
@@ -969,7 +1203,7 @@ class Application(tk.Tk):
 
         self.text_area = scrolledtext.ScrolledText(self, undo=True)
         self.text_area['font'] = ('helvetica', '12')
-        self.text_area.grid(row=0, column=0, rowspan=4, sticky='nsew')
+        self.text_area.grid(row=0, column=0, rowspan=5, sticky='nsew')
 
         image = Image.open('src/splash.ico')
         image = image.resize((100, 100)) 
@@ -978,12 +1212,14 @@ class Application(tk.Tk):
         self.logo_label = Label(self, image=self.logo)
         self.logo_label.grid(row=0, column=1) 
 
-        self.reprocess_button = ttk.Button(self, text="Reprocess", command=self.reprocess, style='TButton', width=15)
+        self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.reprocess, style='TButton', width=20)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
+        
+        self.reprocess_deposits_button = ttk.Button(self, text="Reprocess Deposits", command=self.reprocess_deposits, style='TButton', width=15)
+        self.reprocess_deposits_button.grid(row=3, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
 
-        self.set_path_button = ttk.Button(self, text="Set Path", command=self.set_bet_path, style='TButton', width=15)
-        self.set_path_button.grid(row=3, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
-
+        self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
+        self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
 
         self.bind('<Destroy>', self.on_destroy)
     
@@ -993,11 +1229,15 @@ class Application(tk.Tk):
         if new_folder_path:
             path = new_folder_path
 
-
     def reprocess(self):
         reprocess_file(self)
         process_thread = threading.Thread(target=process_existing_bets, args=(path, self))
         process_thread.start()
+
+    def reprocess_deposits(self):
+        reprocess_deposits(self)
+        process_deposits_thread = threading.Thread(target=reprocess_deposits, args=(path, self))
+        process_deposits_thread.start()
 
     def log_message(self, message):
         current_time = datetime.now().strftime('%H:%M:%S')  # Get the current time
@@ -1033,6 +1273,25 @@ class FileHandler(FileSystemEventHandler):
         else: 
             print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
 
+def remove_duplicates_and_misplaced():
+    filenames = ['depositlogs/deposits_2024-04-23.json', 'depositlogs/deposits_2024-04-24.json']
+    all_deposits = []
+    unique_ids = set()
+
+    for filename in filenames:
+        with open(filename, 'r') as f:
+            deposits = json.load(f)
+            for deposit in deposits:
+                deposit_date = datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date()
+                file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
+                if deposit['ID'] not in unique_ids and deposit_date == file_date:
+                    unique_ids.add(deposit['ID'])
+                    all_deposits.append(deposit)
+
+    for filename in filenames:
+        with open(filename, 'w') as f:
+            file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
+            json.dump([deposit for deposit in all_deposits if datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date() == file_date], f, indent=4)
 
 
 ####################################################################################
@@ -1045,14 +1304,18 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    get_deposits(app)
-    #run_get_data(app)
-    #run_update_racecards()
-    #run_update_todays_oddsmonkey_selections()
+    #remove_duplicates_and_misplaced()
+    #reprocess_deposits(app)
+    run_get_data(app)
+    run_update_racecards()
+    run_update_todays_oddsmonkey_selections()
+    run_get_deposit_data(app)
 
-    #schedule.every(2).minutes.do(run_get_data, app)
-    #schedule.every(6).hours.do(run_update_racecards)
-    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    schedule.every(2).minutes.do(run_get_data, app)
+    schedule.every(10).minutes.do(run_get_deposit_data, app)
+    schedule.every(6).hours.do(run_update_racecards)
+    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    schedule.every().day.at("11:57").do(run_get_deposit_data, app)
 
     while not app.stop_main_loop:
         # Run pending tasks
