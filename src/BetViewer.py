@@ -249,7 +249,6 @@ def bet_feed(data=None):
 
     if show_reporting_data_state.get():
         turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit = get_reporting_data()
-        activity_summary_text.delete('1.0', tk.END)
 
         total_bets = sum(1 for bet in data if bet.get('type', '').lower() == 'bet')
         total_knockbacks = sum(1 for bet in data if bet.get('type', '').lower() == 'wager knockback')
@@ -257,6 +256,7 @@ def bet_feed(data=None):
 
         activity_summary_text.tag_configure("activity", foreground="#510094", font=("Helvetica", 9, "bold"), justify="center")
         activity_summary_text.config(state="normal")
+        activity_summary_text.delete('1.0', tk.END)
         activity_summary_text.insert('1.0', f"Total Bets: {total_bets} | Total Knockbacks: {total_knockbacks} | Percentage: {percentage:.2f}%\nTurnover: {turnover} | Profit: {profit} | Percentage: {profit_percentage}\nDeposits: {total_deposits} | Deposits Total: {total_sum} | Average: {avg_deposit}", "activity")
         activity_summary_text.config(state="disabled")
 
@@ -1109,7 +1109,8 @@ def find_traders():
     # Load today's Oddsmonkey selections
     with open('src/data.json', 'r') as file:
         data = json.load(file)
-    todays_oddsmonkey_selections = data['oddsmonkey_selections']
+
+    todays_oddsmonkey_selections = data['todays_oddsmonkey_selections']
 
     data = get_database()
     results = []
@@ -2487,8 +2488,8 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     display_next_races()
     factoring_sheet_periodic()
 
