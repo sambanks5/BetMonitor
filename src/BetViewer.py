@@ -2206,16 +2206,18 @@ def refresh_display_periodic():
     root.after(30000, refresh_display_periodic)
 
 def factoring_sheet_periodic():
-    global vip_clients, newreg_clients
     threading.Thread(target=factoring_sheet).start()
+    root.after(600000, factoring_sheet_periodic) 
+
+def get_data_periodic():
+    global vip_clients, newreg_clients
     threading.Thread(target=display_closure_requests).start()
     threading.Thread(target=get_vip_clients).start()
     threading.Thread(target=get_newreg_clients).start()
     threading.Thread(target=get_reporting_data).start()
     threading.Thread(target=get_oddsmonkey_selections).start()
 
-
-    root.after(60000, factoring_sheet_periodic)
+    root.after(60000, get_data_periodic)  # Run every minute
 
 def run_create_daily_report():
     global current_file
@@ -2492,6 +2494,7 @@ if __name__ == "__main__":
     #user_login()
     display_next_races()
     factoring_sheet_periodic()
+    get_data_periodic()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()

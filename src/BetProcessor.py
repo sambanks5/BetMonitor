@@ -787,7 +787,6 @@ def get_deposits(app):
     for label_name in ['DEPOSIT', 'DEPOSIT/PAYPAL']:
         for label in labels:
             if label['name'] == label_name:
-                print(label['name'])
                 label_ids[label_name] = label['id']
                 break
 
@@ -827,7 +826,6 @@ def get_deposits(app):
                     last_message_time = datetime.fromtimestamp(int(last_message['internalDate']) // 1000)
 
                 for message in messages:
-                    print(f"Processing message: {message['id']}")
                     # Get the message details
                     msg = service.users().messages().get(userId='me', id=message['id']).execute()
                     payload = msg['payload']
@@ -864,7 +862,6 @@ def get_deposits(app):
 
                     # Only add the message to the list if its ID is not already in the JSON file
                     if msg['id'] not in existing_ids:
-                        print(f"Adding message: {msg['id']}")
                         messages_data.append(parsed_data)
                     else:
                         print(f"Skipping message: {msg['id']}")
@@ -1131,11 +1128,17 @@ def update_data_file(app):
 
             # Update data
             data['vip_clients'] = get_vip_clients(app)
+            print("vip clients")
             data['new_registrations'] = get_new_registrations(app)
+            print("new registrations")
             data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'] = get_reporting_data(app)
+            print("reporting data")
             data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
+            print("oddsmonkey selections")
             data['closures'] = get_closures(app)
+            print("closures")
             data['deposits_summary'] = calculate_deposit_summary()
+            print("deposits summary")
 
             # Write updated data back to file
             with open('src/data.json', 'w') as f:
