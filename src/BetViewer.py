@@ -257,9 +257,9 @@ def bet_feed(data=None):
         activity_summary_text.tag_configure("activity", foreground="#510094", font=("Helvetica", 9, "bold"), justify="center")
         activity_summary_text.config(state="normal")
         activity_summary_text.delete('1.0', tk.END)
-        activity_summary_text.insert('1.0', f"Total Bets: {total_bets} | Total Knockbacks: {total_knockbacks} | Percentage: {percentage:.2f}%\nTurnover: {turnover} | Profit: {profit} | Percentage: {profit_percentage}\nDeposits: {total_deposits} | Deposits Total: {total_sum} | Average: {avg_deposit}", "activity")
+        activity_summary_text.insert('1.0', f"Bets: {total_bets}  |  Knockbacks: {total_knockbacks}  -  {percentage:.2f}%\nTurnover: {turnover}  |  Profit: {profit}  -  {profit_percentage}\nDeposits: {total_deposits}   |   Amount: {total_sum}   |   Average: {avg_deposit}", "activity")
         activity_summary_text.config(state="disabled")
-
+        
     for bet in data:
         wager_type = bet.get('type', '').lower()
         if wager_type == 'wager knockback':
@@ -377,6 +377,12 @@ def bet_runs(data):
 
     sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
 
+    runs_text.tag_config("risk", foreground="#8f0000")
+    runs_text.tag_config("vip", foreground="#009685")
+    runs_text.tag_config("newreg", foreground="purple")
+
+    runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
+
     runs_text.config(state="normal")
     runs_text.delete('1.0', tk.END)
 
@@ -397,13 +403,32 @@ def bet_runs(data):
             continue
 
         if len(bet_numbers) > num_bets:
-            runs_text.insert(tk.END, f"{selection}\n")
+            selection_name = selection.split(' - ')[1] if ' - ' in selection else selection
+
+            matched_odds = None
+            for om_sel in oddsmonkey_selections.values():
+                if selection_name == om_sel[0]:
+                    matched_odds = float(om_sel[1])
+                    break
+
+            if matched_odds is not None:
+                runs_text.insert(tk.END, f"{selection} | OM Lay: {matched_odds}\n", "oddsmonkey")
+            else:
+                runs_text.insert(tk.END, f"{selection}\n")
+
             for bet_number in bet_numbers:
                 bet_info = next((bet for bet in selection_bets if bet['id'] == bet_number), None)
                 if bet_info:
                     for sel in bet_info['details']['selections']:
                         if selection == sel[0]:
-                            runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
+                            if 'risk_category' in bet_info['details'] and bet_info['details']['risk_category'] != '-':
+                                runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "risk")
+                            elif bet_info['customer_ref'] in vip_clients:
+                                runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "vip")
+                            elif bet_info['customer_ref'] in newreg_clients:
+                                runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "newreg")
+                            else:
+                                runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
             runs_text.insert(tk.END, f"\n")
 
     runs_text.config(state=tk.DISABLED)
@@ -443,7 +468,7 @@ def display_next_races():
     for i, race in enumerate(next_horse_races):
         # If the race has just started, display it in purple
         if race in just_started_horse_races:
-            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 9, "bold"), foreground='purple').pack(side='left', padx=11)
+            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold"), foreground='purple').pack(side='left', padx=11)
         else:
             ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
     
@@ -516,6 +541,22 @@ def reset_update_times():
     
     display_courses()
 
+def course_needs_update(course, data):
+    if course in data['courses'] and data['courses'][course]:
+        last_updated_time = data['courses'][course].split(' ')[0]
+        last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+    else:
+        last_updated = datetime.now().time()
+
+    now = datetime.now().time()
+
+    time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+
+    if course in ["SIS Greyhounds", "TRP Greyhounds"]:
+        return time_diff >= 60
+    else:
+        return time_diff >= 25
+
 def display_courses():
     global courses_page, current_page
     for widget in race_updation_frame.winfo_children():
@@ -582,6 +623,17 @@ def display_courses():
 
     forward_button = ttk.Button(race_updation_frame, text=">", command=forward, width=2, cursor="hand2")
     forward_button.grid(row=len(courses_page), column=2, padx=2, pady=2)
+
+    # Add an indicator at the bottom
+    update_indicator = ttk.Label(race_updation_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
+    update_indicator.grid(row=len(courses_page), column=3)
+
+    # Check if any course on other pages needs updating
+    other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
+    if any(course_needs_update(course, data) for course in other_courses):
+        update_indicator.grid()
+    else:
+        update_indicator.grid_remove()
 
     if current_page == 0:
         back_button.grid_remove()
@@ -658,7 +710,7 @@ def update_course(course):
 def log_update(course, time, user):
     now = datetime.now()
     date_string = now.strftime('%d-%m-%Y')
-    log_file = f'logs/update_log_{date_string}.txt'
+    log_file = f'logs/updatelogs/update_log_{date_string}.txt'
 
     if os.path.exists(log_file):
         with open(log_file, 'r') as f:
@@ -1015,12 +1067,13 @@ def create_staff_report():
     staff_updates = Counter()
     staff_updates_today = Counter()
     factoring_updates = Counter()
+    offenders = Counter()
     today = datetime.now().date()
     current_date = datetime.now().date()
-    month_ago = current_date - timedelta(days=30)
+    month_ago = current_date.replace(day=1)
 
-    log_files = os.listdir('logs')
-    log_files.sort(key=lambda file: os.path.getmtime('logs/' + file))
+    log_files = os.listdir('logs/updatelogs')
+    log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
     progress["maximum"] = len(log_files)
     progress["value"] = 0
     # Read all the log files from the past month
@@ -1029,10 +1082,13 @@ def create_staff_report():
         progress["value"] = i + 1
         root.update_idletasks()
 
-        file_date = datetime.fromtimestamp(os.path.getmtime('logs/' + log_file)).date()
+        file_date = datetime.fromtimestamp(os.path.getmtime('logs/updatelogs/' + log_file)).date()
         if month_ago <= file_date <= current_date:
-            with open('logs/' + log_file, 'r') as file:
+            with open('logs/updatelogs/' + log_file, 'r') as file:
                 lines = file.readlines()
+
+            last_update = {}
+            update_counts = {}
 
             for line in lines:
                 if line.strip() == '':
@@ -1051,13 +1107,23 @@ def create_staff_report():
                     staff_updates[staff_name] += 1
 
                     if file_date == today:
+                        current_time = datetime.strptime(time, '%H:%M')
+                        if course not in update_counts:
+                            update_counts[course] = {}
+                        if staff_name not in update_counts[course]:
+                            update_counts[course][staff_name] = Counter()
+                        update_counts[course][staff_name][current_time] += 1
+
+                        if update_counts[course][staff_name][current_time] > 1:
+                            offenders[staff_name] += 1
+
                         staff_updates_today[staff_name] += 1
 
-    factoring_log_file = os.listdir('factoringlogs')
-    factoring_log_file.sort(key=lambda file: os.path.getmtime('factoringlogs/' + file))
+    factoring_log_file = os.listdir('logs/factoringlogs')
+    factoring_log_file.sort(key=lambda file: os.path.getmtime('logs/factoringlogs/' + file))
 
     for log_file in factoring_log_file:
-        with open('factoringlogs/' + log_file, 'r') as file:
+        with open('logs/factoringlogs/' + log_file, 'r') as file:
             lines = file.readlines()
 
         for line in lines:
@@ -1078,27 +1144,27 @@ def create_staff_report():
     report_output += f"\nEmployee Of The Month: {employee_of_the_month}\n"
 
     factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
-    report_output += f"\nCurrent Factoring Leader: {factoring_employee_of_the_month}\n"
+    report_output += f"\nAll Time Factoring Leader: {factoring_employee_of_the_month}\n"
 
     report_output += "\nToday's Staff Updates:\n"
     for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
         report_output += f"\t{staff}  |  {count}\n"
 
-    report_output += "\nTotal Staff Updates:\n"
+    report_output += "\nTotal Staff Updates Since " + month_ago.strftime('%d-%m') + ":\n"
     for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
         report_output += f"\t{staff}  |  {count}\n"
 
-    report_output += "\nStaff Factoring:\n"
+    report_output += "\nAll Time Staff Factoring:\n"
     for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
+        report_output += f"\t{staff}  |  {count}\n"
+    
+    report_output += "\nUpdation Offenders Today:\n"
+    for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
         report_output += f"\t{staff}  |  {count}\n"
 
     report_output += "\nCourse Updates:\n"
     for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
         report_output += f"\t{course}  |  {count}\n"
-
-    # Find the employee of the month for factoring
-
-
 
     report_ticket.config(state="normal")
     report_ticket.delete('1.0', tk.END)
@@ -1294,7 +1360,7 @@ def find_rg_issues():
 
 
     now_local = datetime.now(timezone('Europe/London'))
-    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+    today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
 
     # Load the existing messages from the JSON file for today's date
     if os.path.exists(today_filename):
@@ -1594,7 +1660,7 @@ def open_factoring_wizard():
         }
 
         # Write the data to a JSON file
-        with open(f'factoringlogs/factoring.json', 'a') as file:
+        with open(f'logs/factoringlogs/factoring.json', 'a') as file:
             file.write(json.dumps(data) + '\n')
 
         wizard_window.destroy()
@@ -1633,9 +1699,8 @@ def open_factoring_wizard():
 
     wizard_window.bind('<Return>', lambda event=None: handle_submit())
 
-    submit_button = ttk.Button(wizard_window_frame, text="Submit", command=handle_submit, cursor="hand2")
+    submit_button = ttk.Button(wizard_window_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
     submit_button.pack(padx=5, pady=5)
-
 
 
 ####################################################################################
@@ -2250,9 +2315,9 @@ if __name__ == "__main__":
     root.configure(bg='#ffffff')
     alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width-10), 0)    
     root.geometry(alignstr)
-    root.minsize(width//2, height//2)
-    root.maxsize(screenwidth, screenheight)
-    root.resizable(True, True)
+    # root.minsize(width//2, height//2)
+    # root.maxsize(screenwidth, screenheight)
+    root.resizable(False, False)
 
 
     ### IMPORT LOGO
@@ -2490,8 +2555,8 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
+    get_courses()
+    user_login()
     display_next_races()
     factoring_sheet_periodic()
     get_data_periodic()

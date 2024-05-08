@@ -798,7 +798,7 @@ def get_deposits(app):
     next_date_str = (now_local + timedelta(days=1)).strftime('%Y/%m/%d')
     
     # Define the filename for today's deposits
-    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+    today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
 
     # Load the existing messages from the JSON file for today's date
     if os.path.exists(today_filename):
@@ -882,7 +882,7 @@ def get_deposits(app):
 
     # Write the messages for each day to a separate JSON file
     for date, messages in messages_by_day.items():
-        filename = f'depositlogs/deposits_{date}.json'
+        filename = f'logs/depositlogs/deposits_{date}.json'
 
         # Read the existing messages for the day from the file, if it exists
         if os.path.exists(filename):
@@ -902,7 +902,7 @@ def get_deposits(app):
 
 def calculate_deposit_summary():
     now_local = datetime.now(timezone('Europe/London'))
-    today_filename = f'depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+    today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
 
     # Load the existing messages from the JSON file for today's date
     if os.path.exists(today_filename):
@@ -978,7 +978,7 @@ def reprocess_deposits(app):
         next_date_str = (day_to_process + timedelta(days=1)).strftime('%Y/%m/%d')
 
         # Define the filename for the day's deposits
-        day_filename = f'depositlogs/deposits_{day_to_process.strftime("%Y-%m-%d")}.json'
+        day_filename = f'logs/depositlogs/deposits_{day_to_process.strftime("%Y-%m-%d")}.json'
 
         # Reset the list of existing messages and IDs for the day
         existing_messages = []
@@ -1076,7 +1076,7 @@ def reprocess_deposits(app):
 
         # Write the messages for each day to a separate JSON file
         for date, messages in messages_by_day.items():
-            filename = f'depositlogs/deposits_{date}.json'
+            filename = f'logs/depositlogs/deposits_{date}.json'
 
             # Read the existing messages for the day from the file, if it exists
             if os.path.exists(filename):
@@ -1276,25 +1276,25 @@ class FileHandler(FileSystemEventHandler):
         else: 
             print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
 
-def remove_duplicates_and_misplaced():
-    filenames = ['depositlogs/deposits_2024-04-23.json', 'depositlogs/deposits_2024-04-24.json']
-    all_deposits = []
-    unique_ids = set()
+# def remove_duplicates_and_misplaced():
+#     filenames = ['logs/depositlogs/deposits_2024-04-23.json', 'logs/depositlogs/deposits_2024-04-24.json']
+#     all_deposits = []
+#     unique_ids = set()
 
-    for filename in filenames:
-        with open(filename, 'r') as f:
-            deposits = json.load(f)
-            for deposit in deposits:
-                deposit_date = datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date()
-                file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
-                if deposit['ID'] not in unique_ids and deposit_date == file_date:
-                    unique_ids.add(deposit['ID'])
-                    all_deposits.append(deposit)
+#     for filename in filenames:
+#         with open(filename, 'r') as f:
+#             deposits = json.load(f)
+#             for deposit in deposits:
+#                 deposit_date = datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date()
+#                 file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
+#                 if deposit['ID'] not in unique_ids and deposit_date == file_date:
+#                     unique_ids.add(deposit['ID'])
+#                     all_deposits.append(deposit)
 
-    for filename in filenames:
-        with open(filename, 'w') as f:
-            file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
-            json.dump([deposit for deposit in all_deposits if datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date() == file_date], f, indent=4)
+#     for filename in filenames:
+#         with open(filename, 'w') as f:
+#             file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
+#             json.dump([deposit for deposit in all_deposits if datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date() == file_date], f, indent=4)
 
 
 ####################################################################################
