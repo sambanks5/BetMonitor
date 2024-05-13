@@ -395,10 +395,20 @@ def get_reporting_data(app):
     response = request.execute()
     last_updated_time = response['modifiedTime']
     last_updated_datetime = datetime.strptime(last_updated_time, "%Y-%m-%dT%H:%M:%S.%fZ")
-
     last_updated_time = last_updated_datetime.strftime("%H:%M:%S")
+
+    enhanced_place = spreadsheet.get_worksheet(7)
+    values = enhanced_place.get_all_values()
+    today = datetime.now().strftime('%d/%m/%Y')  # adjust the date format as needed
+
+    enhanced_places = []
+    for row in values:
+        date, time, meeting = row[1], row[2], row[3]  # adjust the indices as needed
+        if date == today:
+            meeting = meeting.title()
+            enhanced_places.append(f'{meeting}, {time}')
     
-    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
+    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, enhanced_places
 
 
 
@@ -1131,7 +1141,7 @@ def update_data_file(app):
             print("vip clients")
             data['new_registrations'] = get_new_registrations(app)
             print("new registrations")
-            data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'] = get_reporting_data(app)
+            data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'], data['enhanced_places'] = get_reporting_data(app)
             print("reporting data")
             data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
             print("oddsmonkey selections")

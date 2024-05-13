@@ -22,7 +22,7 @@ import time
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
-from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext
+from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar
 from dateutil.relativedelta import relativedelta
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
@@ -45,6 +45,8 @@ DEFAULT_NUM_BETS_TO_RUN = 3
 current_file = None
 selection_bets = {}
 oddsmonkey_selections = {}
+todays_oddsmonkey_selections = {}
+enhanced_places = []
 bet_info = {}  
 bet_feed_lock = threading.Lock()
 vip_clients = []
@@ -106,7 +108,7 @@ def get_vip_clients():
         vip_clients = data.get('vip_clients', [])
 
 def get_reporting_data():
-    global daily_turnover, daily_profit, daily_profit_percentage, last_updated_time
+    global daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, enhanced_places
 
     with open('src/data.json', 'r') as f:
         data = json.load(f)
@@ -116,12 +118,13 @@ def get_reporting_data():
         last_updated_time = data.get('last_updated_time', '')
         total_deposits = data.get('deposits_summary', {}).get('total_deposits', 0)
         total_sum = data.get('deposits_summary', {}).get('total_sum', 0)
+        enhanced_places = data.get('enhanced_places', [])
 
     avg_deposit = total_sum / total_deposits if total_deposits else 0
     total_sum = f"£{total_sum:,.2f}"
     avg_deposit = f"£{avg_deposit:,.2f}"
 
-    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit
+    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, enhanced_places
 
 def get_racecards():
     with open('src/data.json') as f:
@@ -139,7 +142,13 @@ def get_oddsmonkey_selections():
 
     return oddsmonkey_selections
 
+def get_todays_oddsmonkey_selections():
+    global todays_oddsmonkey_selections
+    with open('src/data.json') as f:
+        data = json.load(f)
+        todays_oddsmonkey_selections = data.get('todays_oddsmonkey_selections', [])
 
+    return todays_oddsmonkey_selections
 
 ####################################################################################
 ## DISPLAY MESSAGE IN FEED IF ERROR
@@ -248,7 +257,7 @@ def bet_feed(data=None):
     feed_text.delete('1.0', tk.END)
 
     if show_reporting_data_state.get():
-        turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit = get_reporting_data()
+        turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, _ = get_reporting_data()
 
         total_bets = sum(1 for bet in data if bet.get('type', '').lower() == 'bet')
         total_knockbacks = sum(1 for bet in data if bet.get('type', '').lower() == 'wager knockback')
@@ -259,7 +268,7 @@ def bet_feed(data=None):
         activity_summary_text.delete('1.0', tk.END)
         activity_summary_text.insert('1.0', f"Bets: {total_bets}  |  Knockbacks: {total_knockbacks}  -  {percentage:.2f}%\nTurnover: {turnover}  |  Profit: {profit}  -  {profit_percentage}\nDeposits: {total_deposits}   |   Amount: {total_sum}   |   Average: {avg_deposit}", "activity")
         activity_summary_text.config(state="disabled")
-        
+
     for bet in data:
         wager_type = bet.get('type', '').lower()
         if wager_type == 'wager knockback':
@@ -360,7 +369,7 @@ def set_num_run_bets(*args):
     refresh_display()
 
 def bet_runs(data):
-    global DEFAULT_NUM_BETS_TO_RUN, DEFAULT_NUM_RECENT_FILES
+    global DEFAULT_NUM_BETS_TO_RUN, DEFAULT_NUM_RECENT_FILES, enhanced_places, todays_oddsmonkey_selections
     num_bets = DEFAULT_NUM_BETS_TO_RUN
 
     selection_bets = data
@@ -387,6 +396,7 @@ def bet_runs(data):
     runs_text.delete('1.0', tk.END)
 
     for selection, bet_numbers in sorted_selections:
+
         skip_selection = False
         if runs_remove_off_races.get(): 
             race_time_str = selection.split(", ")[1] if ", " in selection else None
@@ -406,7 +416,7 @@ def bet_runs(data):
             selection_name = selection.split(' - ')[1] if ' - ' in selection else selection
 
             matched_odds = None
-            for om_sel in oddsmonkey_selections.values():
+            for om_sel in todays_oddsmonkey_selections.values():
                 if selection_name == om_sel[0]:
                     matched_odds = float(om_sel[1])
                     break
@@ -429,9 +439,18 @@ def bet_runs(data):
                                 runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "newreg")
                             else:
                                 runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
+
+            # Extract the meeting name and time from the selection
+            meeting_time = ' '.join(selection.split(' ')[:2])
+
+            # Check if the meeting name and time is in the enhanced_places list
+            if meeting_time in enhanced_places:
+                runs_text.insert(tk.END, 'Enhanced Place Race\n', "oddsmonkey")
+            
             runs_text.insert(tk.END, f"\n")
 
     runs_text.config(state=tk.DISABLED)
+
 
 
 ####################################################################################
@@ -479,6 +498,7 @@ def display_next_races():
         Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
 
     root.after(60000, display_next_races)
+
 
 
 ####################################################################################
@@ -758,6 +778,9 @@ def create_daily_report(current_file=None):
     # Bets Report
     total_bets = 0
     total_stakes = 0.0
+    total_horse_racing_bets = 0
+    total_greyhound_bets = 0
+    total_other_bets = 0
     # Clients Report
     active_clients = []
     customer_payments = {}
@@ -828,6 +851,14 @@ def create_daily_report(current_file=None):
             total_clients = len(active_clients_set)
             active_clients.append(bet_customer_reference)
             total_bets += 1
+            
+            selection_name = bet['details']['selections'][0][0]
+            if re.search(r'\d{2}:\d{2}', selection_name):  # if the selection name contains a time, it's horse racing
+                total_horse_racing_bets += 1
+            elif 'trap' in selection_name.lower():  # if the selection name contains 'trap', it's greyhounds
+                total_greyhound_bets += 1
+            else:  # otherwise, it's other sports
+                total_other_bets += 1
 
         if is_wageralert:
             wageralert_customer_reference = bet['customer_ref']
@@ -865,6 +896,11 @@ def create_daily_report(current_file=None):
             sms_clients.append(sms_customer_reference)
             total_sms += 1
 
+    total_sport_bets = total_horse_racing_bets + total_greyhound_bets + total_other_bets
+    percentage_horse_racing = (total_horse_racing_bets / total_sport_bets) * 100
+    percentage_greyhound = (total_greyhound_bets / total_sport_bets) * 100
+    percentage_other = (total_other_bets / total_sport_bets) * 100
+
     top_spenders = Counter(customer_payments).most_common(5)
     client_bet_counter = Counter(active_clients)
     top_client_bets = client_bet_counter.most_common(5)
@@ -886,6 +922,12 @@ def create_daily_report(current_file=None):
     report_output += f"Knockbacks: {total_wageralerts}"
     report_output += f"\n\tKnockback Percentage: {total_wageralerts / total_bets * 100:.2f}%"
     report_output += f"\n\tAverage Stake: £{total_stakes / total_bets:,.2f}\n"
+
+    # Add the sport bet percentages to the report
+    report_output += f"\nSport Type Percentages:\n"
+    report_output += f"\tHorse Racing: {percentage_horse_racing:.2f}%\n"
+    report_output += f"\tGreyhounds: {percentage_greyhound:.2f}%\n"
+    report_output += f"\tOther: {percentage_other:.2f}%"
 
     report_output += f"\n\nClients: {total_clients}  |  "
     report_output += f"No Risk: {total_norisk_clients}  |  "
@@ -1183,6 +1225,7 @@ def find_traders():
     selection_to_users = {}
     selection_to_odds = {}
     users_without_risk_category = set()
+    enhanced_bets_counter = {}
 
     for bet in data:
         wager_type = bet.get('type', '').lower()
@@ -1195,6 +1238,14 @@ def find_traders():
             for selection in details['selections']:
                 selection_name = selection[0]
                 odds = selection[1]
+
+                # Check if the selection is in the enhanced_places list
+                race_meeting = selection_name.split(' - ')[0]
+                if race_meeting in enhanced_places:
+                    if customer_reference not in enhanced_bets_counter:
+                        enhanced_bets_counter[customer_reference] = 0
+                    enhanced_bets_counter[customer_reference] += 1
+
 
                 if isinstance(odds, str):
                     if odds == 'SP':
@@ -1241,7 +1292,7 @@ def find_traders():
     
     users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
 
-    return users_without_risk_category, results
+    return users_without_risk_category, results, enhanced_bets_counter
 
 def find_rg_issues():
     data = get_database()
@@ -1541,9 +1592,11 @@ def update_rg_report():
     traders_report_ticket.config(state='disabled')
 
 def update_traders_report():
-    users_without_risk_category, oddsmonkey_traders = find_traders()
+    users_without_risk_category, oddsmonkey_traders, enhanced_bets_counter = find_traders()
+
     username_counts = Counter(trader['username'] for trader in oddsmonkey_traders)
     top_users = username_counts.most_common(6)
+    top_enhanced_users = {user for user, count in enhanced_bets_counter.items() if count > 3}
 
 
     users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
@@ -1556,6 +1609,10 @@ def update_traders_report():
     traders_report_ticket.insert(tk.END, "Clients backing selections shown on OddsMonkey above the lay price:\n")
     for user, count in top_users:
         traders_report_ticket.insert(tk.END, f"\t{user}, Count: {count}\n")
+
+    traders_report_ticket.insert(tk.END, "\nClients wagering frequently on Extra Place Races:\n\n")
+    for user in sorted(top_enhanced_users, key=enhanced_bets_counter.get, reverse=True):  # Sort by count
+        traders_report_ticket.insert(tk.END, f"\t{user}, Count: {enhanced_bets_counter[user]}\n")
 
     traders_report_ticket.insert(tk.END, "\nClients wagering on selections containing multiple risk users:\n\n")
     traders_report_ticket.insert(tk.END, users_without_risk_category_str)
@@ -1587,6 +1644,9 @@ def open_factoring_wizard():
     if not user:
         user_login()
 
+    progress = IntVar()
+    progress.set(0)
+
     def handle_submit():
         print("yes")
         if not entry1.get() or not entry3.get():
@@ -1606,8 +1666,13 @@ def open_factoring_wizard():
             'exact_match': 'true',
         }
 
+        progress.set(10)
+
+        factoring_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
+
         response = requests.get(pipedrive_api_url, params=params)
-        print(response.status_code)
+
+        progress.set(20)
 
         if response.status_code == 200:
             persons = response.json()['data']['items']
@@ -1631,23 +1696,61 @@ def open_factoring_wizard():
                     print(f'Error updating person {person_id}: {update_response.status_code}')
         else:
             print(f'Error: {response.status_code}')
+        
+        progress.set(30)
+
+        factoring_note.config(text="Factoring Applied on Pipedrive.\nReporting on Factoring Log...\n", anchor='center', justify='center')
 
         spreadsheet = gc.open('Factoring Diary')
         worksheet = spreadsheet.get_worksheet(4)
-        print(worksheet)
+        
+        progress.set(40)
+
+        factoring_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
 
         next_row = len(worksheet.col_values(1)) + 1
 
         current_time = datetime.now().strftime("%H:%M:%S")
+        current_date = datetime.now().strftime("%d/%m/%Y")
         entry2_value = entry2.get().split(' - ')[0]
-
-
+        
         worksheet.update_cell(next_row, 1, current_time)
+        progress.set(45)
         worksheet.update_cell(next_row, 2, entry1.get().upper())
+        progress.set(50)
         worksheet.update_cell(next_row, 3, entry2_value)
+        progress.set(55)
         worksheet.update_cell(next_row, 4, entry3.get())
+        progress.set(60)
         worksheet.update_cell(next_row, 5, user) 
+        progress.set(65)
+        worksheet.update_cell(next_row, 6, current_date)  # Column F
 
+        # Open the third worksheet
+        worksheet3 = spreadsheet.get_worksheet(3)
+        progress.set(70)
+
+        # Find all cells in column B that match the username
+        username = entry1.get().upper()
+        matching_cells = worksheet3.findall(username, in_column=2)
+
+        # If no matching cells were found, show an error message and return
+        if not matching_cells:
+            messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. Please make sure the username is correct.")
+            return
+        
+        factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
+
+        progress.set(75)
+        cell = matching_cells[0]
+        row = cell.row
+        worksheet3.update_cell(row, 9, entry2_value)  # Column I
+        progress.set(80)
+        worksheet3.update_cell(row, 10, entry3.get())  # Column J
+        progress.set(85)
+        worksheet3.update_cell(row, 12, current_date)  # Column L
+
+        factoring_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
 
         tree.insert("", "end", values=[current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
         
@@ -1658,15 +1761,20 @@ def open_factoring_wizard():
             'Assessment Rating': entry3.get(),
             'Staff': user
         }
+        
+        progress.set(100)
 
         # Write the data to a JSON file
         with open(f'logs/factoringlogs/factoring.json', 'a') as file:
             file.write(json.dumps(data) + '\n')
 
+        time.sleep(.5)
+
         wizard_window.destroy()
 
+
     wizard_window = tk.Toplevel(root)
-    wizard_window.geometry("270x300")
+    wizard_window.geometry("270x370")
     wizard_window.title("Add Factoring")
     wizard_window.iconbitmap('src/splash.ico')
 
@@ -1674,7 +1782,7 @@ def open_factoring_wizard():
     wizard_window.geometry(f"+{screen_width - 350}+50")
 
     wizard_window_frame = ttk.Frame(wizard_window, style='Card')
-    wizard_window_frame.place(x=5, y=5, width=260, height=290)
+    wizard_window_frame.place(x=5, y=5, width=260, height=360)
 
     username = ttk.Label(wizard_window_frame, text="Client Username")
     username.pack(padx=5, pady=5)
@@ -1694,13 +1802,15 @@ def open_factoring_wizard():
     entry3 = ttk.Entry(wizard_window_frame)
     entry3.pack(padx=5, pady=5)
 
-    factoring_note = ttk.Label(wizard_window_frame, text="Risk Category will be updated in Pipedrive.")
+    factoring_note = ttk.Label(wizard_window_frame, text="Risk Category will be updated in Pipedrive.\n\n", anchor='center', justify='center')
     factoring_note.pack(padx=5, pady=5)
-
-    wizard_window.bind('<Return>', lambda event=None: handle_submit())
 
     submit_button = ttk.Button(wizard_window_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
     submit_button.pack(padx=5, pady=5)
+
+    progress_bar = ttk.Progressbar(wizard_window_frame, length=200, mode='determinate', variable=progress)
+    progress_bar.pack(padx=5, pady=5)
+
 
 
 ####################################################################################
@@ -2061,9 +2171,11 @@ def report_freebet():
     global user
     if not user:
         user_login()
+    
+    progress = IntVar()
+    progress.set(0)
 
     def handle_submit():
-        print("yes")
         if not entry1.get() or not entry2.get() or not entry3.get():
             messagebox.showerror("Error", "Please make sure all fields are completed.")
             return 
@@ -2081,26 +2193,41 @@ def report_freebet():
             messagebox.showerror("Error", f"Spreadsheet '{spreadsheet_name}' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
             return
 
+        progress.set(20)
+
+
+        freebet_note.config(text=f"Found {spreadsheet_name}.\nFree bet for {entry1.get().upper()} being added.\n", anchor='center', justify='center')
+
         worksheet = spreadsheet.get_worksheet(5)
-        next_row = len(worksheet.col_values(1)) + 1
+        next_row = len(worksheet.col_values(2)) + 1
+
+        progress.set(50)
 
         current_date = datetime.now().strftime("%d/%m/%Y")  
         worksheet.update_cell(next_row, 2, current_date)
+        progress.set(60)
         worksheet.update_cell(next_row, 5, entry1.get().upper())
+        progress.set(70)
         worksheet.update_cell(next_row, 3, entry2.get().upper())
+        progress.set(80)
         worksheet.update_cell(next_row, 6, entry3.get())
+        progress.set(100)
+
+        freebet_note.config(text=f"Free bet for {entry1.get().upper()} added successfully.\n\n", anchor='center', justify='center')
+
+        time.sleep(.5)
 
         report_freebet_window.destroy()
 
     report_freebet_window = tk.Toplevel(root)
-    report_freebet_window.geometry("270x300")
+    report_freebet_window.geometry("270x370")
     report_freebet_window.title("Report a Free Bet")
     report_freebet_window.iconbitmap('src/splash.ico')
     screen_width = report_freebet_window.winfo_screenwidth()
     report_freebet_window.geometry(f"+{screen_width - 350}+50")
     
     report_freebet_frame = ttk.Frame(report_freebet_window, style='Card')
-    report_freebet_frame.place(x=5, y=5, width=260, height=290)
+    report_freebet_frame.place(x=5, y=5, width=260, height=360)
 
     username = ttk.Label(report_freebet_frame, text="Client Username")
     username.pack(padx=5, pady=5)
@@ -2120,13 +2247,14 @@ def report_freebet():
     entry3.pack(padx=5, pady=5)
 
 
-    freebet_note = ttk.Label(report_freebet_frame, text=f"Free bet will be added to reporting {current_month}.")
+    freebet_note = ttk.Label(report_freebet_frame, text=f"Free bet will be added to reporting {current_month}.\n\n", anchor='center', justify='center')
     freebet_note.pack(padx=5, pady=5)
 
-    report_freebet_window.bind('<Return>', lambda event=None: handle_submit())
-
-    submit_button = ttk.Button(report_freebet_frame, text="Submit", command=handle_submit, cursor="hand2")
+    submit_button = ttk.Button(report_freebet_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")    
     submit_button.pack(padx=5, pady=5)
+
+    progress_bar = ttk.Progressbar(report_freebet_frame, length=200, mode='determinate', variable=progress)
+    progress_bar.pack(padx=5, pady=5)
 
 
 
@@ -2281,6 +2409,7 @@ def get_data_periodic():
     threading.Thread(target=get_newreg_clients).start()
     threading.Thread(target=get_reporting_data).start()
     threading.Thread(target=get_oddsmonkey_selections).start()
+    threading.Thread(target=get_todays_oddsmonkey_selections).start()
 
     root.after(60000, get_data_periodic)  # Run every minute
 
@@ -2338,6 +2467,9 @@ if __name__ == "__main__":
     menu_bar.add_cascade(label="Options", menu=options_menu)
     menu_bar.add_command(label="Report Freebet", command=report_freebet, foreground="#000000", background="#ffffff")
     menu_bar.add_command(label="Add Factoring", command=open_factoring_wizard, foreground="#000000", background="#ffffff")
+    bored_menu = tk.Menu(menu_bar, tearoff=0)
+    bored_menu.add_command(label="Poke", foreground="#000000", background="#ffffff")
+    menu_bar.add_cascade(label="Bored", menu=bored_menu, foreground="#000000", background="#ffffff")
     help_menu = tk.Menu(menu_bar, tearoff=0)
     help_menu.add_command(label="How to use", command=howTo, foreground="#000000", background="#ffffff")
     help_menu.add_command(label="About", command=about, foreground="#000000", background="#ffffff")
@@ -2555,8 +2687,8 @@ if __name__ == "__main__":
 
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    get_courses()
-    user_login()
+    #get_courses()
+    #user_login()
     display_next_races()
     factoring_sheet_periodic()
     get_data_periodic()
