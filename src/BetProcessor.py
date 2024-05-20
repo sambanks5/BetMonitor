@@ -98,17 +98,17 @@ def parse_file(file_path, app):
         is_wageralert = 'knockback' in bet_text_lower
 
         if is_wageralert:
-            customer_ref, knockback_id, time, details = parse_wageralert_details(bet_text)
-            unique_knockback_id = f"{knockback_id}-{time}"
+            details = parse_wageralert_details(bet_text)
+            unique_knockback_id = f"{details['Knockback ID']}-{details['Time']}"
             bet_info = {
-                'time': time,
+                'time': details['Time'],
                 'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
-                'customer_ref': customer_ref,
+                'customer_ref': details['Customer Ref'],
                 'details': details,
             }
             print('Knockback Processed ' + unique_knockback_id)
-            app.log_message(f'Knockback Processed {unique_knockback_id}, {customer_ref}, {time}')
+            app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
             return bet_info
 
         elif is_sms:
@@ -229,7 +229,10 @@ def parse_bet_details(bet_text):
 ####################################################################################
 def parse_wageralert_details(content):
     customer_ref_pattern = r'Customer Ref: (\w+)'
-    details_pattern = r"Knockback Details:([\s\S]*?)\n\nCustomer's Bets Details:"
+    knockback_id_pattern = r'Knockback Details: (\d+)'
+    error_message_pattern = r'- Error Message: (.*)'
+    liability_exceeded_pattern = r'- Liability Exceeded: (True|False)'
+    max_stake_pattern = r'- Maximum stake available: (.*)'
     time_pattern = r'- Date: \d+ [A-Za-z]+ \d+\n - Time: (\d+:\d+:\d+)'
     bets_details_pattern = r"Customer's Bets Details:([\s\S]*?)\n\nCustomer's Wagers Details:"
     wagers_details_pattern = r"Customer's Wagers Details:([\s\S]*?)\n\nCustomer's services reference no:"
@@ -237,39 +240,60 @@ def parse_wageralert_details(content):
     customer_ref_match = re.search(customer_ref_pattern, content)
     customer_ref = customer_ref_match.group(1) if customer_ref_match else None
 
-    knockback_excluded_keys = ['- Wager Type', '- Liability Failure Code', '- Wager Number (if available)', '- Error Code']
-    knockback_id, knockback_details = extract_details(content, details_pattern, knockback_excluded_keys)
+    knockback_id_match = re.search(knockback_id_pattern, content)
+    knockback_id = knockback_id_match.group(1) if knockback_id_match else None
+
+    error_message_match = re.search(error_message_pattern, content)
+    error_message = error_message_match.group(1) if error_message_match else None
+
+    liability_exceeded_match = re.search(liability_exceeded_pattern, content)
+    liability_exceeded = liability_exceeded_match.group(1) if liability_exceeded_match else None
+
+    max_stake_match = re.search(max_stake_pattern, content)
+    max_stake = max_stake_match.group(1) if max_stake_match else None
+
+    if not error_message:
+        if liability_exceeded == 'True':
+            error_message = f'Liability Exceeded: {liability_exceeded}, Maximum stake available: {max_stake}'
+        else:
+            error_message = 'No error message provided'
 
     time_match = re.search(time_pattern, content)
     time = time_match.group(1) if time_match else None
 
-    bets_excluded_keys = ['- Event File', '- Event Group', '- Event Index', '- Selection Index']
-    _, bets_details = extract_details(content, bets_details_pattern, bets_excluded_keys)
+    bets_details = extract_details(content, bets_details_pattern)
 
-    wagers_excluded_keys = []
-    _, wagers_details = extract_details(content, wagers_details_pattern, wagers_excluded_keys)
+    wagers_details_match = re.search(wagers_details_pattern, content)
+    wagers_details = wagers_details_match.group(1).strip().split('\n') if wagers_details_match else None
+    wager_name = wagers_details[0].split(': ')[1] if wagers_details else None
+    total_stake = wagers_details[2].split(': ')[1] if wagers_details else None
 
-    details = {**knockback_details, **bets_details, **wagers_details}
-    details = {key.replace('-', '').strip(): value for key, value in details.items()}
+    return {
+        'Customer Ref': customer_ref,
+        'Knockback ID': knockback_id,
+        'Error Message': error_message,
+        'Time': time,
+        'Selections': bets_details,
+        'Wager Name': wager_name,
+        'Total Stake': total_stake
+    }
 
-    return customer_ref, knockback_id, time, details
-
-def extract_details(content, pattern, excluded_keys):
+def extract_details(content, pattern):
     match = re.search(pattern, content)
-    details = {}
-    knockback_id = None
+    selections = []
     if match:
-        content = match.group(1).strip().replace('\n', ' ')
-        lines = content.split('- ')
-        knockback_id = lines.pop(0)
-        for line in lines:
-            parts = line.split(':')
-            if len(parts) >= 2:
-                key = '- ' + parts[0].strip()
-                value = ':'.join(parts[1:]).strip()
-                if key not in excluded_keys:
-                    details[key] = value
-    return knockback_id, details
+        content = match.group(1).strip().split('\n\n')
+        for selection_content in content:
+            lines = selection_content.split('\n')
+            selection = {}
+            for key in ['- Meeting Name', '- Selection Name', '- Bet Price']:
+                selection[key] = None  # Initialize keys with None
+            for line in lines:
+                key, value = line.split(': ')
+                if key in ['- Meeting Name', '- Selection Name', '- Bet Price']:
+                    selection[key] = value
+            selections.append(selection)
+    return selections
 
 
 
@@ -1124,6 +1148,54 @@ def parse_paypal_email(html):
 
 
 
+####################################################################################
+## GET NEXT 3 RACES HORSE & GREYHOUND
+####################################################################################
+
+def run_fetch_next_3():
+    get_data_thread = threading.Thread(target=fetch_next_3)
+    get_data_thread.start()
+
+def fetch_next_3():
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
+
+    print("getting data")
+
+    # Send a GET request to the API endpoint
+    horse_response_UKIR = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h', headers=headers)
+    horse_response_ALL = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o', headers=headers)
+    greyhound_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g', headers=headers)
+
+    print("data got")
+
+    # Check if the responses are not empty and have a status code of 200 (OK)
+    if horse_response_UKIR.text and horse_response_UKIR.status_code == 200 and horse_response_ALL.text and horse_response_ALL.status_code == 200 and greyhound_response.text and greyhound_response.status_code == 200:
+        print("data is good")
+        # Parse the JSON responses
+        horse_data_UKIR = horse_response_UKIR.json()
+        horse_data_ALL = horse_response_ALL.json()
+        greyhound_data = greyhound_response.json()
+
+        #write data to next3.json
+        with open('src/next3.json', 'r+') as f:
+            if f.read():
+                f.seek(0)
+                data = json.load(f)
+            else:
+                data = {}
+
+            data['horse_data_UKIR'] = horse_data_UKIR
+            data['horse_data_ALL'] = horse_data_ALL
+            data['greyhound_data'] = greyhound_data
+            f.seek(0)
+            json.dump(data, f, indent=4)
+            f.truncate()
+            
+    print(threading.active_count())
+
+
 
 ####################################################################################
 ## WRITE API DATA TO DATA.JSON
@@ -1138,17 +1210,11 @@ def update_data_file(app):
 
             # Update data
             data['vip_clients'] = get_vip_clients(app)
-            print("vip clients")
             data['new_registrations'] = get_new_registrations(app)
-            print("new registrations")
             data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'], data['enhanced_places'] = get_reporting_data(app)
-            print("reporting data")
             data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
-            print("oddsmonkey selections")
             data['closures'] = get_closures(app)
-            print("closures")
             data['deposits_summary'] = calculate_deposit_summary()
-            print("deposits summary")
 
             # Write updated data back to file
             with open('src/data.json', 'w') as f:
@@ -1286,25 +1352,6 @@ class FileHandler(FileSystemEventHandler):
         else: 
             print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
 
-# def remove_duplicates_and_misplaced():
-#     filenames = ['logs/depositlogs/deposits_2024-04-23.json', 'logs/depositlogs/deposits_2024-04-24.json']
-#     all_deposits = []
-#     unique_ids = set()
-
-#     for filename in filenames:
-#         with open(filename, 'r') as f:
-#             deposits = json.load(f)
-#             for deposit in deposits:
-#                 deposit_date = datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date()
-#                 file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
-#                 if deposit['ID'] not in unique_ids and deposit_date == file_date:
-#                     unique_ids.add(deposit['ID'])
-#                     all_deposits.append(deposit)
-
-#     for filename in filenames:
-#         with open(filename, 'w') as f:
-#             file_date = datetime.strptime(filename.split('_')[-1].split('.')[0], '%Y-%m-%d').date()
-#             json.dump([deposit for deposit in all_deposits if datetime.strptime(deposit['Time'], '%Y-%m-%d %H:%M:%S').date() == file_date], f, indent=4)
 
 
 ####################################################################################
@@ -1323,7 +1370,9 @@ def main(app):
     run_update_racecards()
     run_update_todays_oddsmonkey_selections()
     run_get_deposit_data(app)
+    run_fetch_next_3()
 
+    schedule.every(1).minutes.do(run_fetch_next_3)
     schedule.every(2).minutes.do(run_get_data, app)
     schedule.every(10).minutes.do(run_get_deposit_data, app)
     schedule.every(6).hours.do(run_update_racecards)

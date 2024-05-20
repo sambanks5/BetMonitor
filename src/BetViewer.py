@@ -4,7 +4,7 @@
 
 ## FORMAT AND DISPLAY INCOMING BETS, FIND RUNS ON SELECTIONS, TRACK RACE UPDATION,
 ## DISPLAY NEXT 3 HORSE & GREYHOUND RACES, CREATE DAILY, CLIENT, STAFF REPORTS,
-## SCREEN FOR RISK CLIENTS, OTHER VARLIOS QOL IMPROVEMENTS
+## SCREEN FOR RISK CLIENTS, OTHER VARIOUS QOL IMPROVEMENTS
 ####################################################################################
 
 
@@ -19,9 +19,12 @@ import random
 import gspread
 import datetime
 import time
+from queue import Queue
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar
 from dateutil.relativedelta import relativedelta
 from google.oauth2.credentials import Credentials
@@ -42,6 +45,7 @@ from PIL import Image, ImageTk
 ####################################################################################
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
+POKES_FILE = 'pokes.json'
 current_file = None
 selection_bets = {}
 oddsmonkey_selections = {}
@@ -57,8 +61,8 @@ courses_per_page = 6
 blacklist = set()
 closures_current_page = 0
 requests_per_page = 8
-
-
+next_off_horse_race = None
+expected_off_time = None
 
 ####################################################################################
 ## INITIALISE STAFF NAMES AND CREDENTIALS
@@ -277,7 +281,17 @@ def bet_feed(data=None):
             knockback_id = knockback_id.rsplit('-', 1)[0]
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
-            formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items()])
+
+            formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
+            formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for i, selection in enumerate(knockback_details.get('Selections', []))])
+            formatted_knockback_details += '\n   ' + formatted_selections
+
+            error_message = knockback_details.get('Error Message', '')
+            if 'Maximum stake available' in error_message:
+                error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
+
+            formatted_knockback_details = f"Error Message: {error_message}\n   {formatted_knockback_details}"
+
             if customer_ref in vip_clients:
                 tag = "vip"
             elif customer_ref in newreg_clients:
@@ -456,49 +470,64 @@ def bet_runs(data):
 ####################################################################################
 ## DISPLAY NEXT 3 HORSE & GREYHOUND RACES
 ####################################################################################
-def display_next_races():
-    horse_racecards, greyhound_racecards = get_racecards()
+def run_display_next_3():
+    threading.Thread(target=display_next_3).start()
+    print(threading.active_count())
+    root.after(10000, run_display_next_3)
 
-    now = datetime.now()  
+def display_next_3():
+    global next_off_horse_race
+    global expected_off_time
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
 
-    # Separate horse races into upcoming and just started
-    upcoming_horse_races = [race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() > now.time()]
-    just_started_horse_races = [race for race in horse_racecards if datetime.strptime(race['time'], '%H:%M').time() <= now.time() and datetime.strptime(race['time'], '%H:%M').time() > (now - timedelta(minutes=5)).time()]
+    horse_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o', headers=headers)
+    greyhound_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g', headers=headers)
 
-    # Sort the races
-    upcoming_horse_races = sorted(upcoming_horse_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
-    just_started_horse_races = sorted(just_started_horse_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time(), reverse=True)
+    print(horse_response.status_code, horse_response.reason, greyhound_response.status_code, greyhound_response.reason)
 
-    # Sort the greyhound races and get the next 3
-    upcoming_greyhound_races = [race for race in greyhound_racecards if datetime.strptime(race['time'], '%H:%M').time() > now.time()]
-    greyhound_racecards = sorted(upcoming_greyhound_races, key=lambda x: datetime.strptime(x['time'], '%H:%M').time())
+    # Check if the responses are not empty and have a status code of 200 (OK)
+    if horse_response.status_code == 200 and greyhound_response.status_code == 200:
 
-    # Get the next 3 races, prioritizing just started races
-    next_horse_races = just_started_horse_races + upcoming_horse_races[:max(0, 4-len(just_started_horse_races))]
+        horse_data = horse_response.json()
+        greyhound_data = greyhound_response.json()
+            
+        # Display the horse data
+        for i, event in enumerate(horse_data[:3]):
+            meeting_name = event.get('meetingName', '')
+            status = event.get('status', '')
+            hour = str(event.get('hour', ''))
+            minute = str(event.get('minute', '')).zfill(2)  # Pad the minute with a leading zero if it's a single digit
+            time = f"{hour}:{minute}"
+            if not status:
+                status = '-'
+            
+            race = f"{meeting_name}, {time}"
 
-    next_greyhound_races = greyhound_racecards[:3]
+            if race in enhanced_places:
+                horse_labels[i].config(foreground='#ff00e6')
+            else:
+                horse_labels[i].config(foreground='black')
 
-    for widget in next_races_frame.winfo_children():
-        widget.destroy()
+            # Create a label for each meeting and place it in the grid
+            horse_labels[i].config(text=f"{race}\n{status}")
 
-    horse_frame = Frame(next_races_frame)
-    horse_frame.pack(side='left', padx=5)
+        # Display the greyhound data
+        for i, event in enumerate(greyhound_data[:3]):
+            meeting_name = event.get('meetingName', '')
+            status = event.get('status', '')
+            hour = str(event.get('hour', ''))
+            minute = str(event.get('minute', '')).zfill(2)
+            time = f"{hour}:{minute}"
+            if not status:
+                status = '-'
 
-    for i, race in enumerate(next_horse_races):
-        # If the race has just started, display it in purple
-        if race in just_started_horse_races:
-            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 10, "bold"), foreground='purple').pack(side='left', padx=11)
-        else:
-            ttk.Label(horse_frame, text=f"{race['course']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
+            greyhound_labels[i].config(text=f"{meeting_name}, {time}\n{status}")
     
-    greyhound_frame = Frame(next_races_frame)
-    greyhound_frame.pack(side='right', padx=5)
-
-    for i, race in enumerate(next_greyhound_races):
-        Label(greyhound_frame, text=f"{race['track']} - {race['time']}", font=("Helvetica", 9, "bold")).pack(side='left', padx=11)
-
-    root.after(60000, display_next_races)
-
+    else:
+        print("Error: The response from the API is not OK.")
+        return
 
 
 ####################################################################################
@@ -1648,6 +1677,9 @@ def open_factoring_wizard():
     progress.set(0)
 
     def handle_submit():
+        current_time = datetime.now().strftime("%H:%M:%S")
+        current_date = datetime.now().strftime("%d/%m/%Y")
+
         print("yes")
         if not entry1.get() or not entry3.get():
             messagebox.showerror("Error", "Please make sure all fields are completed.")
@@ -1665,6 +1697,20 @@ def open_factoring_wizard():
             'fields': 'custom_fields',
             'exact_match': 'true',
         }
+
+        if entry2.get() == "W - WATCHLIST":
+            copy_string = f"{current_date} - ADDED TO W {user}"
+        elif entry2.get() == "M - BP ONLY NO OFFERS":
+            copy_string = f"{current_date} - BP ONLY NO OFFERS {user}"
+        elif entry2.get() == "X - SP ONLY NO OFFERS":
+            copy_string = f"{current_date} - SP ONLY NO OFFERS {user}"
+        elif entry2.get() == "S - SP ONLY":
+            copy_string = f"{current_date} - SP ONLY {user}"
+        elif entry2.get() == "D - BP ONLY":
+            copy_string = f"{current_date} - BP ONLY {user}"
+        elif entry2.get() == "O - NO OFFERS":
+            copy_string = f"{current_date} - NO OFFERS {user}"
+        pyperclip.copy(copy_string)
 
         progress.set(10)
 
@@ -1710,8 +1756,6 @@ def open_factoring_wizard():
 
         next_row = len(worksheet.col_values(1)) + 1
 
-        current_time = datetime.now().strftime("%H:%M:%S")
-        current_date = datetime.now().strftime("%d/%m/%Y")
         entry2_value = entry2.get().split(' - ')[0]
         
         worksheet.update_cell(next_row, 1, current_time)
@@ -2344,8 +2388,8 @@ def open_settings():
     separator = ttk.Separator(options_frame, orient='horizontal')
     separator.place(x=10, y=290, width=270)
 
-    show_reporting_data = ttk.Checkbutton(options_frame, text='Display Reporting Data in Feed', variable=show_reporting_data_state, onvalue=True, offvalue=False, cursor="hand2")
-    show_reporting_data.place(x=60, y=320)
+    # show_reporting_data = ttk.Checkbutton(options_frame, text='Display Reporting Data in Feed', variable=show_reporting_data_state, onvalue=True, offvalue=False, cursor="hand2")
+    # show_reporting_data.place(x=40, y=320)
 
     if current_file is not None:
         databases_combobox.set(current_file)
@@ -2467,9 +2511,9 @@ if __name__ == "__main__":
     menu_bar.add_cascade(label="Options", menu=options_menu)
     menu_bar.add_command(label="Report Freebet", command=report_freebet, foreground="#000000", background="#ffffff")
     menu_bar.add_command(label="Add Factoring", command=open_factoring_wizard, foreground="#000000", background="#ffffff")
-    bored_menu = tk.Menu(menu_bar, tearoff=0)
-    bored_menu.add_command(label="Poke", foreground="#000000", background="#ffffff")
-    menu_bar.add_cascade(label="Bored", menu=bored_menu, foreground="#000000", background="#ffffff")
+    # bored_menu = tk.Menu(menu_bar, tearoff=0)
+    # bored_menu.add_command(label="Poke", command=open_poke_window, foreground="#000000", background="#ffffff")
+    # menu_bar.add_cascade(label="Bored", menu=bored_menu, foreground="#000000", background="#ffffff")
     help_menu = tk.Menu(menu_bar, tearoff=0)
     help_menu.add_command(label="How to use", command=howTo, foreground="#000000", background="#ffffff")
     help_menu.add_command(label="About", command=about, foreground="#000000", background="#ffffff")
@@ -2506,6 +2550,9 @@ if __name__ == "__main__":
 
     archive_email_bool = tk.BooleanVar()
     archive_email_bool.set(False)  # Set the initial state to True
+
+    all_var = tk.IntVar(value=1)
+    uk_ir_var = tk.IntVar(value=0)
 
 
     ### BET FEED
@@ -2682,16 +2729,34 @@ if __name__ == "__main__":
     login_label = ttk.Label(settings_frame, text='')
     login_label.place(relx=0.18, rely=0.85)
 
-    next_races_frame = ttk.Frame(root, style='Card')
+    next_races_frame = ttk.Frame(root)
     next_races_frame.place(relx=0.012, rely=0.95, relwidth=0.975, relheight=0.047)
 
+    horses_frame = ttk.Frame(next_races_frame, style='Card')
+    horses_frame.place(relx=0, rely=0.05, relwidth=0.5, relheight=0.9)
+
+    greyhounds_frame = ttk.Frame(next_races_frame, style='Card')
+    greyhounds_frame.place(relx=0.51, rely=0.05, relwidth=0.49, relheight=0.9)
+
+    # Create the labels for the horse data
+    horse_labels = [ttk.Label(horses_frame, justify='center', font=("Helvetica", 9, "bold")) for _ in range(3)]
+    for i, label in enumerate(horse_labels):
+        label.grid(row=0, column=i, padx=0, pady=5)
+        horses_frame.columnconfigure(i, weight=1)
+
+    # Create the labels for the greyhound data
+    greyhound_labels = [ttk.Label(greyhounds_frame, justify='center', font=("Helvetica", 9, "bold")) for _ in range(3)]
+    for i, label in enumerate(greyhound_labels):
+        label.grid(row=1, column=i, padx=0, pady=5)
+        greyhounds_frame.columnconfigure(i, weight=1)
 
     ### STARTUP FUNCTIONS (COMMENT OUT FOR TESTING AS TO NOT MAKE UNNECESSARY REQUESTS)
-    #get_courses()
-    #user_login()
-    display_next_races()
+    get_courses()
+    user_login()
     factoring_sheet_periodic()
     get_data_periodic()
+    run_display_next_3()
+
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
