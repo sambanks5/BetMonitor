@@ -13,13 +13,13 @@ import os
 import re
 import threading
 import pyperclip
+import fasteners
 import json
 import requests
 import random
 import gspread
 import datetime
 import time
-from queue import Queue
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
@@ -45,7 +45,6 @@ from PIL import Image, ImageTk
 ####################################################################################
 DEFAULT_NUM_RECENT_FILES = 50
 DEFAULT_NUM_BETS_TO_RUN = 3
-POKES_FILE = 'pokes.json'
 current_file = None
 selection_bets = {}
 oddsmonkey_selections = {}
@@ -61,8 +60,7 @@ courses_per_page = 6
 blacklist = set()
 closures_current_page = 0
 requests_per_page = 8
-next_off_horse_race = None
-expected_off_time = None
+last_notification = None
 
 ####################################################################################
 ## INITIALISE STAFF NAMES AND CREDENTIALS
@@ -96,6 +94,7 @@ gc = gspread.authorize(credentials)
 ####################################################################################
 ## GET DATA FROM DATA.JSON
 ####################################################################################
+
 def get_newreg_clients():
     # Get New Registrations from pipedrive API
     global newreg_clients
@@ -130,14 +129,6 @@ def get_reporting_data():
 
     return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, enhanced_places
 
-def get_racecards():
-    with open('src/data.json') as f:
-        racecards = json.load(f)
-        greyhound_racecards = racecards.get('greyhound_racecards', [])
-        horse_racecards = racecards.get('horse_racecards', [])
-
-    return horse_racecards, greyhound_racecards
-
 def get_oddsmonkey_selections():
     global oddsmonkey_selections
     with open('src/data.json') as f:
@@ -154,14 +145,6 @@ def get_todays_oddsmonkey_selections():
 
     return todays_oddsmonkey_selections
 
-####################################################################################
-## DISPLAY MESSAGE IN FEED IF ERROR
-####################################################################################
-def update_feed_text(message):
-    feed_text.config(state="normal")
-    feed_text.insert('end', message)
-    feed_text.config(state="disabled")
-
 
 
 ####################################################################################
@@ -171,7 +154,6 @@ def refresh_display():
     global current_file
     try:
         current_file = datetime.now().strftime('%Y-%m-%d') + '-wager_database.json'
-        print(f"Refreshing display with file: {current_file}")
         start_bet_feed(current_file)
         display_courses()
     except Exception as e:
@@ -203,7 +185,7 @@ def get_database(date_str=None):
             return data
         except FileNotFoundError:
             error_message = f"No bet data available for {date_str}. \nIf this is wrong, click 'Reprocess' on Bet Processor\n\n"
-            feed_text.after(0, update_feed_text, error_message)
+            # feed_text.after(0, update_feed_text, error_message)
             return []
         except json.JSONDecodeError:
             if attempt < max_retries - 1:
@@ -225,7 +207,7 @@ def get_database(date_str=None):
 ## FORMAT AND DISPLAY BETS, DISPLAY 'RISK' BETS
 ####################################################################################
 def start_bet_feed(current_file=None):
-    logo_label.unbind("<Button-1>")
+    # logo_label.unbind("<Button-1>")
 
     data = get_database(current_file) if current_file else None
     bet_thread = threading.Thread(target=bet_feed, args=(data,))
@@ -234,13 +216,14 @@ def start_bet_feed(current_file=None):
 
 def bet_feed(data=None):
     global vip_clients, newreg_clients
-
-    bet_runs_thread = threading.Thread(target=bet_runs, args=(data,))
-    bet_runs_thread.start()
-
     with bet_feed_lock:
         if data is None:
             data = get_database()
+
+    bet_runs_thread = threading.Thread(target=bet_runs, args=(data,))
+    bet_runs_thread.start()
+    display_activity_data_thread = threading.Thread(target=display_activity_data, args=(data,))
+    display_activity_data_thread.start()
 
     risk_bets = ""
     separator = '\n-------------------------------------------------------------------------------------\n'
@@ -251,6 +234,7 @@ def bet_feed(data=None):
         feed_text.tag_configure("vip", foreground="#009685")
         feed_text.tag_configure("sms", foreground="orange")
         feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
+        feed_text.tag_configure("notices", font=("Helvetica", 11, "bold"))
     else:
         feed_text.tag_configure("risk", foreground="black")
         feed_text.tag_configure("newreg", foreground="black")
@@ -260,19 +244,6 @@ def bet_feed(data=None):
     feed_text.config(state="normal")
     feed_text.delete('1.0', tk.END)
 
-    if show_reporting_data_state.get():
-        turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, _ = get_reporting_data()
-
-        total_bets = sum(1 for bet in data if bet.get('type', '').lower() == 'bet')
-        total_knockbacks = sum(1 for bet in data if bet.get('type', '').lower() == 'wager knockback')
-        percentage = total_knockbacks / total_bets * 100 if total_bets else 0
-
-        activity_summary_text.tag_configure("activity", foreground="#510094", font=("Helvetica", 9, "bold"), justify="center")
-        activity_summary_text.config(state="normal")
-        activity_summary_text.delete('1.0', tk.END)
-        activity_summary_text.insert('1.0', f"Bets: {total_bets}  |  Knockbacks: {total_knockbacks}  -  {percentage:.2f}%\nTurnover: {turnover}  |  Profit: {profit}  -  {profit_percentage}\nDeposits: {total_deposits}   |   Amount: {total_sum}   |   Average: {avg_deposit}", "activity")
-        activity_summary_text.config(state="disabled")
-
     for bet in data:
         wager_type = bet.get('type', '').lower()
         if wager_type == 'wager knockback':
@@ -281,17 +252,13 @@ def bet_feed(data=None):
             knockback_id = knockback_id.rsplit('-', 1)[0]
             knockback_details = bet.get('details', {})
             time = bet.get('time', '') 
-
             formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
             formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for i, selection in enumerate(knockback_details.get('Selections', []))])
             formatted_knockback_details += '\n   ' + formatted_selections
-
             error_message = knockback_details.get('Error Message', '')
             if 'Maximum stake available' in error_message:
                 error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
-
             formatted_knockback_details = f"Error Message: {error_message}\n   {formatted_knockback_details}"
-
             if customer_ref in vip_clients:
                 tag = "vip"
             elif customer_ref in newreg_clients:
@@ -323,34 +290,23 @@ def bet_feed(data=None):
             
             if customer_risk_category and customer_risk_category != '-':
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "risk")
                 risk_bets += f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}" + separator
-
                 if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
-
             elif customer_reference in vip_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "vip")
-
                 if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
-
             elif customer_reference in newreg_clients:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", "newreg")
-
                 if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
-
             else:
                 selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-
                 feed_text.insert('end', f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}")
-                
                 if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() and (sel[1] == 'SP' or (sel[1] == 'evs' and float(om_sel[1][1]) < 2.0) or (sel[1] != 'evs' and float(sel[1]) > float(om_sel[1][1]))) for sel in parsed_selections for om_sel in oddsmonkey_selections.items()):                    
                     feed_text.insert('end', f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
                      
@@ -363,8 +319,21 @@ def bet_feed(data=None):
     bets_with_risk_text.insert('1.0', risk_bets)
     bets_with_risk_text.config(state="disabled")
 
-    logo_label.bind("<Button-1>", lambda e: start_bet_feed())
+    # logo_label.bind("<Button-1>", lambda e: refresh_display())
     
+def display_activity_data(data):
+    turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, _ = get_reporting_data()
+
+    total_bets = sum(1 for bet in data if bet.get('type', '').lower() == 'bet')
+    total_knockbacks = sum(1 for bet in data if bet.get('type', '').lower() == 'wager knockback')
+    percentage = total_knockbacks / total_bets * 100 if total_bets else 0
+
+    activity_summary_text.tag_configure("activity", font=("Helvetica", 10, "bold"), justify="center")
+    activity_summary_text.config(state="normal")
+    activity_summary_text.delete('1.0', tk.END)
+    activity_summary_text.insert('1.0', f"Bets: {total_bets} | Knockbacks: {total_knockbacks}  -  {percentage:.2f}%\nTurnover: {turnover} | Profit: {profit}  -  {profit_percentage}\nDeposits: {total_deposits} | Amount: {total_sum} | Average: {avg_deposit}", "activity")
+    activity_summary_text.config(state="disabled")
+
 
 
 ####################################################################################
@@ -400,17 +369,14 @@ def bet_runs(data):
 
     sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
 
-    runs_text.tag_config("risk", foreground="#8f0000")
-    runs_text.tag_config("vip", foreground="#009685")
-    runs_text.tag_config("newreg", foreground="purple")
-
+    runs_text.tag_configure("risk", foreground="#8f0000")
+    runs_text.tag_configure("vip", foreground="#009685")
+    runs_text.tag_configure("newreg", foreground="purple")
     runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
-
     runs_text.config(state="normal")
     runs_text.delete('1.0', tk.END)
 
     for selection, bet_numbers in sorted_selections:
-
         skip_selection = False
         if runs_remove_off_races.get(): 
             race_time_str = selection.split(", ")[1] if ", " in selection else None
@@ -472,12 +438,46 @@ def bet_runs(data):
 ####################################################################################
 def run_display_next_3():
     threading.Thread(target=display_next_3).start()
-    print(threading.active_count())
     root.after(10000, run_display_next_3)
 
+def process_data(data, labels_type):
+    global enhanced_places
+    global horse_labels
+    global greyhound_labels
+    
+    labels = horse_labels if labels_type == 'horse' else greyhound_labels
+
+    for i, event in enumerate(data[:3]):
+        meeting_name = event.get('meetingName', '')
+        status = event.get('status', '')
+        hour = str(event.get('hour', ''))
+        ptype = event.get('pType', '')
+        minute = str(event.get('minute', '')).zfill(2) 
+        time = f"{hour}:{minute}"
+        if not status:
+            status = '-'
+        
+        ## Map ptype to a more readable format
+        if ptype == 'Board Price':
+            ptype = 'BP'
+        elif ptype == 'Early Price':
+            ptype = 'EP'
+        elif ptype == 'S.P. Only':
+            ptype = 'SP'
+        else:
+            ptype = '-'
+
+        race = f"{meeting_name}, {time}"
+
+        if race in enhanced_places:
+            labels[i].config(foreground='#ff00e6')
+        else:
+            labels[i].config(foreground='black')
+
+        # Create a label for each meeting and place it in the grid
+        labels[i].config(text=f"{race} ({ptype})\n{status}")
+
 def display_next_3():
-    global next_off_horse_race
-    global expected_off_time
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
     }
@@ -485,49 +485,20 @@ def display_next_3():
     horse_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o', headers=headers)
     greyhound_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g', headers=headers)
 
-    print(horse_response.status_code, horse_response.reason, greyhound_response.status_code, greyhound_response.reason)
-
     # Check if the responses are not empty and have a status code of 200 (OK)
     if horse_response.status_code == 200 and greyhound_response.status_code == 200:
 
         horse_data = horse_response.json()
         greyhound_data = greyhound_response.json()
-            
-        # Display the horse data
-        for i, event in enumerate(horse_data[:3]):
-            meeting_name = event.get('meetingName', '')
-            status = event.get('status', '')
-            hour = str(event.get('hour', ''))
-            minute = str(event.get('minute', '')).zfill(2)  # Pad the minute with a leading zero if it's a single digit
-            time = f"{hour}:{minute}"
-            if not status:
-                status = '-'
-            
-            race = f"{meeting_name}, {time}"
 
-            if race in enhanced_places:
-                horse_labels[i].config(foreground='#ff00e6')
-            else:
-                horse_labels[i].config(foreground='black')
+        # Process the horse and greyhound data
+        process_data(horse_data, 'horse')
+        process_data(greyhound_data, 'greyhound')    
 
-            # Create a label for each meeting and place it in the grid
-            horse_labels[i].config(text=f"{race}\n{status}")
-
-        # Display the greyhound data
-        for i, event in enumerate(greyhound_data[:3]):
-            meeting_name = event.get('meetingName', '')
-            status = event.get('status', '')
-            hour = str(event.get('hour', ''))
-            minute = str(event.get('minute', '')).zfill(2)
-            time = f"{hour}:{minute}"
-            if not status:
-                status = '-'
-
-            greyhound_labels[i].config(text=f"{meeting_name}, {time}\n{status}")
-    
     else:
         print("Error: The response from the API is not OK.")
         return
+
 
 
 ####################################################################################
@@ -621,18 +592,25 @@ def display_courses():
     end = start + courses_per_page
     courses_page = courses[start:end]
 
-    add_button = ttk.Button(race_updation_frame, text="+", command=add_course, width=2, cursor="hand2")
-    add_button.grid(row=len(courses_page), column=0, padx=2, pady=2) 
+    button_frame = ttk.Frame(race_updation_frame)
+    button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
+
+    # Create the add button and align it to the left of the Frame
+    add_button = ttk.Button(button_frame, text="+", command=add_course, width=2, cursor="hand2")
+    add_button.pack(side='left')
+
+    # Add an indicator in the middle
+    update_indicator = ttk.Label(button_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
+    update_indicator.pack(side='left', padx=2, pady=2, expand=True)
+
+    # Create the remove button and align it to the right of the Frame
+    remove_button = ttk.Button(button_frame, text="-", command=remove_course, width=2, cursor="hand2")
+    remove_button.pack(side='right')
 
     for i, course in enumerate(courses_page):
-        course_label = ttk.Label(race_updation_frame, text=course, width=15)
-        course_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")
-
-        remove_button = ttk.Button(race_updation_frame, text="X", command=lambda course=course: remove_course(course), width=2, cursor="hand2")
-        remove_button.grid(row=i, column=1, padx=3, pady=2)
-
-        course_button = ttk.Button(race_updation_frame, text="✔", command=lambda course=course: update_course(course), width=2, cursor="hand2")
-        course_button.grid(row=i, column=2, padx=3, pady=2)
+        # Replace the course label with a button
+        course_button = ttk.Button(race_updation_frame, text=course, command=lambda course=course: update_course(course), width=15, cursor="hand2")
+        course_button.grid(row=i, column=0, padx=5, pady=2, sticky="w")
 
         if course in data['courses'] and data['courses'][course]:
             last_updated_time = data['courses'][course].split(' ')[0]
@@ -665,34 +643,64 @@ def display_courses():
             time_text = "Not updated"
 
         time_label = ttk.Label(race_updation_frame, text=time_text, foreground=color)
-        time_label.grid(row=i, column=3, padx=5, pady=2, sticky="w")
+        time_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
 
-    back_button = ttk.Button(race_updation_frame, text="<", command=back, width=2, cursor="hand2")
-    back_button.grid(row=len(courses_page), column=1, padx=2, pady=2)
+    navigation_frame = ttk.Frame(race_updation_frame)
+    navigation_frame.grid(row=len(courses_page), column=1, padx=2, pady=2, sticky='ew')
 
-    forward_button = ttk.Button(race_updation_frame, text=">", command=forward, width=2, cursor="hand2")
-    forward_button.grid(row=len(courses_page), column=2, padx=2, pady=2)
+    back_button = ttk.Button(navigation_frame, text="<", command=back, width=2, cursor="hand2")
+    back_button.grid(row=0, column=0, padx=2, pady=2)
 
-    # Add an indicator at the bottom
-    update_indicator = ttk.Label(race_updation_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
-    update_indicator.grid(row=len(courses_page), column=3)
+    forward_button = ttk.Button(navigation_frame, text=">", command=forward, width=2, cursor="hand2")
+    forward_button.grid(row=0, column=1, padx=2, pady=2)
 
     # Check if any course on other pages needs updating
     other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
     if any(course_needs_update(course, data) for course in other_courses):
-        update_indicator.grid()
+        update_indicator.pack()
     else:
-        update_indicator.grid_remove()
+        update_indicator.pack_forget()
 
     if current_page == 0:
-        back_button.grid_remove()
+        back_button.config(state='disabled')
     else:
-        back_button.grid()
+        back_button.config(state='normal')
 
     if current_page == len(courses) // courses_per_page:
-        forward_button.grid_remove()
+        forward_button.config(state='disabled')
     else:
-        forward_button.grid()
+        forward_button.config(state='normal')
+
+def remove_course():
+    # Open a dialog box to get the course name
+    course = simpledialog.askstring("Remove Course", "Enter the course name:")
+    
+    with open('update_times.json', 'r') as f:
+        data = json.load(f)
+    if course in data['courses']:
+        del data['courses'][course]
+
+    with open('update_times.json', 'w') as f:
+        json.dump(data, f)
+
+    log_notification(f"'{course}' removed by {user}")
+
+    display_courses()
+
+def add_course():
+    course_name = simpledialog.askstring("Add Course", "Enter the course name:")
+    if course_name:
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+
+        data['courses'][course_name] = ""
+
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+        log_notification(f"'{course_name}' added by {user}")
+
+        display_courses()
 
 def back():
     global current_page
@@ -708,31 +716,6 @@ def forward():
     if (current_page + 1) * courses_per_page < total_courses:
         current_page += 1
         display_courses()
-
-def add_course():
-    course_name = simpledialog.askstring("Add Course", "Enter the course name:")
-    if course_name:
-        with open('update_times.json', 'r') as f:
-            data = json.load(f)
-
-        data['courses'][course_name] = ""
-
-        with open('update_times.json', 'w') as f:
-            json.dump(data, f)
-
-        display_courses()
-
-def remove_course(course):
-    with open('update_times.json', 'r') as f:
-        data = json.load(f)
-
-    if course in data['courses']:
-        del data['courses'][course]
-
-    with open('update_times.json', 'w') as f:
-        json.dump(data, f)
-
-    display_courses()
 
 def update_course(course):
     global user
@@ -752,8 +735,6 @@ def update_course(course):
         json.dump(data, f)
 
     log_update(course, time_string, user)
-
-
     display_courses()
 
 def log_update(course, time, user):
@@ -780,6 +761,9 @@ def log_update(course, time, user):
     else:
         data.append(f"\n{course}:\n")
         data.append(update)
+
+    log_message = f"{user} updated {course}"
+    log_notification(log_message)
 
     with open(log_file, 'w') as f:
         f.writelines(data)
@@ -882,7 +866,8 @@ def create_daily_report(current_file=None):
             total_bets += 1
             
             selection_name = bet['details']['selections'][0][0]
-            if re.search(r'\d{2}:\d{2}', selection_name):  # if the selection name contains a time, it's horse racing
+
+            if re.search(r'\d{2}:\d{2}', selection_name) and 'trap' not in selection_name:  # if the selection name contains a time, it's horse racing
                 total_horse_racing_bets += 1
             elif 'trap' in selection_name.lower():  # if the selection name contains 'trap', it's greyhounds
                 total_greyhound_bets += 1
@@ -894,26 +879,28 @@ def create_daily_report(current_file=None):
             knockback_details = bet['details']
             is_alert = False
             for key, value in knockback_details.items():
-                if 'Price Has Changed' in key or 'Price Has Changed' in value:
-                    price_change += 1
-                    is_alert = True
-                elif 'Liability Exceeded' in key and 'True' in value:
-                    liability_exceeded += 1
-                    is_alert = True
-                elif 'Event Has Ended' in key or 'Event Has Ended' in value:
-                    event_ended += 1
-                    is_alert = True
-                elif 'Error Source' in key and 'User Restrictions' in value:
-                    user_restriction += 1
-                elif 'Error Message' in key and 'Price Type Disallowed' in value:
-                    price_type_disallowed += 1
-                    is_alert = True
-                elif 'Error Message' in key and 'Sport Disallowed' in value:
-                    sport_disallowed += 1
-                    is_alert = True
-                elif 'Error Message' in key and 'User Max Stake Exceeded' in value:
-                    max_stake_exceeded += 1
-                    is_alert = True
+                if key == 'Error Message':
+                    if 'Price Has Changed' in value:
+                        price_change += 1
+                        is_alert = True
+                    elif 'Liability Exceeded: True' in value:
+                        liability_exceeded += 1
+                        is_alert = True
+                    elif 'Event Has Ended' in value:
+                        event_ended += 1
+                        is_alert = True
+                    elif 'Price Type Disallowed' in value:
+                        user_restriction += 1
+                        price_type_disallowed += 1
+                        is_alert = True
+                    elif 'Sport Disallowed' in value:
+                        user_restriction += 1
+                        sport_disallowed += 1
+                        is_alert = True
+                    elif 'User Max Stake Exceeded' in value:
+                        user_restriction += 1
+                        max_stake_exceeded += 1
+                        is_alert = True
                         
             if not is_alert:
                 other_alert += 1
@@ -1050,7 +1037,10 @@ def create_client_report(customer_ref, current_file=None):
     price_change = 0
     event_ended = 0
     other_alert = 0
-
+    user_restriction = 0
+    price_type_disallowed = 0
+    sport_disallowed = 0
+    max_stake_exceeded = 0
     total_sms = 0
 
     timestamps = []
@@ -1070,23 +1060,46 @@ def create_client_report(customer_ref, current_file=None):
             total_bets += 1
 
         if is_wageralert and bet['customer_ref'] == customer_ref:
+            knockback_details = bet['details']
             is_alert = False
-            for key, value in bet['details'].items():
-                if 'Price Has Changed' in key or 'Price Has Changed' in value:
-                    price_change += 1
-                    is_alert = True
-                elif 'Liability Exceeded' in key and 'True' in value:
-                    liability_exceeded += 1
-                    is_alert = True
-                elif 'Event Has Ended' in key or 'Event Has Ended' in value:
-                    event_ended += 1
-                    is_alert = True
+            for key, value in knockback_details.items():
+                if key == 'Error Message':
+                    if 'Price Has Changed' in value:
+                        price_change += 1
+                        is_alert = True
+                    elif 'Liability Exceeded: True' in value:
+                        liability_exceeded += 1
+                        is_alert = True
+                    elif 'Event Has Ended' in value:
+                        event_ended += 1
+                        is_alert = True
+                    elif 'Price Type Disallowed' in value:
+                        user_restriction += 1
+                        price_type_disallowed += 1
+                        is_alert = True
+                    elif 'Sport Disallowed' in value:
+                        user_restriction += 1
+                        sport_disallowed += 1
+                        is_alert = True
+                    elif 'User Max Stake Exceeded' in value:
+                        user_restriction += 1
+                        max_stake_exceeded += 1
+                        is_alert = True
+                    
             if not is_alert:
                 other_alert += 1
             total_wageralerts += 1
-            formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in bet['details'].items()])
-            client_report_feed += f"{bet['time']} - {bet['customer_ref']} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator 
 
+            formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
+            formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for i, selection in enumerate(knockback_details.get('Selections', []))])
+            formatted_knockback_details += '\n   ' + formatted_selections
+
+            error_message = knockback_details.get('Error Message', '')
+            if 'Maximum stake available' in error_message:
+                error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
+            formatted_knockback_details = f"Error Message: {error_message}\n   {formatted_knockback_details}"
+            client_report_feed += f"{bet['time']} - {bet['customer_ref']} - WAGER KNOCKBACK:\n   {formatted_knockback_details}" + separator
+      
         if is_sms and bet['customer_ref'] == customer_ref:
             client_report_feed += f"{bet['time']}-{bet['id']} | {bet['customer_ref']} SMS WAGER:\n{bet['details']}" + separator
             total_sms += 1
@@ -1116,13 +1129,16 @@ def create_client_report(customer_ref, current_file=None):
     report_output += f"\nKNOCKBACKS: {total_wageralerts}\n\n"
     report_output += f"Liability Exceeded: {liability_exceeded}\n"
     report_output += f"Price Changes: {price_change}\n"
-    report_output += f"Event Ended: {event_ended}\n"
+    report_output += f"Event Ended: {event_ended}\n\n"
+    report_output += f"User Restrictions: {user_restriction}\n"
+    report_output += f"Price Type Disallowed: {price_type_disallowed}\n"
+    report_output += f"Sport Disallowed: {sport_disallowed}\n"
+    report_output += f"Max Stake Exceeded: {max_stake_exceeded}\n"
     report_output += f"Other: {other_alert}\n"
 
     report_output += f"\nTEXTBETS: {total_sms}\n"
 
     report_output += f"\n\nFULL FEED FOR {customer_ref}:{separator}"
-
 
     report_ticket.config(state="normal")
     report_ticket.delete('1.0', tk.END)
@@ -1312,14 +1328,8 @@ def find_traders():
 
         if len(users_with_risk_category) / len(users) > 0.5:
             users_without_risk_category.update(users_without_risk_category_for_selection)
-
-    try:
-        with open('vip.json', 'r') as file:
-            exemptions = json.load(file)
-    except FileNotFoundError:
-        exemptions = []
     
-    users_without_risk_category = {user for user in users_without_risk_category if user[0] not in exemptions}
+    users_without_risk_category = {user for user in users_without_risk_category}
 
     return users_without_risk_category, results, enhanced_bets_counter
 
@@ -1447,7 +1457,6 @@ def find_rg_issues():
         with open(today_filename, 'r') as f:
             deposits = json.load(f)
         
-
     # Create a dictionary to store deposit information for each user
     deposit_info = defaultdict(lambda: {'total': 0, 'times': [], 'amounts': [], 'types': set()})
 
@@ -1566,8 +1575,7 @@ def find_rg_issues():
     # Update the total score
     for user, scores in user_scores.items():
         scores['score'] = sum(scores['scores'].values())
-
-
+            
     # Filter out the users who have a score of 0
     user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
     return user_scores
@@ -1680,7 +1688,6 @@ def open_factoring_wizard():
         current_time = datetime.now().strftime("%H:%M:%S")
         current_date = datetime.now().strftime("%d/%m/%Y")
 
-        print("yes")
         if not entry1.get() or not entry3.get():
             messagebox.showerror("Error", "Please make sure all fields are completed.")
             return
@@ -1698,31 +1705,19 @@ def open_factoring_wizard():
             'exact_match': 'true',
         }
 
-        if entry2.get() == "W - WATCHLIST":
-            copy_string = f"{current_date} - ADDED TO W {user}"
-        elif entry2.get() == "M - BP ONLY NO OFFERS":
-            copy_string = f"{current_date} - BP ONLY NO OFFERS {user}"
-        elif entry2.get() == "X - SP ONLY NO OFFERS":
-            copy_string = f"{current_date} - SP ONLY NO OFFERS {user}"
-        elif entry2.get() == "S - SP ONLY":
-            copy_string = f"{current_date} - SP ONLY {user}"
-        elif entry2.get() == "D - BP ONLY":
-            copy_string = f"{current_date} - BP ONLY {user}"
-        elif entry2.get() == "O - NO OFFERS":
-            copy_string = f"{current_date} - NO OFFERS {user}"
-        pyperclip.copy(copy_string)
-
         progress.set(10)
 
+        copy_string = ""
+        if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]:
+            copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {user}"
+
+        pyperclip.copy(copy_string)
+
         factoring_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
-
         response = requests.get(pipedrive_api_url, params=params)
-
         progress.set(20)
-
         if response.status_code == 200:
             persons = response.json()['data']['items']
-            print(persons)
             if not persons:
                 messagebox.showerror("Error", f"No persons found for username: {entry1.get()}. Please make sure the username is correct, or enter the risk category in pipedrive manually.")
                 return
@@ -1750,54 +1745,37 @@ def open_factoring_wizard():
         spreadsheet = gc.open('Factoring Diary')
         worksheet = spreadsheet.get_worksheet(4)
         
-        progress.set(40)
-
         factoring_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
 
         next_row = len(worksheet.col_values(1)) + 1
-
+        progress.set(40)
         entry2_value = entry2.get().split(' - ')[0]
-        
         worksheet.update_cell(next_row, 1, current_time)
-        progress.set(45)
         worksheet.update_cell(next_row, 2, entry1.get().upper())
-        progress.set(50)
         worksheet.update_cell(next_row, 3, entry2_value)
-        progress.set(55)
         worksheet.update_cell(next_row, 4, entry3.get())
-        progress.set(60)
         worksheet.update_cell(next_row, 5, user) 
-        progress.set(65)
         worksheet.update_cell(next_row, 6, current_date)  # Column F
 
-        # Open the third worksheet
         worksheet3 = spreadsheet.get_worksheet(3)
-        progress.set(70)
-
-        # Find all cells in column B that match the username
         username = entry1.get().upper()
+        factoring_note.config(text="Trying to find user in Factoring Diary...\n\n", anchor='center', justify='center')
         matching_cells = worksheet3.findall(username, in_column=2)
+        progress.set(50)
 
-        # If no matching cells were found, show an error message and return
         if not matching_cells:
-            messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. Please make sure the username is correct.")
-            return
-        
-        factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
-
-        progress.set(75)
-        cell = matching_cells[0]
-        row = cell.row
-        worksheet3.update_cell(row, 9, entry2_value)  # Column I
-        progress.set(80)
-        worksheet3.update_cell(row, 10, entry3.get())  # Column J
-        progress.set(85)
-        worksheet3.update_cell(row, 12, current_date)  # Column L
-
+            messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. This may be due to them being a recent registration. Factoring reported to log, but not to diary.")
+        else:
+            factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
+            cell = matching_cells[0]
+            row = cell.row
+            worksheet3.update_cell(row, 9, entry2_value)  # Column I
+            worksheet3.update_cell(row, 10, entry3.get())  # Column J
+            worksheet3.update_cell(row, 12, current_date)  # Column L
+        progress.set(60)
         factoring_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
-
         tree.insert("", "end", values=[current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
-        
+        progress.set(70)
         data = {
             'Time': current_time,
             'Username': entry1.get().upper(),
@@ -1805,17 +1783,14 @@ def open_factoring_wizard():
             'Assessment Rating': entry3.get(),
             'Staff': user
         }
-        
-        progress.set(100)
-
-        # Write the data to a JSON file
+        progress.set(80)
         with open(f'logs/factoringlogs/factoring.json', 'a') as file:
             file.write(json.dumps(data) + '\n')
 
+        log_notification(f"{user} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
+        progress.set(100)
         time.sleep(.5)
-
         wizard_window.destroy()
-
 
     wizard_window = tk.Toplevel(root)
     wizard_window.geometry("270x370")
@@ -1870,6 +1845,8 @@ def display_closure_requests():
 
 
     def handle_request(request):
+        log_notification(f"{user} Handling {request['Restriction']} request for {request['Username']} ")
+
         # Define the mapping for the 'restriction' field
         restriction_mapping = {
             'Further Options': 'Self Exclusion'
@@ -1995,47 +1972,54 @@ def display_closure_requests():
         data = json.load(f)
         requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
 
-    # Calculate the start and end indices for the current page
-    start = closures_current_page * requests_per_page
-    end = start + requests_per_page
-    requests_page = requests[start:end]
+    # Check if the requests list is empty
+    if not requests:
+        # Create a text widget with a message
+        notebook.tab(tab_5, text="Requests")
+        no_requests_label = ttk.Label(requests_frame, text="No requests to display.", width=40, anchor='center', justify='center')
+        no_requests_label.grid(row=0, column=0, padx=10, pady=2, sticky="w")
+    else:
+        notebook.tab(tab_5, text="Requests*")
+        start = closures_current_page * requests_per_page
+        end = start + requests_per_page
+        requests_page = requests[start:end]
 
-    # Define the mapping for the 'restriction' field
-    restriction_mapping = {
-        'Account Deactivation': 'Deactivation',
-        'Further Options': 'Self Exclusion'
-    }
+        # Define the mapping for the 'restriction' field
+        restriction_mapping = {
+            'Account Deactivation': 'Deactivation',
+            'Further Options': 'Self Exclusion'
+        }
 
-    # Loop over the requests on the current page and create a label and a tick button for each one
-    for i, request in enumerate(requests_page):
-        # Map the 'restriction' field
-        restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
+        # Loop over the requests on the current page and create a label and a tick button for each one
+        for i, request in enumerate(requests_page):
+            # Map the 'restriction' field
+            restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
 
-        # Check if the 'length' field is None or Null
-        length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
+            # Check if the 'length' field is None or Null
+            length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
 
-        # Create a label with the request data
-        request_label = ttk.Label(requests_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
-        request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
+            # Create a label with the request data
+            request_label = ttk.Label(requests_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
+            request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
 
-        # Create a tick button
-        tick_button = ttk.Button(requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
-        tick_button.grid(row=i, column=0, padx=3, pady=2)
+            # Create a tick button
+            tick_button = ttk.Button(requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
+            tick_button.grid(row=i, column=0, padx=3, pady=2)
 
-    # Create the back and forward buttons
-    back_button = ttk.Button(requests_frame, text="<", command=closures_back, width=2, cursor="hand2")
-    back_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
+        # Create the back and forward buttons
+        back_button = ttk.Button(requests_frame, text="<", command=closures_back, width=2, cursor="hand2")
+        back_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
 
-    forward_button = ttk.Button(requests_frame, text=">", command=closures_forward, width=2, cursor="hand2")
-    forward_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
+        forward_button = ttk.Button(requests_frame, text=">", command=closures_forward, width=2, cursor="hand2")
+        forward_button.grid(row=requests_per_page, column=1, padx=2, pady=2)
 
-    # Remove the back button if we're on the first page
-    if closures_current_page == 0:
-        back_button.grid_remove()
+        # Remove the back button if we're on the first page
+        if closures_current_page == 0:
+            back_button.grid_remove()
 
-    # Remove the forward button if we're on the last page
-    if closures_current_page == len(requests) // requests_per_page:
-        forward_button.grid_remove()
+        # Remove the forward button if we're on the last page
+        if closures_current_page == len(requests) // requests_per_page:
+            forward_button.grid_remove()
 
 def closures_back():
     global closures_current_page
@@ -2259,6 +2243,7 @@ def report_freebet():
 
         freebet_note.config(text=f"Free bet for {entry1.get().upper()} added successfully.\n\n", anchor='center', justify='center')
 
+        log_notification(f"{user} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
         time.sleep(.5)
 
         report_freebet_window.destroy()
@@ -2290,7 +2275,6 @@ def report_freebet():
     entry3 = ttk.Entry(report_freebet_frame)
     entry3.pack(padx=5, pady=5)
 
-
     freebet_note = ttk.Label(report_freebet_frame, text=f"Free bet will be added to reporting {current_month}.\n\n", anchor='center', justify='center')
     freebet_note.pack(padx=5, pady=5)
 
@@ -2314,13 +2298,14 @@ def user_login():
             user = user.upper()
             if user in USER_NAMES:
                 full_name = USER_NAMES[user]
+                log_notification(f"{user} logged in")
                 break
             else:
                 messagebox.showerror("Error", "Could not find staff member! Please try again.")
         else:
             messagebox.showerror("Error", "Maximum of 2 characters.")
 
-    login_label.config(text=f'Logged in as {full_name}')
+    # login_label.config(text=f'Logged in as {full_name}')
 
 
 
@@ -2388,9 +2373,6 @@ def open_settings():
     separator = ttk.Separator(options_frame, orient='horizontal')
     separator.place(x=10, y=290, width=270)
 
-    # show_reporting_data = ttk.Checkbutton(options_frame, text='Display Reporting Data in Feed', variable=show_reporting_data_state, onvalue=True, offvalue=False, cursor="hand2")
-    # show_reporting_data.place(x=40, y=320)
-
     if current_file is not None:
         databases_combobox.set(current_file)
     else:
@@ -2426,7 +2408,7 @@ def copy_to_clipboard():
 ## MENU BAR 'ABOUT' AND 'HOWTO' 
 ####################################################################################
 def about():
-    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.2")
+    messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.5")
 
 def howTo():
     messagebox.showinfo("How to use", "General\nProgram checks bww\export folder on 20s interval.\nOnly set amount of recent bets are checked. This amount can be defined in options.\nBet files are parsed then displayed in feed and any bets from risk clients show in 'Risk Bets'.\n\nRuns on Selections\nDisplays selections with more than 'X' number of bets.\nX can be defined in options.\n\nReports\nDaily Report - Generates a report of the days activity.\nClient Report - Generates a report of a specific clients activity.\n\nFactoring\nLinks to Google Sheets factoring diary.\nAny change made to customer account reported here by clicking 'Add'.\n\nRace Updation\nList of courses for updating throughout the day.\nWhen course updated, click ✔.\nTo remove course, click X.\nTo add a course or event for update logging, click +\nHorse meetings will turn red after 30 minutes. Greyhounds 1 hour.\nAll updates are logged under F:\GB Bet Monitor\logs.\n\nPlease report any errors to Sam.")
@@ -2455,7 +2437,7 @@ def get_data_periodic():
     threading.Thread(target=get_oddsmonkey_selections).start()
     threading.Thread(target=get_todays_oddsmonkey_selections).start()
 
-    root.after(60000, get_data_periodic)  # Run every minute
+    root.after(30000, get_data_periodic)
 
 def run_create_daily_report():
     global current_file
@@ -2468,6 +2450,96 @@ def get_client_report_ref():
         client_report_user = client_report_user.upper()
         threading.Thread(target=create_client_report, args=(client_report_user, current_file)).start()
 
+def run_rg_scan():
+    threading.Thread(target=update_rg_report).start()
+
+def run_traders_scan():
+    threading.Thread(target=update_traders_report).start()
+
+def user_notification():
+    if not user:
+        user_login()
+
+    def submit():
+        message = entry.get()
+        message = (user + ": " + message)
+        log_notification(message, important=True)
+        window.destroy()
+
+    window = tk.Toplevel(root)
+    window.title("Enter Notification")
+    window.iconbitmap('src/splash.ico')
+    window.geometry("300x130")
+    screen_width = window.winfo_screenwidth()
+    window.geometry(f"+{screen_width - 350}+50")
+
+    label = ttk.Label(window, text="Enter your message:")
+    label.pack(padx=5, pady=5)
+
+    entry = ttk.Entry(window, width=50)
+    entry.pack(padx=5, pady=5)
+    entry.focus_set()  # Set focus to the Entry widget
+    entry.bind('<Return>', lambda event=None: submit())  # Bind the <Return> event to the submit function
+
+    button = ttk.Button(window, text="Submit", command=submit)
+    button.pack(padx=5, pady=10)
+
+def log_notification(message, important=False):
+    # Get the current time
+    time = datetime.now().strftime('%H:%M:%S')
+
+    file_lock = fasteners.InterProcessLock('notifications.lock')
+
+    try:
+        with file_lock:
+            with open('notifications.json', 'r') as f:
+                notifications = json.load(f)
+    except FileNotFoundError:
+        notifications = []
+
+    notifications.insert(0, {'time': time, 'message': message, 'important': important})
+
+    with file_lock:
+        with open('notifications.json', 'w') as f:
+            json.dump(notifications, f, indent=4)
+
+# Initialize a variable to keep track of the most recent notification
+
+def update_notifications():
+    global last_notification  # Use the global variable
+
+    notifications_text.tag_configure("important", font=("TkDefaultFont", 10, "bold"))
+    file_lock = fasteners.InterProcessLock('notifications.lock')
+
+    with file_lock:
+        try:
+            with open('notifications.json', 'r') as f:
+                notifications = json.load(f)
+
+            # If there's a new notification or notifications is empty, update the widget
+            if not notifications or (last_notification is None or last_notification != notifications[0]):
+                # Find the index of the last notification in the list
+                last_index = next((index for index, notification in enumerate(notifications) if notification == last_notification), len(notifications))
+
+                # Add the new notifications to the widget
+                for notification in reversed(notifications[:last_index]):
+                    time = notification['time']
+                    message = notification['message']
+                    important = notification['important']
+                    if important:
+                        message = f'{time}: {message}\n'
+                        notifications_text.insert('1.0', message, "important")
+                    else:
+                        notifications_text.insert('1.0', f'{time}: {message}\n')
+
+                # Update the most recent notification
+                last_notification = notifications[0] if notifications else None
+
+        except FileNotFoundError:
+            pass
+
+    # Schedule the next update
+    notifications_text.after(1000, update_notifications)  # Update every 1000 milliseconds (1 second)
 
 
 ####################################################################################
@@ -2477,7 +2549,7 @@ if __name__ == "__main__":
 
     ### ROOT WINDOW
     root = tk.Tk()
-    root.title("Bet Viewer v8.2")
+    root.title(f"Bet Viewer v8.5")
     root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
     ttk.Style().theme_use('forest-light')
     style = ttk.Style(root)
@@ -2492,7 +2564,6 @@ if __name__ == "__main__":
     # root.maxsize(screenwidth, screenheight)
     root.resizable(False, False)
 
-
     ### IMPORT LOGO
     logo_image = Image.open('src/splash.ico')
     logo_image.thumbnail((70, 70))
@@ -2502,18 +2573,15 @@ if __name__ == "__main__":
     ### MENU BAR SETTINGS
     menu_bar = tk.Menu(root)
     options_menu = tk.Menu(menu_bar, tearoff=0)
+    options_menu.add_command(label="Refresh", command=refresh_display, foreground="#000000", background="#ffffff")
     options_menu.add_command(label="Settings", command=open_settings, foreground="#000000", background="#ffffff")
     options_menu.add_command(label="Set User Initials", command=user_login, foreground="#000000", background="#ffffff")
-    # options_menu.add_command(label="Add VIP", command=add_vip, foreground="#000000", background="#ffffff")
-    # options_menu.add_command(label="Add Watchlist", command=add_watchlist, foreground="#000000", background="#ffffff")
     options_menu.add_separator(background="#ffffff")
     options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
     menu_bar.add_cascade(label="Options", menu=options_menu)
     menu_bar.add_command(label="Report Freebet", command=report_freebet, foreground="#000000", background="#ffffff")
+    menu_bar.add_command(label="Add notification", command=user_notification, foreground="#000000", background="#ffffff")
     menu_bar.add_command(label="Add Factoring", command=open_factoring_wizard, foreground="#000000", background="#ffffff")
-    # bored_menu = tk.Menu(menu_bar, tearoff=0)
-    # bored_menu.add_command(label="Poke", command=open_poke_window, foreground="#000000", background="#ffffff")
-    # menu_bar.add_cascade(label="Bored", menu=bored_menu, foreground="#000000", background="#ffffff")
     help_menu = tk.Menu(menu_bar, tearoff=0)
     help_menu.add_command(label="How to use", command=howTo, foreground="#000000", background="#ffffff")
     help_menu.add_command(label="About", command=about, foreground="#000000", background="#ffffff")
@@ -2539,9 +2607,6 @@ if __name__ == "__main__":
     runs_remove_off_races = tk.BooleanVar()
     runs_remove_off_races.set(False)
 
-    show_reporting_data_state = tk.BooleanVar()
-    show_reporting_data_state.set(True)
-
     confirm_betty_update_bool = tk.BooleanVar()
     confirm_betty_update_bool.set(False)  # Set the initial state to False
 
@@ -2558,12 +2623,36 @@ if __name__ == "__main__":
     ### BET FEED
     feed_frame = ttk.LabelFrame(root, style='Card', text="Bet Feed")
     feed_frame.place(relx=0.44, rely=0.01, relwidth=0.55, relheight=0.64)
+    feed_frame.grid_columnconfigure(0, weight=1)
+    feed_frame.grid_rowconfigure(0, weight=1)
+    feed_frame.grid_columnconfigure(1, weight=0)
     feed_text = tk.Text(feed_frame, font=("Helvetica", 11, "bold"),wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
 
     feed_text.config(state='disabled')
-    feed_text.pack(fill='both', expand=True)
-    feed_scroll = ttk.Scrollbar(feed_text, orient='vertical', command=feed_text.yview, cursor="hand2")
-    feed_scroll.pack(side="right", fill="y")
+    feed_text.grid(row=0, column=0, sticky='nsew')
+
+    # filter_frame = ttk.Frame(feed_frame)
+    # filter_frame.grid(row=1, column=0, sticky='ew')
+    # unit_stake_label = ttk.Label(filter_frame, text='Unit Stk:')
+    # unit_stake_label.grid(row=0, column=0, sticky='e', padx=6)
+    # unit_stake = ttk.Entry(filter_frame, width=4)
+    # unit_stake.grid(row=0, column=1, pady=(0, 3), sticky='w')
+
+    # combobox_label = ttk.Label(filter_frame, text='Risk Cat:')
+    # combobox_label.grid(row=0, column=2, sticky='w', padx=6)
+    # riskcat_options = ["", "W", "M", "S", "X"]
+    # combobox = ttk.Combobox(filter_frame, values=riskcat_options, width=4)
+    # combobox.grid(row=0, column=3, pady=(0, 3), sticky='w')
+
+    # sport_options = ["", "Horses", "Greyhounds", "Other"]
+    # sport_label = ttk.Label(filter_frame, text='Sport:')
+    # sport_label.grid(row=0, column=4, sticky='w', padx=6)
+    # sport_combobox = ttk.Combobox(filter_frame, values=sport_options, state="readonly", width=10)
+    # sport_combobox.grid(row=0, column=5, pady=(0, 3), sticky='w')
+    # sport_combobox.set(sport_options[0])
+
+    feed_scroll = ttk.Scrollbar(feed_frame, orient='vertical', command=feed_text.yview, cursor="hand2")
+    feed_scroll.grid(row=0, column=1, sticky='ns')
     feed_text.configure(yscrollcommand=feed_scroll.set)
 
     ### RUNS ON SELECTIONS
@@ -2578,17 +2667,12 @@ if __name__ == "__main__":
 
     spinbox_frame = ttk.Frame(runs_frame)
     spinbox_frame.grid(row=1, column=0, sticky='ew')
-
-
     spinbox_label = ttk.Label(spinbox_frame, text='Bets to a run: ')
     spinbox_label.grid(row=0, column=0, sticky='e', padx=6)
-
     spinbox = ttk.Spinbox(spinbox_frame, from_=2, to=10, textvariable=num_run_bets_var, width=2)
     spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
-
     combobox_label = ttk.Label(spinbox_frame, text=' Number of bets: ')
     combobox_label.grid(row=0, column=2, sticky='w', padx=6)
-
     combobox_values = [20, 50, 100, 300, 1000, 2000]
     combobox_var = tk.IntVar(value=50)   
     combobox = ttk.Combobox(spinbox_frame, textvariable=combobox_var, values=combobox_values, width=4)
@@ -2687,10 +2771,10 @@ if __name__ == "__main__":
     traders_report_ticket.config(state='disabled')
     traders_report_ticket.grid(row=0, column=0, sticky="nsew")
 
-    find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=update_traders_report, cursor="hand2")
+    find_traders_button = ttk.Button(tab_4, text="Scan for Potential Risk Users", command=run_traders_scan, cursor="hand2")
     find_traders_button.grid(row=2, column=0, pady=(0, 0), sticky="w")
     
-    find_rg_risk_button = ttk.Button(tab_4, text="Scan for RG Issues", command=update_rg_report, cursor="hand2")
+    find_rg_risk_button = ttk.Button(tab_4, text="Scan for RG Issues", command=run_rg_scan, cursor="hand2")
     find_rg_risk_button.grid(row=2, column=0, pady=(0, 0), sticky="e")
 
     ### CLOSURE REQUESTS TAB
@@ -2702,32 +2786,36 @@ if __name__ == "__main__":
 
     # RACE UPDATION
     race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
-    race_updation_frame.place(relx=0.44, rely=0.66, relwidth=0.33, relheight=0.283)
+    race_updation_frame.place(relx=0.44, rely=0.66, relwidth=0.26, relheight=0.283)
 
-    ### SETTINGS FRAME
-    settings_frame = ttk.LabelFrame(root, style='Card', text="Settings")
-    settings_frame.place(relx=0.785, rely=0.66, relwidth=0.2, relheight=0.283)
+    ### NOTIFICATIONS FRAME
+    notifications_frame = ttk.LabelFrame(root, style='Card', text="Staff Feed")
+    notifications_frame.place(relx=0.71, rely=0.66, relwidth=0.28, relheight=0.247)
+
+    notifications_text = tk.Text(notifications_frame, font=("Helvetica", 10), wrap='word',padx=10, pady=10, bd=0, fg="#000000", bg="#ffffff")
+    notifications_text.pack(expand=True, fill='both')
 
     # LOGO, SETTINGS BUTTON AND SEPARATOR
-    logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
-    logo_label.place(relx=0.3, rely=0.02)
-    logo_label.bind("<Button-1>", lambda e: refresh_display())    
-    settings_button = ttk.Button(settings_frame, text="Settings", command=open_settings, width=7, cursor="hand2")
-    settings_button.place(relx=0.29, rely=0.32)
-    separator = ttk.Separator(settings_frame, orient='horizontal')
-    separator.place(relx=0.02, rely=0.48, relwidth=0.95)
+    # logo_label = tk.Label(settings_frame, image=company_logo, bd=0, cursor="hand2")
+    # logo_label.place(relx=0.3, rely=0.02)
+    # logo_label.bind("<Button-1>", lambda e: refresh_display())    
+    # settings_button = ttk.Button(settings_frame, text="Settings", command=open_settings, width=7, cursor="hand2")
+    # settings_button.place(relx=0.29, rely=0.32)
+    # separator = ttk.Separator(settings_frame, orient='horizontal')
+    # separator.place(relx=0.02, rely=0.48, relwidth=0.95)
 
-    # PASSWORD GENERATOR AND SEPARATOR
-    copy_button = ttk.Button(settings_frame, command=copy_to_clipboard, text="Generate PW", state=tk.NORMAL, cursor="hand2")
-    copy_button.place(relx=0.2, rely=0.53)
-    password_result_label = tk.Label(settings_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
-    password_result_label.place(relx=0.26, rely=0.67)
-    separator = ttk.Separator(settings_frame, orient='horizontal')
-    separator.place(relx=0.02, rely=0.79, relwidth=0.95)
+
+    copy_frame = ttk.Frame(root, style='Card')
+    copy_frame.place(relx=0.72, rely=0.91, relwidth=0.26, relheight=0.033)
+
+    copy_button = ttk.Button(copy_frame, command=copy_to_clipboard, text="Generate", state=tk.NORMAL, cursor="hand2")
+    copy_button.place(relx=0.1, rely=0.05, relwidth=0.4, relheight=0.9)
+    password_result_label = tk.Label(copy_frame, wraplength=200, font=("Helvetica", 12), justify="center", text="GB000000", fg="#000000", bg="#ffffff")
+    password_result_label.place(relx=0.5, rely=0.25, relwidth=0.4, relheight=0.4)
 
     # USER LABEL DISPLAY
-    login_label = ttk.Label(settings_frame, text='')
-    login_label.place(relx=0.18, rely=0.85)
+    # login_label = ttk.Label(settings_frame, text='')
+    # login_label.place(relx=0.18, rely=0.85)
 
     next_races_frame = ttk.Frame(root)
     next_races_frame.place(relx=0.012, rely=0.95, relwidth=0.975, relheight=0.047)
@@ -2756,7 +2844,7 @@ if __name__ == "__main__":
     factoring_sheet_periodic()
     get_data_periodic()
     run_display_next_3()
-
+    update_notifications()
 
     ### GUI LOOP
     threading.Thread(target=refresh_display_periodic, daemon=True).start()
