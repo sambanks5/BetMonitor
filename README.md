@@ -26,7 +26,7 @@ Bet Processor
 - Export files to a JSON database by day
 
 Bet Processor UI with test data:
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/64acc9e6-9b70-4bfc-9f4e-53d204851b35)
+![image](https://github.com/sambanks5/BetMonitor/assets/121309218/7733c2e1-618f-4b18-93af-e921b936aecc)
   A simple UI containing a scroll text widget outputting processed bets, button to set the folder containing bet files and 'reprocess' button to delete and re-process all bet files from the folder in case of error.
 
   
@@ -39,16 +39,11 @@ Bet Viewer
 - Quality of life improvements for office staff to reduce time taken on menial tasks
 
 20/03/2024 - Update to feed now shows colours for each bet. Colours are identifiers depending on the user/bet. Red - Risk client/bet or watchlist, Purple - New Registration, Green - Good client/bet
+08/06/2024 - Added 'Staff Feed' for logging notices for staff on live activity. Additionally, added bottom panel 'Next 3' races for Horses and Greyhounds, so staff can see what is coming up and the race 'Status'
 
 Bet Viewer UI with test data:
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/6d40f69f-591b-415e-8a12-eb071c78dd36)
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/4283d6ba-7c91-4304-bcfa-8d73c6f0c3a5)
+![image](https://github.com/sambanks5/BetMonitor/assets/121309218/e4d993e7-713b-442a-b8b6-347d343800aa)
 
-
-OLD UI (Without feed identifier colours)
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/e7cb2b2d-7f01-45a7-b33c-5ebc22627c22)
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/289f5725-11de-4bf8-bfe5-7a8afeb4be28)
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/5c7fec68-278d-4112-89ed-27f79cb15768)
 
 Contains multiple tKinter 'frames' displaying data from various functions. 
 
