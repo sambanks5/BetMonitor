@@ -67,6 +67,7 @@ processed_races = set()
 processed_closures = set()
 notified_users = set()
 bet_count_500 = False
+bet_count_750 = False
 bet_count_1000 = False
 knockback_count_250 = False
 
@@ -88,7 +89,6 @@ def set_bet_folder_path():
 def load_database(app):
     print("\nLoading database")
     date = datetime.now().strftime('%Y-%m-%d')
-
     filename = f'database/{date}-wager_database.json'
 
     try:
@@ -472,20 +472,21 @@ def staff_report_notification():
             notified_users.add(user)
 
 def activity_report_notification():
-    global bet_count_1000, knockback_count_250, bet_count_500
     data = load_database(app)
     bet_count = len([bet for bet in data if bet['type'] == 'BET'])
     knockback_count = len([bet for bet in data if bet['type'] == 'WAGER KNOCKBACK'])
 
-    if bet_count == 500 and bet_count_500 == False:
-        log_notification(f"{bet_count} bets taken", True)
-        bet_count_500 = True
-    if bet_count == 1000 and bet_count_1000 == False:
-        log_notification(f"{bet_count} bets taken", True)
-        bet_count_1000 = True
-    if knockback_count == 250 and knockback_count_250 == False:
-        log_notification(f"{knockback_count} knockbacks", True)
-        knockback_count_250 = True    
+    thresholds = {
+        500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
+        750: {'count': bet_count, 'flag': 'bet_count_750', 'message': 'bets taken'},
+        1000: {'count': bet_count, 'flag': 'bet_count_1000', 'message': 'bets taken'},
+        250: {'count': knockback_count, 'flag': 'knockback_count_250', 'message': 'knockbacks'}
+    }
+
+    for threshold, data in thresholds.items():
+        if data['count'] == threshold and not globals()[data['flag']]:
+            log_notification(f"{data['count']} {data['message']}", True)
+            globals()[data['flag']] = True
 
 
 
@@ -823,17 +824,14 @@ def check_race_times():
 
     races.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
 
-    for race in races:
+    total_races = len(races)
+    for index, race in enumerate(races, start=1):
         race_time = race.split(', ')[1]
         if current_time == race_time and race not in processed_races:
-            if race in enhanced_places:
-                log_notification(f"Enhanced race: {race} is past off time", True)
-            else:
-                log_notification(f"{race} is past off time.")
+            race_status = "Enhanced race" if race in enhanced_places else "Race"
             processed_races.add(race)
-
-            remaining_races = [race for race in races if datetime.strptime(race.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')]
-            log_notification(f"{len(remaining_races)} races remaining today")
+            remaining_races = len([r for r in races if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
+            log_notification(f"{race_status}: {race} is past off time. {index}/{total_races} with {remaining_races} races remaining today.")
 
 
 ####################################################################################

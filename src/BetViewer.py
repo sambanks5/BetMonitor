@@ -318,8 +318,6 @@ def bet_feed(data=None):
     bets_with_risk_text.delete('1.0', tk.END)
     bets_with_risk_text.insert('1.0', risk_bets)
     bets_with_risk_text.config(state="disabled")
-
-    # logo_label.bind("<Button-1>", lambda e: refresh_display())
     
 def display_activity_data(data):
     turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, _ = get_reporting_data()
@@ -529,6 +527,7 @@ def get_courses():
             print("Error: The 'race' object is not a dictionary.")
             return []
 
+    courses.add("Football")
     courses.add("SIS Greyhounds")
     courses.add("TRP Greyhounds")
 
@@ -1582,10 +1581,8 @@ def find_rg_issues():
 
 def update_rg_report():
     user_scores = find_rg_issues()
-
     # Sort the user_scores dictionary by total score
     user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
-
     # Create a dictionary to map the keys to more descriptive sentences
     key_descriptions = {
         'num_bets': 'High Number of Bets',
