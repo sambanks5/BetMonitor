@@ -1333,6 +1333,7 @@ def find_traders():
     return users_without_risk_category, results, enhanced_bets_counter
 
 def find_rg_issues():
+    
     data = get_database()
     user_scores = {}
     virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
@@ -2628,6 +2629,10 @@ if __name__ == "__main__":
     feed_text.config(state='disabled')
     feed_text.grid(row=0, column=0, sticky='nsew')
 
+    feed_scroll = ttk.Scrollbar(feed_frame, orient='vertical', command=feed_text.yview, cursor="hand2")
+    feed_scroll.grid(row=0, column=1, sticky='ns')
+    feed_text.configure(yscrollcommand=feed_scroll.set)
+
     # filter_frame = ttk.Frame(feed_frame)
     # filter_frame.grid(row=1, column=0, sticky='ew')
     # unit_stake_label = ttk.Label(filter_frame, text='Unit Stk:')
@@ -2648,9 +2653,7 @@ if __name__ == "__main__":
     # sport_combobox.grid(row=0, column=5, pady=(0, 3), sticky='w')
     # sport_combobox.set(sport_options[0])
 
-    feed_scroll = ttk.Scrollbar(feed_frame, orient='vertical', command=feed_text.yview, cursor="hand2")
-    feed_scroll.grid(row=0, column=1, sticky='ns')
-    feed_text.configure(yscrollcommand=feed_scroll.set)
+
 
     ### RUNS ON SELECTIONS
     runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")

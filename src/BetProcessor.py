@@ -103,6 +103,61 @@ def load_database(app):
 ####################################################################################
 ## IDENTIFY BET TYPE AND PARSE TEXT ACCORDINGLY
 ####################################################################################
+def identify_sport(selection):
+    print(f"Type of selection: {type(selection)}, Content: {selection}")
+
+    # Adjusted to handle both lists/tuples of selections and single selections within a tuple
+    if isinstance(selection, (list, tuple)):
+        print("Handling list or tuple format")
+        # Check if the first element is a list or tuple, indicating a list of selections
+        if all(isinstance(sel, (list, tuple)) for sel in selection):
+            for sel in selection:
+                if len(sel) > 0:
+                    selection_str = sel[0]  # Extract the selection name from the first element
+                    print(f"Processing selection: {selection_str}")
+                    if 'trap' in selection_str.lower():
+                        return 1  # Greyhound
+                    elif re.search(r'\d{2}:\d{2}', selection_str):
+                        return 0  # Horse
+                    else:
+                        return 2  # Other
+                else:
+                    print("Inner element is empty or not a list/tuple")
+                    return 3  # Default for unrecognized format within list/tuple
+        # New case: Handle single selection within a tuple
+        else:
+            selection_str = selection[0]  # Assuming the first element is the selection name
+            print(f"Processing single selection: {selection_str}")
+            if 'trap' in selection_str.lower():
+                return 1  # Greyhound
+            elif re.search(r'\d{2}:\d{2}', selection_str):
+                return 0  # Horse
+            else:
+                return 2  # Other
+            
+    elif isinstance(selection, dict):
+        print("Handling dictionary format")
+        if selection is None or '- Meeting Name' not in selection or selection['- Meeting Name'] is None:
+            print("Dictionary format not as expected")
+            return 3  # Default identifier for null values
+        if 'trap' in selection['- Selection Name'].lower():
+            return 1  # Greyhound
+        elif re.search(r'\d{2}:\d{2}', selection['- Meeting Name']):
+            return 0  # Horse
+        else:
+            return 2  # Other
+    else:
+        print("Selection format unrecognized")
+        return 3  # Default for unrecognized format
+
+def add_sport_to_selections(selections):
+    sports = set()
+    for selection in selections:
+        # Directly pass the selection to identify_sport without checking its type here
+        sport = identify_sport(selection)
+        sports.add(sport)
+    return list(sports)
+
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
         bet_text = file.read()
@@ -114,12 +169,14 @@ def parse_file(file_path, app):
         if is_wageralert:
             details = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{details['Knockback ID']}-{details['Time']}"
+            sports = add_sport_to_selections(details['Selections'])
             bet_info = {
                 'time': details['Time'],
                 'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
                 'customer_ref': details['Customer Ref'],
                 'details': details,
+                'Sport': sports,
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
@@ -143,6 +200,7 @@ def parse_file(file_path, app):
 
         elif is_bet:
             bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
+            sports = add_sport_to_selections(parsed_selections)
             bet_info = {
                 'time': timestamp,
                 'id': bet_no,
@@ -155,11 +213,13 @@ def parse_file(file_path, app):
                     'unit_stake': unit_stake,
                     'payment': payment,
                     'bet_type': bet_type
-                }
+                },
+                'Sport': sports,
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
             return bet_info
+        
     print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
 
