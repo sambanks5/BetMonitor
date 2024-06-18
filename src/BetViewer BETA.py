@@ -321,12 +321,12 @@ class BetRuns:
     def __init__(self, root):
         self.num_run_bets_var = tk.StringVar()
         self.combobox_var = tk.IntVar(value=50)
-        self.num_run_bets = 0  # Initialize with default value
-        self.num_recent_files = 50  # Initialize with default value or any other appropriate value
+        self.num_run_bets = 2
+        self.num_recent_files = 50
 
         self.root = root
         self.initialize_ui()
-        self.bet_runs()
+        self.refresh_bets()
     
     def initialize_ui(self):
         self.runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
@@ -342,17 +342,27 @@ class BetRuns:
         self.spinbox_frame = ttk.Frame(self.runs_frame)
         self.spinbox_frame.grid(row=1, column=0, sticky='ew')
         self.spinbox_label = ttk.Label(self.spinbox_frame, text='Run: ')
-        self.spinbox_label.grid(row=0, column=0, sticky='e', padx=6)
         self.spinbox = ttk.Spinbox(self.spinbox_frame, from_=2, to=10, textvariable=self.num_run_bets_var, width=2)
-        self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
-        self.combobox_label = ttk.Label(self.spinbox_frame, text=' Num bets: ')
-        self.combobox_label.grid(row=0, column=2, sticky='w', padx=6)
-        self.combobox_values = [20, 50, 100, 300, 1000, 2000]
-        
-        self.combobox = ttk.Combobox(self.spinbox_frame, textvariable=self.combobox_var, values=self.combobox_values, width=4)
-        self.combobox.grid(row=0, column=3, pady=(0, 3), sticky='w')
-        self.combobox_var.trace("w", self.set_recent_bets)
+        self.spinbox_frame.grid(row=1, column=0, sticky='ew')
+        self.spinbox_frame.grid_columnconfigure(0, weight=1)
+        self.spinbox_frame.grid_columnconfigure(1, weight=1)
+        self.spinbox_frame.grid_columnconfigure(2, weight=1)
+        self.spinbox_frame.grid_columnconfigure(3, weight=1)
 
+        self.spinbox_label.grid(row=0, column=0, sticky='ew', padx=6)  # Adjusted sticky to 'ew'
+        self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='ew') 
+        
+        self.num_run_bets_var.set("2")
+        self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
+        self.num_run_bets_var.trace("w", self.set_num_run_bets)
+
+        self.combobox_label = ttk.Label(self.spinbox_frame, text=' Num bets: ')
+        self.combobox_label.grid(row=0, column=2, sticky='ew', padx=6)  # Adjusted sticky to 'ew'
+
+        self.combobox_values = [20, 50, 100, 300, 1000, 2000]
+        self.combobox = ttk.Combobox(self.spinbox_frame, textvariable=self.combobox_var, values=self.combobox_values, width=4)
+        self.combobox_var.trace("w", self.set_recent_bets)
+        self.combobox.grid(row=0, column=3, pady=(0, 3), sticky='ew')  # Adjusted sticky to 'ew'
         self.runs_scroll = ttk.Scrollbar(self.runs_frame, orient='vertical', command=self.runs_text.yview, cursor="hand2")
         self.runs_scroll.grid(row=0, column=1, sticky='ns')
         self.runs_text.configure(yscrollcommand=self.runs_scroll.set)
@@ -360,24 +370,18 @@ class BetRuns:
     def set_recent_bets(self, *args):  # Ensure this method can be used as a callback
         # Directly update the instance attribute based on the combobox value
         self.num_recent_files = self.combobox_var.get()
+        self.refresh_bets()
 
-    def set_num_run_bets(self, *args):  # Ensure this method can be used as a callback
-        # Try to update the instance attribute based on the spinbox value
+    def set_num_run_bets(self, *args):
         try:
             self.num_run_bets = int(self.num_run_bets_var.get())
+            self.refresh_bets()
         except ValueError:
             # Handle the case where the conversion fails (e.g., input is not a number)
             pass
 
-    def bet_runs(self):
-        num_bets = self.num_run_bets
-        num_recent_files = self.num_recent_files
-        
-        selection_bets = get_database()
-        vip_clients, newreg_clients, _, todays_oddsmonkey_selections, reporting_data = access_data()
-        enhanced_places = reporting_data.get('enhanced_places', [])
-
-        selection_bets = selection_bets[:num_recent_files]
+    def bet_runs(self, num_bets, num_run_bets):
+        selection_bets = get_database()[:num_bets] 
         selection_to_bets = defaultdict(list)
 
         for bet in selection_bets:
@@ -387,6 +391,13 @@ class BetRuns:
                     selection_to_bets[selection].append(bet['id'])
 
         sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
+        
+        self.update_ui_with_selections(sorted_selections, selection_bets, num_run_bets)
+
+
+    def update_ui_with_selections(self, sorted_selections, selection_bets, num_run_bets):
+        vip_clients, newreg_clients, _, todays_oddsmonkey_selections, reporting_data = access_data()
+        enhanced_places = reporting_data.get('enhanced_places', [])
 
         self.runs_text.tag_configure("risk", foreground="#8f0000")
         self.runs_text.tag_configure("vip", foreground="#009685")
@@ -401,7 +412,7 @@ class BetRuns:
             if skip_selection:
                 continue
 
-            if len(bet_numbers) > num_bets:
+            if len(bet_numbers) >= num_run_bets:
                 selection_name = selection.split(' - ')[1] if ' - ' in selection else selection
 
                 matched_odds = None
@@ -439,7 +450,17 @@ class BetRuns:
                 self.runs_text.insert(tk.END, f"\n")
 
         self.runs_text.config(state=tk.DISABLED)
-        
+
+    def refresh_bets(self):
+        # Method to refresh bets every 10 seconds
+        num_bets = self.num_recent_files
+        num_run_bets = self.num_run_bets
+
+        self.bet_runs(num_bets, num_run_bets)
+
+        # Use threading to call this method again after 10 seconds
+        self.root.after(10000, self.refresh_bets)        
+
 
 class BetViewerApp:
     def __init__(self, root):
@@ -455,12 +476,14 @@ class BetViewerApp:
         style = ttk.Style(self.root)
         width = 900
         height = 1000
+
+        
         screenwidth = self.root.winfo_screenwidth()
         screenheight = self.root.winfo_screenheight()
         # self.root.configure(bg='#ffffff')
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width - 10), 0)
         self.root.geometry(alignstr)
-        self.root.resizable(False, False)
+        #self.root.resizable(False, False)
 
         self.import_logo()
         self.setup_menu_bar()
