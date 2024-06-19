@@ -205,6 +205,22 @@ class BetFeed:
         self.activity_frame.grid_columnconfigure(0, weight=1)
         self.activity_text.grid(row=0, column=0, sticky='nsew')
 
+    def start_feed_update(self):
+        # Get the current scroll position
+        scroll_pos = self.feed_text.yview()[0]
+        
+        # Check if the scroll position is at the top (or close to the top)
+        if scroll_pos <= 0.05:
+            # The view is at the top, safe to refresh
+            print("Refreshing feed...")
+            self.bet_feed()
+        else:
+            # The view is not at the top, skip refresh or handle differently
+            pass  # You can decide to do something else here if needed
+        
+        # Schedule start_feed_update to be called again after 5 seconds
+        self.feed_frame.after(5000, self.start_feed_update)
+
     def apply_filters(self):
         # Retrieve current filter values from the UI elements
         self.current_filters['username'] = self.username_filter_entry.get()
@@ -255,38 +271,42 @@ class BetFeed:
             unit_stake_filter_value = None
 
         for bet in bets:
-            # Access 'unit_stake' from the nested 'details' dictionary and convert it to float
-            unit_stake_str = bet.get('details', {}).get('unit_stake', '£0')
-            try:
-                unit_stake_value = float(unit_stake_str.replace('£', ''))
-            except ValueError:
-                # If conversion fails, skip this bet
+            if isinstance(bet.get('details'), dict):
+                #Access 'unit_stake' from the nested 'details' dictionary and convert it to float
+                unit_stake_str = bet['details'].get('unit_stake', '£0')
+                try:
+                    unit_stake_value = float(unit_stake_str.replace('£', ''))
+                except ValueError:
+                    # If conversion fails, skip this bet
+                    continue
+
+                # Check if the bet's unit_stake is equal to or greater than the filter value
+                if unit_stake_filter_value is not None and unit_stake_value < unit_stake_filter_value:
+                    continue  # Skip this bet if it doesn't meet the unit stake criteria
+
+                # Check if the bet's customer_ref matches the username filter
+                if username and bet.get('customer_ref') != username.upper():
+                    continue  # Skip this bet if it doesn't match the username filter
+
+                # The rest of your filtering logic remains the same...
+                # Access 'risk_category' from the nested 'details' dictionary
+                risk_category_value = bet.get('details', {}).get('risk_category', '-')
+
+                # Determine if the bet should be included based on the risk category filter
+                include_bet = False
+                if risk_category is None or risk_category == '':
+                    include_bet = True
+                elif risk_category == 'Any' and risk_category_value != '-':
+                    include_bet = True
+                elif risk_category_value == risk_category:
+                    include_bet = True
+
+                # Apply sport filter
+                if include_bet and (sport_number == -1 or sport_number in bet.get('Sport', [])):
+                    filtered_bets.append(bet)
+            else:
+
                 continue
-
-            # Check if the bet's unit_stake is equal to or greater than the filter value
-            if unit_stake_filter_value is not None and unit_stake_value < unit_stake_filter_value:
-                continue  # Skip this bet if it doesn't meet the unit stake criteria
-
-            # Check if the bet's customer_ref matches the username filter
-            if username and bet.get('customer_ref') != username.upper():
-                continue  # Skip this bet if it doesn't match the username filter
-
-            # The rest of your filtering logic remains the same...
-            # Access 'risk_category' from the nested 'details' dictionary
-            risk_category_value = bet.get('details', {}).get('risk_category', '-')
-
-            # Determine if the bet should be included based on the risk category filter
-            include_bet = False
-            if risk_category is None or risk_category == '':
-                include_bet = True
-            elif risk_category == 'Any' and risk_category_value != '-':
-                include_bet = True
-            elif risk_category_value == risk_category:
-                include_bet = True
-
-            # Apply sport filter
-            if include_bet and (sport_number == -1 or sport_number in bet.get('Sport', [])):
-                filtered_bets.append(bet)
         
         return filtered_bets
 
@@ -325,9 +345,20 @@ class BetFeed:
             self.display_bet(bet)
             self.feed_text.insert('end', separator, "notices")
         
-        self.update_activity_frame(reporting_data)
+        self.sport_count = self.count_sport(self.data)
+        self.update_activity_frame(reporting_data, self.sport_count)
         # Disable the text widget to prevent user edits
         self.feed_text.config(state="disabled")
+
+    def count_sport(self, data):
+        sport_counts = {0: 0, 1: 0, 2: 0}
+
+        for bet in data:
+            if "Sport" in bet:
+                for sport in bet["Sport"]:
+                    if sport in sport_counts:
+                        sport_counts[sport] += 1
+        return sport_counts
 
 
     def insert_feed_text(self, text, tag=None):
@@ -355,12 +386,7 @@ class BetFeed:
         elif wager_type == 'bet':
             self.display_regular_bet(bet)
 
-    def start_feed_update(self):
-        # Call the bet_feed method to update the feed
-        self.bet_feed()
-        
-        # Schedule start_feed_update to be called again after 30 seconds
-        self.feed_frame.after(5000, self.start_feed_update)
+
 
     def display_wager_knockback(self, bet):
         customer_ref = bet.get('customer_ref', '')
@@ -434,26 +460,38 @@ class BetFeed:
         self.total_bets += 1
 
 
-    def update_activity_frame(self, reporting_data):
+    def update_activity_frame(self, reporting_data, sport_count):
         unique_m_clients = len(self.m_clients)
         unique_w_clients = len(self.w_clients)
         unique_norisk_clients = len(self.norisk_clients)
         total_unique_clients = len(self.m_clients.union(self.w_clients, self.norisk_clients))
         knockback_percentage = (self.total_knockbacks / self.total_bets * 100) if self.total_bets > 0 else 0
 
+
+                # 'total_deposits': self.data.get('deposits_summary', {}).get('total_deposits', 0),
+                # 'total_sum': self.data.get('deposits_summary', {}).get('total_sum', 0),
         # Format reporting data
         daily_turnover = reporting_data.get('daily_turnover', 'N/A')
         daily_profit = reporting_data.get('daily_profit', 'N/A')
         daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
         last_updated_time = reporting_data.get('last_updated_time', 'N/A')
+        total_deposits = reporting_data.get('total_deposits', 'N/A')
+        total_sum_deposits = reporting_data.get('total_sum', 'N/A')
+        horse_bets = sport_count.get(0, 0)
+        dog_bets = sport_count.get(1, 0)
+        other_bets = sport_count.get(2, 0)
+
+
+        avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
 
         status_text = (
-            f"Bets: {self.total_bets} | Knockbacks: {self.total_knockbacks} | SMS: {self.total_sms_wagers}\n"
-            f"Knockback Percentage: {knockback_percentage:.2f}%\n"
-            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | NoRisk: {unique_norisk_clients}\n"
-            f"Turnover: {daily_turnover} | Profit: {daily_profit}\n"
-            f"Profit Percentage: {daily_profit_percentage}\n"
-            f"Last Updated: {last_updated_time}"
+            f"Bets: {self.total_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%)\n"
+            f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
+            f"Deposits: {total_deposits} | Total: £{total_sum_deposits:,.2f} (~£{avg_deposit:,.2f})\n"
+            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}\n"
+            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n"
+
+            # f"Last Updated: {last_updated_time}"
         )
 
         self.activity_text.config(state='normal')  # Enable the widget for editing
