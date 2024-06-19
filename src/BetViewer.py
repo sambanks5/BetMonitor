@@ -2502,7 +2502,6 @@ def log_notification(message, important=False):
             json.dump(notifications, f, indent=4)
 
 # Initialize a variable to keep track of the most recent notification
-
 def update_notifications():
     global last_notification  # Use the global variable
 

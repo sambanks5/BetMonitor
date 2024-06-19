@@ -27,6 +27,35 @@ from tkinter.ttk import *
 from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
+user = ""
+USER_NAMES = {
+    'GB': 'George',
+    'JP': 'Jon',
+    'DF': 'Dave',
+    'SB': 'Sam',
+    'JJ': 'Joji',
+    'AE': 'Arch',
+    'EK': 'Ed',
+}
+
+def user_login():
+    global user, full_name
+    while True:
+        user = simpledialog.askstring("Input", "Please enter your initials:")
+        if user and len(user) <= 2:
+            user = user.upper()
+            if user in USER_NAMES:
+                full_name = USER_NAMES[user]
+                # log_notification(f"{user} logged in")
+                break
+            else:
+                messagebox.showerror("Error", "Could not find staff member! Please try again.")
+        else:
+            messagebox.showerror("Error", "Maximum of 2 characters.")
+
+    # login_label.config(text=f'Logged in as {full_name}')
+
+
 
 class BetDataFetcher:
     _instance = None
@@ -102,24 +131,34 @@ def get_database(date_str=None):
         date_str += '-wager_database.json'
     json_file_path = f"database/{date_str}"
 
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            with open(json_file_path, 'r') as json_file:
-                data = json.load(json_file)
-            data.reverse()
-            return data
-        except FileNotFoundError:
-            if attempt >= max_retries - 1:
-                print(f"No bet data available for {date_str}.")
-            time.sleep(1)  # Retry after a delay
-        except json.JSONDecodeError:
-            if attempt >= max_retries - 1:
-                print(f"Error: Could not decode JSON from file: {json_file_path}.")
-            time.sleep(1)
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return []
+    try:
+        with open(json_file_path, 'r') as json_file:
+            data = json.load(json_file)
+        data.reverse()
+        return data
+    except FileNotFoundError:
+        print(f"No bet data available for {date_str}.")
+        return []
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from file: {json_file_path}.")
+        return []
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return []
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -135,14 +174,14 @@ def get_database(date_str=None):
 class BetFeed:
     def __init__(self, root):
         self.root = root
-        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None}
+        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
         self.initialize_ui()
         self.start_feed_update()
 
     def initialize_ui(self):
         # BET FEED UI Setup
         self.feed_frame = ttk.LabelFrame(self.root, style='Card', text="Bet Feed")
-        self.feed_frame.place(x=5, y=5, width=550, height=600)
+        self.feed_frame.place(x=5, y=5, width=550, height=640)
         self.feed_frame.grid_columnconfigure(0, weight=1)
         self.feed_frame.grid_columnconfigure(1, weight=0)
         self.feed_frame.grid_rowconfigure(0, weight=1)
@@ -156,33 +195,47 @@ class BetFeed:
         self.feed_text.configure(yscrollcommand=self.feed_scroll.set)
 
         self.filter_frame = ttk.Frame(self.feed_frame)
-        self.filter_frame.grid(row=1, column=0, sticky='ew')
+        self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(5, 0))
 
         self.username_filter_label = ttk.Label(self.filter_frame, text='Client:')
         self.username_filter_label.grid(row=0, column=0, sticky='e', padx=5)
         self.username_filter_entry = ttk.Entry(self.filter_frame, width=8)
         self.username_filter_entry.grid(row=0, column=1, pady=(0, 3), sticky='ew')
 
-        self.unit_stake_filter_label = ttk.Label(self.filter_frame, text='Unit Stk:')
+        self.unit_stake_filter_label = ttk.Label(self.filter_frame, text='Unit Stake:')
         self.unit_stake_filter_label.grid(row=0, column=2, sticky='e', padx=5)
         self.unit_stake_filter_entry = ttk.Entry(self.filter_frame, width=3)
         self.unit_stake_filter_entry.grid(row=0, column=3, pady=(0, 3), sticky='ew')
 
-        self.risk_category_filter = ttk.Label(self.filter_frame, text='Risk Cat:')
+        self.risk_category_filter = ttk.Label(self.filter_frame, text='Risk Category:')
         self.risk_category_filter.grid(row=0, column=4, sticky='e', padx=5)
         self.risk_category_combobox_values = ["", "Any", "M", "W", "S", "O", "X"]
         self.risk_category_filter_entry = ttk.Combobox(self.filter_frame, values=self.risk_category_combobox_values, width=3)
         self.risk_category_filter_entry.grid(row=0, column=5, pady=(0, 3), sticky='ew')
 
+        
+        self.selection_filter_label = ttk.Label(self.filter_frame, text='Selection:')
+        self.selection_filter_label.grid(row=1, column=0, sticky='e', padx=5)
+        self.selection_filter_entry = ttk.Entry(self.filter_frame, width=8)
+        self.selection_filter_entry.grid(row=1, column=1, pady=(0, 3), sticky='ew', columnspan=3)
+
         self.sport_filter = ttk.Label(self.filter_frame, text='Sport:')
-        self.sport_filter.grid(row=0, column=6, sticky='e', padx=5)
+        self.sport_filter.grid(row=1, column=4, sticky='e', padx=5)
         self.sport_combobox_values = ["", "Horses", "Dogs", "Other"]
         self.sport_combobox_entry = ttk.Combobox(self.filter_frame, values=self.sport_combobox_values, width=5)
-        self.sport_combobox_entry.grid(row=0, column=7, pady=(0, 3), sticky='ew')
+        self.sport_combobox_entry.grid(row=1, column=5, pady=(0, 3), sticky='ew')
 
         self.tick_button = ttk.Button(self.filter_frame, text='✔', command=self.apply_filters, width=2)
         self.tick_button.grid(row=0, column=8, padx=(10, 0), sticky='ew', pady=(0, 3)) 
 
+        self.reset_button = ttk.Button(self.filter_frame, text='X', command=self.reset_filters, width=2)
+        self.reset_button.grid(row=1, column=8, padx=(10, 0), sticky='ew', pady=(0, 3)) 
+
+        self.separator = ttk.Separator(self.filter_frame, orient='vertical')
+        self.separator.grid(row=0, column=7, rowspan=2, sticky='ns')
+
+        self.filter_frame.grid_rowconfigure(0, weight=1)
+        self.filter_frame.grid_rowconfigure(1, weight=1)
         self.filter_frame.grid_columnconfigure(0, weight=0)
         self.filter_frame.grid_columnconfigure(1, weight=0)
         self.filter_frame.grid_columnconfigure(2, weight=1)
@@ -227,6 +280,7 @@ class BetFeed:
         self.current_filters['unit_stake'] = self.unit_stake_filter_entry.get()
         self.current_filters['risk_category'] = self.risk_category_filter_entry.get()
         self.current_filters['sport'] = self.sport_combobox_entry.get()
+        self.current_filters['selection'] = self.selection_filter_entry.get()
 
         # Check if any filters are applied
         filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
@@ -242,17 +296,19 @@ class BetFeed:
 
     def reset_filters(self):
         # Reset the stored filters
-        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None}
+        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
         # You might want to clear the UI elements for filters here as well
         self.username_filter_entry.delete(0, tk.END)  # Clear the username filter entry
         self.unit_stake_filter_entry.delete(0, tk.END)  # Clear the unit stake filter entry
         self.risk_category_filter_entry.delete(0, tk.END)  # Clear the risk category filter entry
         self.sport_combobox_entry.set('')  # Reset the sport combobox to its default state or an empty string
+        self.selection_filter_entry.delete(0, tk.END)  # Clear the selection filter entry
+        
+        self.tick_button.configure(style='TButton')
 
-        # Call bet_feed to refresh the data without any filters
         self.bet_feed()
 
-    def filter_bets(self, bets, username, unit_stake_filter, risk_category, sport):
+    def filter_bets(self, bets, username, unit_stake_filter, risk_category, sport, selection_search_term=None):
         filtered_bets = []        
         # Mapping for sport names to numbers
         sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
@@ -272,6 +328,34 @@ class BetFeed:
 
         for bet in bets:
             if isinstance(bet.get('details'), dict):
+                selections = bet['details'].get('selections', [])
+                selection_match = False
+                if selection_search_term:
+                    if bet.get('type') == "WAGER KNOCKBACK":  # Check if it's a knockback
+                        for selection in selections:
+                            # Construct the selection string for knockbacks
+                            meeting_name = selection.get("- Meeting Name", "")
+                            selection_name = selection.get("- Selection Name", "")
+                            selection_str = f"{meeting_name}, {selection_name}"
+                            if selection_search_term.lower() in selection_str.lower():
+                                selection_match = True
+                                break
+                    else:  # For other bet types
+                        for selection in selections:
+                            if isinstance(selection, list) and selection_search_term.lower() in selection[0].lower():
+                                selection_match = True
+                                break
+                            elif isinstance(selection, dict):  # Fallback for unexpected dict format in non-knockback bets
+                                selection_str = selection.get("Selection Name", "")  # Assuming a similar key exists
+                                if selection_search_term.lower() in selection_str.lower():
+                                    selection_match = True
+                                    break
+                else:
+                    selection_match = True  # If no search term is provided, don't filter out based on selections
+
+                if not selection_match:
+                    continue  # Skip this bet if it doesn't match the selection search term
+
                 #Access 'unit_stake' from the nested 'details' dictionary and convert it to float
                 unit_stake_str = bet['details'].get('unit_stake', '£0')
                 try:
@@ -288,7 +372,6 @@ class BetFeed:
                 if username and bet.get('customer_ref') != username.upper():
                     continue  # Skip this bet if it doesn't match the username filter
 
-                # The rest of your filtering logic remains the same...
                 # Access 'risk_category' from the nested 'details' dictionary
                 risk_category_value = bet.get('details', {}).get('risk_category', '-')
 
@@ -318,17 +401,24 @@ class BetFeed:
         self.w_clients = set()
         self.norisk_clients = set()
 
-        # Fetch the actual database data for the given date or today if not specified
         self.data = get_database(date_str)
+
+        if self.data is None:
+            self.feed_text.config(state="normal")
+            self.feed_text.delete('1.0', tk.END)  # Clear existing text
+            self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
+            self.feed_text.config(state="disabled")
+            return  # Exit the function early
 
         # Retrieve current filter values
         username = self.current_filters['username']
         unit_stake = self.current_filters['unit_stake']
         risk_category = self.current_filters['risk_category']
         sport = self.current_filters['sport']
+        selection_search_term = self.current_filters['selection']
 
         # Filter bets based on current filter settings
-        filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport)
+        filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport, selection_search_term)
         # Initialize text tags for different categories
         self.initialize_text_tags()
 
@@ -336,19 +426,23 @@ class BetFeed:
         self.feed_text.config(state="normal")
         self.feed_text.delete('1.0', tk.END)  # Clear existing text
 
-        separator = '\n-------------------------------------------------------------------------------------------------------\n'
+        if not filtered_bets:  # Check if filtered_bets is empty
+            self.feed_text.insert('end', "No bets found with the current filters.", 'center')
+        else:
+            separator = '\n-------------------------------------------------------------------------------------------------------\n'
+            # Access additional data needed for display
+            self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
 
-        # Access additional data needed for display
-        self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
-
-        for bet in filtered_bets:  # Iterate through each filtered bet
-            self.display_bet(bet)
-            self.feed_text.insert('end', separator, "notices")
+            for bet in filtered_bets:  # Iterate through each filtered bet
+                self.display_bet(bet)
+                self.feed_text.insert('end', separator, "notices")
+            
+            self.sport_count = self.count_sport(self.data)
+            self.update_activity_frame(reporting_data, self.sport_count)
         
-        self.sport_count = self.count_sport(self.data)
-        self.update_activity_frame(reporting_data, self.sport_count)
         # Disable the text widget to prevent user edits
         self.feed_text.config(state="disabled")
+
 
     def count_sport(self, data):
         sport_counts = {0: 0, 1: 0, 2: 0}
@@ -374,7 +468,7 @@ class BetFeed:
         self.feed_text.tag_configure("sms", foreground="orange")
         self.feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
         self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
-
+        self.feed_text.tag_configure('center', justify='center')
 
 
     def display_bet(self, bet):
@@ -385,7 +479,6 @@ class BetFeed:
             self.display_sms_wager(bet)
         elif wager_type == 'bet':
             self.display_regular_bet(bet)
-
 
 
     def display_wager_knockback(self, bet):
@@ -467,31 +560,27 @@ class BetFeed:
         total_unique_clients = len(self.m_clients.union(self.w_clients, self.norisk_clients))
         knockback_percentage = (self.total_knockbacks / self.total_bets * 100) if self.total_bets > 0 else 0
 
-
-                # 'total_deposits': self.data.get('deposits_summary', {}).get('total_deposits', 0),
-                # 'total_sum': self.data.get('deposits_summary', {}).get('total_sum', 0),
-        # Format reporting data
         daily_turnover = reporting_data.get('daily_turnover', 'N/A')
         daily_profit = reporting_data.get('daily_profit', 'N/A')
         daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
-        last_updated_time = reporting_data.get('last_updated_time', 'N/A')
+        #last_updated_time = reporting_data.get('last_updated_time', 'N/A')
         total_deposits = reporting_data.get('total_deposits', 'N/A')
         total_sum_deposits = reporting_data.get('total_sum', 'N/A')
         horse_bets = sport_count.get(0, 0)
         dog_bets = sport_count.get(1, 0)
         other_bets = sport_count.get(2, 0)
 
+        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
 
         avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
 
         status_text = (
-            f"Bets: {self.total_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%)\n"
+            f"Bets: {self.total_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%){'*' if filters_applied else ''}\n"
             f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
             f"Deposits: {total_deposits} | Total: £{total_sum_deposits:,.2f} (~£{avg_deposit:,.2f})\n"
-            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}\n"
-            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n"
-
-            # f"Last Updated: {last_updated_time}"
+            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}{'*' if filters_applied else ''}\n"
+            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n\n"
+            f"{'Feed Filters Currently Applied!' if filters_applied else 'Bet Viewer v10.0'}"
         )
 
         self.activity_text.config(state='normal')  # Enable the widget for editing
@@ -501,6 +590,19 @@ class BetFeed:
         self.activity_text.insert(tk.END, status_text, 'center')  # Insert the updated status text and apply the 'center' tag
         
         self.activity_text.config(state='disabled')  # Disable editing
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -526,7 +628,7 @@ class BetRuns:
     
     def initialize_ui(self):
         self.runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
-        self.runs_frame.place(x=560, y=160, width=335, height=445)
+        self.runs_frame.place(x=560, y=160, width=335, height=485)
         self.runs_frame.grid_columnconfigure(0, weight=1)
         self.runs_frame.grid_rowconfigure(0, weight=1)
         self.runs_frame.grid_columnconfigure(1, weight=0)
@@ -576,7 +678,16 @@ class BetRuns:
             pass
 
     def bet_runs(self, num_bets, num_run_bets):
-        selection_bets = get_database()[:num_bets] 
+        database_data = get_database()
+        
+        if database_data is None:
+            self.runs_text.config(state="normal")
+            self.runs_text.delete('1.0', tk.END)  # Clear existing text
+            self.runs_text.insert('end', "No bet data available for the selected date or the database can't be found.")
+            self.runs_text.config(state="disabled")
+            return  # Exit the function early if data is not as expected
+
+        selection_bets = database_data[:num_bets]        
         selection_to_bets = defaultdict(list)
 
         for bet in selection_bets:
@@ -667,12 +778,455 @@ class BetRuns:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class RaceUpdaton:
+    def __init__(self, root):
+        self.root = root
+        self.current_page = 0
+        self.courses_per_page = 6
+        self.initialize_ui()
+        self.get_courses()
+    
+    def initialize_ui(self):
+        self.race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
+        self.race_updation_frame.place(x=5, y=647, width=227, height=273)
+
+    def get_courses(self):
+        today = date.today()
+        courses = set()
+
+        try:
+            response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h')
+            response.raise_for_status()
+            api_data = response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching data from API: {e}")
+            return
+        except json.JSONDecodeError:
+            print("Error decoding JSON from API response.")
+            return
+
+        for event in api_data:
+            for meeting in event['meetings']:
+                courses.add(meeting['meetinName'])
+
+        courses.add("Football")
+        courses.add("SIS Greyhounds")
+        courses.add("TRP Greyhounds")
+
+        courses = list(courses)
+        print("Courses:", courses)
+
+        try:
+            with open('update_times.json', 'r') as f:
+                update_data = json.load(f)
+        except FileNotFoundError:
+            update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
+            with open('update_times.json', 'w') as f:
+                json.dump(update_data, f)
+
+        if update_data['date'] != today.strftime('%Y-%m-%d'):
+            update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in courses}}
+            with open('update_times.json', 'w') as f:
+                json.dump(update_data, f)
+
+        self.display_courses()
+        return courses
+
+
+    def reset_update_times(self):
+        if os.path.exists('update_times.json'):
+            os.remove('update_times.json')
+
+        update_data = {'date': '', 'courses': {}}
+        with open('update_times.json', 'w') as f:
+            json.dump(update_data, f)
+        
+        self.display_courses()
+
+    def course_needs_update(self, course, data):
+        if course in data['courses'] and data['courses'][course]:
+            last_updated_time = data['courses'][course].split(' ')[0]
+            last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+        else:
+            last_updated = datetime.now().time()
+
+        now = datetime.now().time()
+
+        time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+
+        if course in ["SIS Greyhounds", "TRP Greyhounds"]:
+            return time_diff >= 60
+        else:
+            return time_diff >= 25
+
+    def display_courses(self):
+        for widget in self.race_updation_frame.winfo_children():
+            widget.destroy()
+
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+
+        courses = list(data['courses'].keys())
+        courses.sort(key=lambda x: (x=="SIS Greyhounds", x=="TRP Greyhounds"))
+        start = self.current_page * self.courses_per_page
+        end = start + self.courses_per_page
+        courses_page = courses[start:end]
+
+        button_frame = ttk.Frame(self.race_updation_frame)
+        button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
+
+        # Create the add button and align it to the left of the Frame
+        add_button = ttk.Button(button_frame, text="+", command=self.add_course, width=2, cursor="hand2")
+        add_button.pack(side='left')
+
+        # Add an indicator in the middle
+        update_indicator = ttk.Label(button_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
+        update_indicator.pack(side='left', padx=2, expand=True)
+
+        # Create the remove button and align it to the right of the Frame
+        remove_button = ttk.Button(button_frame, text="-", command=self.remove_course, width=2, cursor="hand2")
+        remove_button.pack(side='right')
+
+        for i, course in enumerate(courses_page):
+            # Replace the course label with a button
+            course_button = ttk.Button(self.race_updation_frame, text=course, command=lambda course=course: self.update_course(course), width=15, cursor="hand2")
+            course_button.grid(row=i, column=0, padx=5, pady=2, sticky="w")
+
+            if course in data['courses'] and data['courses'][course]:
+                last_updated_time = data['courses'][course].split(' ')[0]
+                last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+            else:
+                last_updated = datetime.now().time()
+
+            now = datetime.now().time()
+
+            time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+
+            if course in ["SIS Greyhounds", "TRP Greyhounds"]:
+                if 60 <= time_diff < 90:
+                    color = 'Orange'
+                elif time_diff >= 90:
+                    color = 'red'
+                else:
+                    color = 'black'
+            else:
+                if 25 <= time_diff < 35:
+                    color = 'Orange'
+                elif time_diff >= 35:
+                    color = 'red'
+                else:
+                    color = 'black'
+
+            if course in data['courses'] and data['courses'][course]:
+                time_text = data['courses'][course]
+            else:
+                time_text = "Not updated"
+
+            time_label = ttk.Label(self.race_updation_frame, text=time_text, foreground=color)
+            time_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+
+        navigation_frame = ttk.Frame(self.race_updation_frame)
+        navigation_frame.grid(row=len(courses_page), column=1, padx=2, pady=2, sticky='ew')
+
+        back_button = ttk.Button(navigation_frame, text="<", command=self.back, width=2, cursor="hand2")
+        back_button.grid(row=0, column=0, padx=2, pady=2)
+
+        forward_button = ttk.Button(navigation_frame, text=">", command=self.forward, width=2, cursor="hand2")
+        forward_button.grid(row=0, column=1, padx=2, pady=2)
+
+        # Check if any course on other pages needs updating
+        other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
+        if any(self.course_needs_update(course, data) for course in other_courses):
+            update_indicator.pack()
+        else:
+            update_indicator.pack_forget()
+
+        if self.current_page == 0:
+            back_button.config(state='disabled')
+        else:
+            back_button.config(state='normal')
+
+        if self.current_page == len(courses) // self.courses_per_page:
+            forward_button.config(state='disabled')
+        else:
+            forward_button.config(state='normal')
+
+    def remove_course(self):
+        # Open a dialog box to get the course name
+        course = simpledialog.askstring("Remove Course", "Enter the course name:")
+        
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+        if course in data['courses']:
+            del data['courses'][course]
+
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+        # log_notification(f"'{course}' removed by {user}")
+
+        self.display_courses()
+
+    def add_course(self):
+        course_name = simpledialog.askstring("Add Course", "Enter the course name:")
+        if course_name:
+            with open('update_times.json', 'r') as f:
+                data = json.load(f)
+
+            data['courses'][course_name] = ""
+
+            with open('update_times.json', 'w') as f:
+                json.dump(data, f)
+
+            # log_notification(f"'{course_name}' added by {user}")
+
+            self.display_courses()
+
+    def back(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.display_courses()
+
+    def forward(self):
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+        total_courses = len(data['courses'].keys())
+        if (self.current_page + 1) * self.courses_per_page < total_courses:
+            self.current_page += 1
+            self.display_courses()
+
+    def update_course(self, course):
+        global user
+        if not user:
+            user_login()
+
+        now = datetime.now()
+        time_string = now.strftime('%H:%M')
+
+        with open('update_times.json', 'r') as f:
+            data = json.load(f)
+
+        data['courses'][course] = f"{time_string} - {user}"
+        with open('update_times.json', 'w') as f:
+            json.dump(data, f)
+
+        self.log_update(course, time_string, user)
+        self.display_courses()
+
+    def log_update(self, course, time, user):
+        now = datetime.now()
+        date_string = now.strftime('%d-%m-%Y')
+        log_file = f'logs/updatelogs/update_log_{date_string}.txt'
+
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                data = f.readlines()
+        else:
+            data = []
+
+        update = f"{time} - {user}\n"
+
+        course_index = None
+        for i, line in enumerate(data):
+            if line.strip() == course + ":":
+                course_index = i
+                break
+
+        if course_index is not None:
+            data.insert(course_index + 1, update)
+        else:
+            data.append(f"\n{course}:\n")
+            data.append(update)
+
+        log_message = f"{user} updated {course}"
+        # log_notification(log_message)
+
+        with open(log_file, 'w') as f:
+            f.writelines(data)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class Notebook:
+    def __init__(self, root):
+        self.root = root
+        self.initialize_ui()
+
+    def initialize_ui(self):
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.place(x=238, y=655, width=470, height=265)
+        ### RISK BETS TAB
+        tab_1 = ttk.Frame(self.notebook)
+        self.notebook.add(tab_1, text="Staff Feed")
+        staff_feed=tk.Text(tab_1, font=("Helvetica", 10), bd=0, wrap='word',padx=10, pady=10, fg="#000000", bg="#ffffff")
+        staff_feed.grid(row=0, column=0, sticky="nsew")
+        staff_feed.pack(fill='both', expand=True)
+        ### REPORT TAB
+        tab_2 = ttk.Frame(self.notebook)
+        self.notebook.add(tab_2, text="Reports/Screener")
+        tab_2.grid_rowconfigure(0, weight=1)
+        tab_2.grid_rowconfigure(1, weight=1)
+        tab_2.grid_columnconfigure(0, weight=1)
+        report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
+        report_ticket.tag_configure("center", justify='center')
+        report_ticket.insert('1.0', "User Report\nGenerate a report for a specific client, including their bet history.\n\nStaff Report\nGenerate a report on staff activity.\n\nDaily Report\nGenerate a report for the days betting activity.", "center")    
+        report_ticket.config(state='disabled')
+        report_ticket.grid(row=0, column=0, sticky="nsew")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class Next3Panel:
+    def __init__(self, root):
+        self.root = root
+        _, _, _, _, reporting_data = access_data()
+        self.enhanced_places = reporting_data.get('enhanced_places', [])
+        self.initialize_ui()
+        self.run_display_next_3()
+    
+    def run_display_next_3(self):
+        self.display_next_3()
+        print("Running next 3")
+        self.root.after(10000, self.run_display_next_3)
+
+    def initialize_ui(self):
+        next_races_frame = ttk.Frame(root)
+        next_races_frame.place(x=5, y=927, width=890, height=55)
+
+        horses_frame = ttk.Frame(next_races_frame, style='Card')
+        horses_frame.place(relx=0, rely=0.05, relwidth=0.5, relheight=0.9)
+
+        greyhounds_frame = ttk.Frame(next_races_frame, style='Card')
+        greyhounds_frame.place(relx=0.51, rely=0.05, relwidth=0.49, relheight=0.9)
+
+        # Create the labels for the horse data
+        self.horse_labels = [ttk.Label(horses_frame, justify='center', font=("Helvetica", 9, "bold")) for _ in range(3)]
+        for i, label in enumerate(self.horse_labels):
+            label.grid(row=0, column=i, padx=0, pady=5)
+            horses_frame.columnconfigure(i, weight=1)
+
+        # Create the labels for the greyhound data
+        self.greyhound_labels = [ttk.Label(greyhounds_frame, justify='center', font=("Helvetica", 9, "bold")) for _ in range(3)]
+        for i, label in enumerate(self.greyhound_labels):
+            label.grid(row=1, column=i, padx=0, pady=5)
+            greyhounds_frame.columnconfigure(i, weight=1)
+    
+    def process_data(self, data, labels_type):
+    
+        labels = self.horse_labels if labels_type == 'horse' else self.greyhound_labels
+        for i, event in enumerate(data[:3]):
+            meeting_name = event.get('meetingName', '')
+            status = event.get('status', '')
+            hour = str(event.get('hour', ''))
+            ptype = event.get('pType', '')
+            minute = str(event.get('minute', '')).zfill(2) 
+            time = f"{hour}:{minute}"
+            if not status:
+                status = '-'
+            
+            ## Map ptype to a more readable format
+            if ptype == 'Board Price':
+                ptype = 'BP'
+            elif ptype == 'Early Price':
+                ptype = 'EP'
+            elif ptype == 'S.P. Only':
+                ptype = 'SP'
+            else:
+                ptype = '-'
+
+            race = f"{meeting_name}, {time}"
+
+            if race in self.enhanced_places:
+                labels[i].config(foreground='#ff00e6')
+            else:
+                labels[i].config(foreground='black')
+
+            # Create a label for each meeting and place it in the grid
+            labels[i].config(text=f"{race} ({ptype})\n{status}")
+
+    def display_next_3(self):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+        }
+
+        horse_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o', headers=headers)
+        greyhound_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g', headers=headers)
+
+        # Check if the responses are not empty and have a status code of 200 (OK)
+        if horse_response.status_code == 200 and greyhound_response.status_code == 200:
+
+            horse_data = horse_response.json()
+            greyhound_data = greyhound_response.json()
+
+            # Process the horse and greyhound data
+            self.process_data(horse_data, 'horse')
+            self.process_data(greyhound_data, 'greyhound')    
+
+        else:
+            print("Error: The response from the API is not OK.")
+            return   
+            
+
+
+
+
+
 class BetViewerApp:
     def __init__(self, root):
         self.root = root
         self.initialize_ui()
         self.bet_feed = BetFeed(root)  # Integrate BetFeed into BetViewerApp
         self.bet_runs = BetRuns(root)  # Integrate BetRuns into BetViewerApp
+        self.race_updation = RaceUpdaton(root)  # Integrate RaceUpdaton into BetViewerApp
+        self.next3_panel = Next3Panel(root)  # Integrate Next3Panel into BetViewerApp
+        self.notebook = Notebook(root)  # Integrate Notebook into BetViewerApp
 
     def initialize_ui(self):
         self.root.title("Bet Viewer v8.5")
@@ -680,9 +1234,7 @@ class BetViewerApp:
         ttk.Style().theme_use('forest-light')
         style = ttk.Style(self.root)
         width = 900
-        height = 1000
-
-        
+        height = 1005
         screenwidth = self.root.winfo_screenwidth()
         screenheight = self.root.winfo_screenheight()
         # self.root.configure(bg='#ffffff')
@@ -742,6 +1294,13 @@ class BetViewerApp:
 
     def about(self):
         pass
+
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
