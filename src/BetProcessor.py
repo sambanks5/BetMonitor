@@ -825,7 +825,7 @@ def get_reporting_data(app):
 ## GET NEW REGISTRATIONS FROM PIPEDRIVE API
 ####################################################################################
 def get_new_registrations(app):
-    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
+    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=60')
 
     if response.status_code == 200:
         data = response.json()
