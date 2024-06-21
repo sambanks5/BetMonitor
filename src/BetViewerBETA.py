@@ -1126,6 +1126,25 @@ class RaceUpdaton:
 
 
 
+class Settings:
+    def __init__(self, root):
+        self.root = root
+        self.initialize_ui()
+        self.import_logo()
+    
+    def initialize_ui(self):
+        self.settings_frame = ttk.Frame(root, style='Card')
+        self.settings_frame.place(x=714, y=652, width=180, height=266)
+
+    def import_logo(self):
+        logo_image = Image.open('src/splash.ico')
+        logo_image = logo_image.resize((60, 60))
+        self.company_logo = ImageTk.PhotoImage(logo_image)
+        self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
+        self.logo_label.pack(pady=10)
+
+
+
 
 
 
@@ -1145,7 +1164,7 @@ class Notebook:
 
     def initialize_ui(self):
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.place(x=238, y=653, width=470, height=265)
+        self.notebook.place(x=238, y=653, width=470, height=266)
         ### RISK BETS TAB
         tab_1 = ttk.Frame(self.notebook)
         tab_1.grid_rowconfigure(0, weight=1)
@@ -1180,7 +1199,7 @@ class Notebook:
         self.copy_button = ttk.Button(self.staff_feed_buttons_frame, text="Generate Password", command=self.copy_to_clipboard, cursor="hand2", width=15)
         self.copy_button.pack(side="top", pady=(20, 5))
 
-        self.password_result_label = ttk.Label(self.staff_feed_buttons_frame, text="GB000000", font=("Helvetica", 10), wraplength=200)
+        self.password_result_label = ttk.Label(self.staff_feed_buttons_frame, text="GB000000", font=("Helvetica", 12), wraplength=200)
         self.password_result_label.pack(side="top", pady=2)
         
         ### REPORT TAB
@@ -1214,6 +1233,7 @@ class Notebook:
 
     def update_notifications(self):
         self.staff_feed.tag_configure("important", font=("TkDefaultFont", 10, "bold"))
+        self.staff_feed.config(state='normal')  # Temporarily enable editing to update text
         file_lock = fasteners.InterProcessLock('notifications.lock')
 
         with file_lock:
@@ -1248,6 +1268,7 @@ class Notebook:
 
             except FileNotFoundError:
                 pass
+        self.staff_feed.config(state='disabled')  # Disable editing after updating
         # Schedule the next update
         self.staff_feed.after(1000, self.update_notifications)
 
@@ -1387,8 +1408,9 @@ class BetViewerApp:
         self.bet_feed = BetFeed(root)  # Integrate BetFeed into BetViewerApp
         self.bet_runs = BetRuns(root)  # Integrate BetRuns into BetViewerApp
         self.race_updation = RaceUpdaton(root)  # Integrate RaceUpdaton into BetViewerApp
-        self.next3_panel = Next3Panel(root)  # Integrate Next3Panel into BetViewerApp
+        # self.next3_panel = Next3Panel(root)  # Integrate Next3Panel into BetViewerApp
         self.notebook = Notebook(root)  # Integrate Notebook into BetViewerApp
+        self.settings = Settings(root)  # Integrate Settings into BetViewerApp
 
     def initialize_ui(self):
         self.root.title("Bet Viewer v8.5")
@@ -1464,7 +1486,7 @@ class BetViewerApp:
         
 
     def about(self):
-        messagebox.showinfo("About", "Geoff Banks Bet Monitoring v8.5")
+        messagebox.showinfo("About", "Geoff Banks Bet Monitoring v10.0")
 
 
 
