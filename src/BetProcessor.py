@@ -1716,14 +1716,14 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Bet Processor started")
-    run_get_data(app)
-    run_get_deposit_data(app)
-    run_update_todays_oddsmonkey_selections()
+    #run_get_data(app)
+    #run_get_deposit_data(app)
+    #run_update_todays_oddsmonkey_selections()
     check_race_times()
 
-    schedule.every(2).minutes.do(run_get_data, app)
-    schedule.every(10).minutes.do(run_get_deposit_data, app)
-    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    #schedule.every(2).minutes.do(run_get_data, app)
+    #schedule.every(10).minutes.do(run_get_deposit_data, app)
+    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     schedule.every(50).seconds.do(check_race_times)
     schedule.every(1).hour.do(run_find_rg_issues)

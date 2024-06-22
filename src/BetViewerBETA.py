@@ -1,5 +1,4 @@
 import os
-import psutil
 import re
 import threading
 import pyperclip
@@ -13,14 +12,8 @@ import time
 import tkinter as tk
 from collections import defaultdict, Counter
 from oauth2client.service_account import ServiceAccountCredentials
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar
-from dateutil.relativedelta import relativedelta
-from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+from functools import lru_cache
 from googleapiclient.discovery import build
 from pytz import timezone
 from tkinter import ttk
@@ -40,9 +33,19 @@ USER_NAMES = {
     'EK': 'Ed',
 }
 
-def get_database():
-    global current_database
-    # Use the global variable if set, otherwise default to today's database
+current_database = None
+last_cache_time = None
+
+@lru_cache(maxsize=1)
+def get_database_cached():
+    global current_database, last_cache_time
+    # Invalidate cache if it's older than 1 minute
+    if last_cache_time and datetime.now() - last_cache_time > timedelta(minutes=1):
+        get_database_cached.cache_clear()
+        last_cache_time = datetime.now()
+    else:
+        last_cache_time = datetime.now()
+
     date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
     if not date_str.endswith('-wager_database.json'):
         date_str += '-wager_database.json'
@@ -61,6 +64,9 @@ def get_database():
     except Exception as e:
         print(f"An error occurred: {e}")
         return []
+
+def get_database():
+    return get_database_cached()
 
 def user_login():
     global user, full_name
@@ -322,7 +328,69 @@ class BetFeed:
             pass
         
         # Schedule start_feed_update to be called again after 5 seconds
-        self.feed_frame.after(10000, self.start_feed_update)
+        self.feed_frame.after(2000, self.start_feed_update)
+
+    def bet_feed(self, date_str=None):
+        self.total_bets = 0
+        self.total_knockbacks = 0
+        self.total_sms_wagers = 0
+        self.m_clients = set()
+        self.w_clients = set()
+        self.norisk_clients = set()
+
+        self.data = get_database()
+
+        if self.data is None:
+            self.feed_text.config(state="normal")
+            self.feed_text.delete('1.0', tk.END)  # Clear existing text
+            self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
+            self.feed_text.config(state="disabled")
+            return  # Exit the function early
+
+        # Retrieve current filter values
+        username = self.current_filters['username']
+        unit_stake = self.current_filters['unit_stake']
+        risk_category = self.current_filters['risk_category']
+        sport = self.current_filters['sport']
+        selection_search_term = self.current_filters['selection']
+
+        # Check if any filters are active
+        filters_active = any([
+            username,
+            unit_stake,
+            risk_category,
+            sport,
+            selection_search_term
+        ])
+
+        # Filter bets based on current filter settings if any filters are active
+        if filters_active:
+            filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport, selection_search_term)
+        else:
+            filtered_bets = self.data  # Use all data if no filters are active
+
+        self.initialize_text_tags()
+
+        # Enable text widget for updates
+        self.feed_text.config(state="normal")
+        self.feed_text.delete('1.0', tk.END)  # Clear existing text
+
+        if not filtered_bets:  # Check if filtered_bets is empty
+            self.feed_text.insert('end', "No bets found with the current filters.", 'center')
+        else:
+            separator = '\n-------------------------------------------------------------------------------------------------------\n'
+            # Access additional data needed for display
+            self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
+
+            for bet in filtered_bets:  # Iterate through each filtered bet
+                self.display_bet(bet)
+                self.feed_text.insert('end', separator, "notices")
+            
+            self.sport_count = self.count_sport(self.data)
+            self.update_activity_frame(reporting_data, self.sport_count)
+        
+        # Disable the text widget to prevent user edits
+        self.feed_text.config(state="disabled")
 
     def apply_filters(self):
         # Retrieve current filter values from the UI elements
@@ -345,9 +413,7 @@ class BetFeed:
         self.bet_feed()
 
     def reset_filters(self):
-        # Reset the stored filters
         self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
-        # You might want to clear the UI elements for filters here as well
         self.username_filter_entry.delete(0, tk.END)  # Clear the username filter entry
         self.unit_stake_filter_entry.delete(0, tk.END)  # Clear the unit stake filter entry
         self.risk_category_filter_entry.delete(0, tk.END)  # Clear the risk category filter entry
@@ -377,8 +443,6 @@ class BetFeed:
             unit_stake_filter_value = None
 
         specific_filters_applied = unit_stake_filter_value is not None or sport_number != -1 or (risk_category and risk_category not in ['Any', ''])
-
-
         for bet in bets:
             if isinstance(bet.get('details'), dict):
                 selections = bet['details'].get('selections', [])
@@ -456,68 +520,6 @@ class BetFeed:
                 filtered_bets.append(bet)
         
         return filtered_bets
-
-    def bet_feed(self, date_str=None):
-        self.total_bets = 0
-        self.total_knockbacks = 0
-        self.total_sms_wagers = 0
-        self.m_clients = set()
-        self.w_clients = set()
-        self.norisk_clients = set()
-
-        self.data = get_database()
-
-        if self.data is None:
-            self.feed_text.config(state="normal")
-            self.feed_text.delete('1.0', tk.END)  # Clear existing text
-            self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
-            self.feed_text.config(state="disabled")
-            return  # Exit the function early
-
-        # Retrieve current filter values
-        username = self.current_filters['username']
-        unit_stake = self.current_filters['unit_stake']
-        risk_category = self.current_filters['risk_category']
-        sport = self.current_filters['sport']
-        selection_search_term = self.current_filters['selection']
-
-        # Check if any filters are active
-        filters_active = any([
-            username and username != 'Any',
-            unit_stake and unit_stake != 'Any',
-            risk_category and risk_category not in ['Any', ''],
-            sport and sport != 'Any',
-            selection_search_term
-        ])
-
-        # Filter bets based on current filter settings if any filters are active
-        if filters_active:
-            filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport, selection_search_term)
-        else:
-            filtered_bets = self.data  # Use all data if no filters are active
-
-        self.initialize_text_tags()
-
-        # Enable text widget for updates
-        self.feed_text.config(state="normal")
-        self.feed_text.delete('1.0', tk.END)  # Clear existing text
-
-        if not filtered_bets:  # Check if filtered_bets is empty
-            self.feed_text.insert('end', "No bets found with the current filters.", 'center')
-        else:
-            separator = '\n-------------------------------------------------------------------------------------------------------\n'
-            # Access additional data needed for display
-            self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
-
-            for bet in filtered_bets:  # Iterate through each filtered bet
-                self.display_bet(bet)
-                self.feed_text.insert('end', separator, "notices")
-            
-            self.sport_count = self.count_sport(self.data)
-            self.update_activity_frame(reporting_data, self.sport_count)
-        
-        # Disable the text widget to prevent user edits
-        self.feed_text.config(state="disabled")
 
 
     def count_sport(self, data):
