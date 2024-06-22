@@ -35,37 +35,42 @@ USER_NAMES = {
 
 current_database = None
 last_cache_time = None
+cached_data = None
 
-@lru_cache(maxsize=1)
 def get_database_cached():
-    global current_database, last_cache_time
-    # Invalidate cache if it's older than 1 minute
-    if last_cache_time and datetime.now() - last_cache_time > timedelta(minutes=1):
-        get_database_cached.cache_clear()
-        last_cache_time = datetime.now()
-    else:
-        last_cache_time = datetime.now()
+    global current_database, last_cache_time, cached_data
+    print("Checking cache...")
 
-    date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
-    if not date_str.endswith('-wager_database.json'):
-        date_str += '-wager_database.json'
-    json_file_path = f"database/{date_str}"
-    try:
-        with open(json_file_path, 'r') as json_file:
-            data = json.load(json_file)
-        data.reverse()
-        return data
-    except FileNotFoundError:
-        print(f"No bet data available for {date_str}.")
-        return []
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from file: {json_file_path}.")
-        return []
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
+    # Check if cache needs to be invalidated
+    if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=20):
+        print("Cache cleared or not set.")
+        last_cache_time = datetime.now()
+        # Load data from file as cache is invalid
+        date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
+        if not date_str.endswith('-wager_database.json'):
+            date_str += '-wager_database.json'
+        json_file_path = f"database/{date_str}"
+        try:
+            with open(json_file_path, 'r') as json_file:
+                cached_data = json.load(json_file)
+            cached_data.reverse()
+            print("Data loaded successfully.")
+        except FileNotFoundError:
+            print(f"No bet data available for {date_str}.")
+            cached_data = []
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from file: {json_file_path}.")
+            cached_data = []
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            cached_data = []
+    else:
+        print("Cache hit.")
+
+    return cached_data
 
 def get_database():
+    print("Fetching database...")
     return get_database_cached()
 
 def user_login():
@@ -328,7 +333,7 @@ class BetFeed:
             pass
         
         # Schedule start_feed_update to be called again after 5 seconds
-        self.feed_frame.after(2000, self.start_feed_update)
+        self.feed_frame.after(8000, self.start_feed_update)
 
     def bet_feed(self, date_str=None):
         self.total_bets = 0
@@ -844,7 +849,7 @@ class BetRuns:
         self.bet_runs(num_bets, num_run_bets)
 
         # Use threading to call this method again after 10 seconds
-        self.root.after(10000, self.refresh_bets)        
+        self.root.after(13000, self.refresh_bets)        
 
 
 
@@ -1043,6 +1048,8 @@ class RaceUpdaton:
             forward_button.config(state='disabled')
         else:
             forward_button.config(state='normal')
+
+        self.root.after(20000, self.display_courses)
 
     def remove_course(self):
         # Open a dialog box to get the course name
