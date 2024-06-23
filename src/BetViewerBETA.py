@@ -888,6 +888,10 @@ class RaceUpdaton:
         self.race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
         self.race_updation_frame.place(x=5, y=647, width=227, height=273)
 
+    def display_courses_periodic(self):
+        self.display_courses()
+        self.root.after(15000, self.display_courses_periodic)
+
     def get_courses(self):
         today = date.today()
         courses = set()
@@ -927,7 +931,7 @@ class RaceUpdaton:
             with open('update_times.json', 'w') as f:
                 json.dump(update_data, f)
 
-        self.display_courses()
+        self.display_courses_periodic()
         return courses
 
 
@@ -958,9 +962,6 @@ class RaceUpdaton:
             return time_diff >= 25
 
     def display_courses(self):
-        for widget in self.race_updation_frame.winfo_children():
-            widget.destroy()
-
         with open('update_times.json', 'r') as f:
             data = json.load(f)
 
@@ -970,6 +971,9 @@ class RaceUpdaton:
         end = start + self.courses_per_page
         courses_page = courses[start:end]
 
+        for widget in self.race_updation_frame.winfo_children():
+            widget.destroy()
+        
         button_frame = ttk.Frame(self.race_updation_frame)
         button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
 
@@ -1048,8 +1052,6 @@ class RaceUpdaton:
             forward_button.config(state='disabled')
         else:
             forward_button.config(state='normal')
-
-        self.root.after(20000, self.display_courses)
 
     def remove_course(self):
         # Open a dialog box to get the course name
@@ -2284,13 +2286,11 @@ class Settings:
     def update_current_database(self, event):
         global current_database
         current_database = self.databases_combobox.get()
-        # Here you can add functionality to refresh the displayed data based on the new selection
 
     def reset_database(self):
         global current_database
         current_database = None
         self.databases_combobox.set('')
-        # Here you can add functionality to reset the database to the default file
 
 
 
