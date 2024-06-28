@@ -67,6 +67,7 @@ processed_races = set()
 processed_closures = set()
 notified_users = set()
 bet_count_500 = False
+bet_count_750 = False
 bet_count_1000 = False
 knockback_count_250 = False
 
@@ -88,7 +89,6 @@ def set_bet_folder_path():
 def load_database(app):
     print("\nLoading database")
     date = datetime.now().strftime('%Y-%m-%d')
-
     filename = f'database/{date}-wager_database.json'
 
     try:
@@ -103,6 +103,61 @@ def load_database(app):
 ####################################################################################
 ## IDENTIFY BET TYPE AND PARSE TEXT ACCORDINGLY
 ####################################################################################
+def identify_sport(selection):
+    print(f"Type of selection: {type(selection)}, Content: {selection}")
+
+    # Adjusted to handle both lists/tuples of selections and single selections within a tuple
+    if isinstance(selection, (list, tuple)):
+        print("Handling list or tuple format")
+        # Check if the first element is a list or tuple, indicating a list of selections
+        if all(isinstance(sel, (list, tuple)) for sel in selection):
+            for sel in selection:
+                if len(sel) > 0:
+                    selection_str = sel[0]  # Extract the selection name from the first element
+                    print(f"Processing selection: {selection_str}")
+                    if 'trap' in selection_str.lower():
+                        return 1  # Greyhound
+                    elif re.search(r'\d{2}:\d{2}', selection_str):
+                        return 0  # Horse
+                    else:
+                        return 2  # Other
+                else:
+                    print("Inner element is empty or not a list/tuple")
+                    return 3  # Default for unrecognized format within list/tuple
+        # New case: Handle single selection within a tuple
+        else:
+            selection_str = selection[0]  # Assuming the first element is the selection name
+            print(f"Processing single selection: {selection_str}")
+            if 'trap' in selection_str.lower():
+                return 1  # Greyhound
+            elif re.search(r'\d{2}:\d{2}', selection_str):
+                return 0  # Horse
+            else:
+                return 2  # Other
+            
+    elif isinstance(selection, dict):
+        print("Handling dictionary format")
+        if selection is None or '- Meeting Name' not in selection or selection['- Meeting Name'] is None:
+            print("Dictionary format not as expected")
+            return 3  # Default identifier for null values
+        if 'trap' in selection['- Selection Name'].lower():
+            return 1  # Greyhound
+        elif re.search(r'\d{2}:\d{2}', selection['- Meeting Name']):
+            return 0  # Horse
+        else:
+            return 2  # Other
+    else:
+        print("Selection format unrecognized")
+        return 3  # Default for unrecognized format
+
+def add_sport_to_selections(selections):
+    sports = set()
+    for selection in selections:
+        # Directly pass the selection to identify_sport without checking its type here
+        sport = identify_sport(selection)
+        sports.add(sport)
+    return list(sports)
+
 def parse_file(file_path, app):
     with open(file_path, 'r') as file:
         bet_text = file.read()
@@ -114,12 +169,14 @@ def parse_file(file_path, app):
         if is_wageralert:
             details = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{details['Knockback ID']}-{details['Time']}"
+            sports = add_sport_to_selections(details['Selections'])
             bet_info = {
                 'time': details['Time'],
                 'id': unique_knockback_id,
                 'type': 'WAGER KNOCKBACK',
                 'customer_ref': details['Customer Ref'],
                 'details': details,
+                'Sport': sports,
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
@@ -143,6 +200,7 @@ def parse_file(file_path, app):
 
         elif is_bet:
             bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
+            sports = add_sport_to_selections(parsed_selections)
             bet_info = {
                 'time': timestamp,
                 'id': bet_no,
@@ -155,11 +213,13 @@ def parse_file(file_path, app):
                     'unit_stake': unit_stake,
                     'payment': payment,
                     'bet_type': bet_type
-                }
+                },
+                'Sport': sports,
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
             return bet_info
+        
     print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
     return {}
 
@@ -472,20 +532,21 @@ def staff_report_notification():
             notified_users.add(user)
 
 def activity_report_notification():
-    global bet_count_1000, knockback_count_250, bet_count_500
     data = load_database(app)
     bet_count = len([bet for bet in data if bet['type'] == 'BET'])
     knockback_count = len([bet for bet in data if bet['type'] == 'WAGER KNOCKBACK'])
 
-    if bet_count == 500 and bet_count_500 == False:
-        log_notification(f"{bet_count} bets taken", True)
-        bet_count_500 = True
-    if bet_count == 1000 and bet_count_1000 == False:
-        log_notification(f"{bet_count} bets taken", True)
-        bet_count_1000 = True
-    if knockback_count == 250 and knockback_count_250 == False:
-        log_notification(f"{knockback_count} knockbacks", True)
-        knockback_count_250 = True    
+    thresholds = {
+        500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
+        750: {'count': bet_count, 'flag': 'bet_count_750', 'message': 'bets taken'},
+        1000: {'count': bet_count, 'flag': 'bet_count_1000', 'message': 'bets taken'},
+        250: {'count': knockback_count, 'flag': 'knockback_count_250', 'message': 'knockbacks'}
+    }
+
+    for threshold, data in thresholds.items():
+        if data['count'] == threshold and not globals()[data['flag']]:
+            log_notification(f"{data['count']} {data['message']}", True)
+            globals()[data['flag']] = True
 
 
 
@@ -764,7 +825,7 @@ def get_reporting_data(app):
 ## GET NEW REGISTRATIONS FROM PIPEDRIVE API
 ####################################################################################
 def get_new_registrations(app):
-    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=55')
+    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=60')
 
     if response.status_code == 200:
         data = response.json()
@@ -823,17 +884,14 @@ def check_race_times():
 
     races.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
 
-    for race in races:
+    total_races = len(races)
+    for index, race in enumerate(races, start=1):
         race_time = race.split(', ')[1]
         if current_time == race_time and race not in processed_races:
-            if race in enhanced_places:
-                log_notification(f"Enhanced race: {race} is past off time", True)
-            else:
-                log_notification(f"{race} is past off time.")
+            race_status = "Enhanced race" if race in enhanced_places else "Race"
             processed_races.add(race)
-
-            remaining_races = [race for race in races if datetime.strptime(race.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')]
-            log_notification(f"{len(remaining_races)} races remaining today")
+            remaining_races = len([r for r in races if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
+            log_notification(f"{race_status}: {race} is past off time. {index}/{total_races} with {remaining_races} races remaining today.")
 
 
 ####################################################################################
@@ -1658,14 +1716,14 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Bet Processor started")
-    run_get_data(app)
-    run_get_deposit_data(app)
-    run_update_todays_oddsmonkey_selections()
+    #run_get_data(app)
+    #run_get_deposit_data(app)
+    #run_update_todays_oddsmonkey_selections()
     check_race_times()
 
-    schedule.every(2).minutes.do(run_get_data, app)
-    schedule.every(10).minutes.do(run_get_deposit_data, app)
-    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    #schedule.every(2).minutes.do(run_get_data, app)
+    #schedule.every(10).minutes.do(run_get_deposit_data, app)
+    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     schedule.every(50).seconds.do(check_race_times)
     schedule.every(1).hour.do(run_find_rg_issues)

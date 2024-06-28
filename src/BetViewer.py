@@ -318,8 +318,6 @@ def bet_feed(data=None):
     bets_with_risk_text.delete('1.0', tk.END)
     bets_with_risk_text.insert('1.0', risk_bets)
     bets_with_risk_text.config(state="disabled")
-
-    # logo_label.bind("<Button-1>", lambda e: refresh_display())
     
 def display_activity_data(data):
     turnover, profit, profit_percentage, last_updated_time, total_deposits, total_sum, avg_deposit, _ = get_reporting_data()
@@ -529,6 +527,7 @@ def get_courses():
             print("Error: The 'race' object is not a dictionary.")
             return []
 
+    courses.add("Football")
     courses.add("SIS Greyhounds")
     courses.add("TRP Greyhounds")
 
@@ -1334,6 +1333,7 @@ def find_traders():
     return users_without_risk_category, results, enhanced_bets_counter
 
 def find_rg_issues():
+    
     data = get_database()
     user_scores = {}
     virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
@@ -1582,10 +1582,8 @@ def find_rg_issues():
 
 def update_rg_report():
     user_scores = find_rg_issues()
-
     # Sort the user_scores dictionary by total score
     user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
-
     # Create a dictionary to map the keys to more descriptive sentences
     key_descriptions = {
         'num_bets': 'High Number of Bets',
@@ -2504,7 +2502,6 @@ def log_notification(message, important=False):
             json.dump(notifications, f, indent=4)
 
 # Initialize a variable to keep track of the most recent notification
-
 def update_notifications():
     global last_notification  # Use the global variable
 
@@ -2631,6 +2628,10 @@ if __name__ == "__main__":
     feed_text.config(state='disabled')
     feed_text.grid(row=0, column=0, sticky='nsew')
 
+    feed_scroll = ttk.Scrollbar(feed_frame, orient='vertical', command=feed_text.yview, cursor="hand2")
+    feed_scroll.grid(row=0, column=1, sticky='ns')
+    feed_text.configure(yscrollcommand=feed_scroll.set)
+
     # filter_frame = ttk.Frame(feed_frame)
     # filter_frame.grid(row=1, column=0, sticky='ew')
     # unit_stake_label = ttk.Label(filter_frame, text='Unit Stk:')
@@ -2651,9 +2652,7 @@ if __name__ == "__main__":
     # sport_combobox.grid(row=0, column=5, pady=(0, 3), sticky='w')
     # sport_combobox.set(sport_options[0])
 
-    feed_scroll = ttk.Scrollbar(feed_frame, orient='vertical', command=feed_text.yview, cursor="hand2")
-    feed_scroll.grid(row=0, column=1, sticky='ns')
-    feed_text.configure(yscrollcommand=feed_scroll.set)
+
 
     ### RUNS ON SELECTIONS
     runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
