@@ -65,6 +65,7 @@ file_lock = threading.Lock()
 path = 'F:\BWW\Export'
 processed_races = set()
 processed_closures = set()
+previously_seen_events = set()
 notified_users = set()
 bet_count_500 = False
 bet_count_750 = False
@@ -840,9 +841,10 @@ def get_new_registrations(app):
 ####################################################################################
 ## LOG NOTIFICATIONS
 ####################################################################################
-def check_race_times():
+def check_closures_and_race_times():
     global processed_races, processed_closures
     current_time = datetime.now().strftime('%H:%M')
+    current_date = datetime.now().date()
 
     try:
         with open('src/data.json', 'r') as f:
@@ -874,24 +876,69 @@ def check_race_times():
         print("Error decoding JSON from API response.")
         return
 
-    races = []
+    races_today = []
+    races_tomorrow = []
+    current_weekday_name = datetime.now().strftime('%A')
+
     for event in api_data:
-        for meeting in event['meetings']:
-            for race in meeting['events']:
-                meeting_name = race['meetingName']
-                time = race['time']
-                races.append(f'{meeting_name}, {time}')
+        event_weekday_name = event['eventName'].split("'s")[0]
+        if event_weekday_name == current_weekday_name:
+            for meeting in event['meetings']:
+                for race in meeting['events']:
+                    meeting_name = race['meetingName']
+                    time = race['time']
+                    races_today.append(f'{meeting_name}, {time}')
+        else:  # This condition now correctly assumes the event is for tomorrow
+            for meeting in event['meetings']:
+                for race in meeting['events']:
+                    meeting_name = race['meetingName']
+                    time = race['time']
+                    races_tomorrow.append(f'{meeting_name}, {time}')
 
-    races.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
-
-    total_races = len(races)
-    for index, race in enumerate(races, start=1):
+    races_today.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
+    total_races_today = len(races_today)
+    for index, race in enumerate(races_today, start=1):
         race_time = race.split(', ')[1]
         if current_time == race_time and race not in processed_races:
-            race_status = "Enhanced race" if race in enhanced_places else "Race"
-            processed_races.add(race)
-            remaining_races = len([r for r in races if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
-            log_notification(f"{race_status}: {race} is past off time. {index}/{total_races} with {remaining_races} races remaining today.")
+            if race in enhanced_places:
+                race_status = "Enhanced race"
+                processed_races.add(race)
+                remaining_races = len([r for r in races_today if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
+                log_notification(f"{race_status}: {race} is past off time. {index}/{total_races_today} with {remaining_races} races remaining today.", important=True)
+            else:
+                race_status = "Race"
+                processed_races.add(race)
+                remaining_races = len([r for r in races_today if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
+                log_notification(f"{race_status}: {race} is past off time. {index}/{total_races_today} with {remaining_races} races remaining today.")
+    
+    # if races_tomorrow:
+    #     log_notification(f"Tomorrow's races count: {len(races_tomorrow)}")
+
+def fetch_and_print_new_events():
+    global previously_seen_events
+    print("Fetching new events...")
+    url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S'
+    response = requests.get(url)
+    data = response.json() 
+
+    # Extract event names from the response
+    current_events = set(event['eventName'] for event in data)
+
+    if not previously_seen_events:
+        previously_seen_events = current_events
+    else:
+        new_events = current_events - previously_seen_events
+
+        # Print new events
+        for event in new_events:
+            print("hello cunt")
+            print(f"New event added: {event}")
+            log_notification(f"New event added: {event}")
+
+        # Update the list of previously seen events
+        previously_seen_events.update(new_events)
+
+    print(len(current_events))
 
 
 ####################################################################################
@@ -1716,16 +1763,18 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Bet Processor started")
-    #run_get_data(app)
-    #run_get_deposit_data(app)
-    #run_update_todays_oddsmonkey_selections()
-    check_race_times()
+    run_get_data(app)
+    run_get_deposit_data(app)
+    run_update_todays_oddsmonkey_selections()
+    check_closures_and_race_times()
+    fetch_and_print_new_events()
 
-    #schedule.every(2).minutes.do(run_get_data, app)
-    #schedule.every(10).minutes.do(run_get_deposit_data, app)
-    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    schedule.every(2).minutes.do(run_get_data, app)
+    schedule.every(10).minutes.do(run_get_deposit_data, app)
+    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
-    schedule.every(50).seconds.do(check_race_times)
+    schedule.every(50).seconds.do(check_closures_and_race_times)
+    schedule.every(20).minutes.do(fetch_and_print_new_events)
     schedule.every(1).hour.do(run_find_rg_issues)
     schedule.every(1).minute.do(run_staff_report_notification)
     schedule.every(1).minute.do(run_activity_report_notification)

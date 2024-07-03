@@ -2019,22 +2019,6 @@ def display_closure_requests():
         if closures_current_page == len(requests) // requests_per_page:
             forward_button.grid_remove()
 
-def closures_back():
-    global closures_current_page
-    if closures_current_page > 0:
-        closures_current_page -= 1
-        display_closure_requests()
-
-def closures_forward():
-    global closures_current_page, requests_per_page
-    with open('src/data.json', 'r') as f:
-        data = json.load(f)
-
-    total_requests = len([request for request in data.get('closures', []) if request['Username'] not in blacklist])
-    if (closures_current_page + 1) * requests_per_page < total_requests:
-        closures_current_page += 1
-        display_closure_requests()
-
 def update_person(update_url, update_data, person_id):
     update_response = requests.put(update_url, json=update_data)
     print(update_url, update_data, person_id)
@@ -2187,6 +2171,21 @@ def report_closure_requests(restriction, username, length):
     else:
         print("Error: Invalid restriction")
 
+def closures_back():
+    global closures_current_page
+    if closures_current_page > 0:
+        closures_current_page -= 1
+        display_closure_requests()
+
+def closures_forward():
+    global closures_current_page, requests_per_page
+    with open('src/data.json', 'r') as f:
+        data = json.load(f)
+
+    total_requests = len([request for request in data.get('closures', []) if request['Username'] not in blacklist])
+    if (closures_current_page + 1) * requests_per_page < total_requests:
+        closures_current_page += 1
+        display_closure_requests()
 
 
 ####################################################################################
