@@ -925,17 +925,17 @@ def fetch_and_print_new_events():
     current_events = set(event['eventName'] for event in data)
 
     if not previously_seen_events:
+        print("yep")
         previously_seen_events = current_events
     else:
         new_events = current_events - previously_seen_events
+        print(len(new_events))
 
-        # Print new events
         for event in new_events:
             print("hello cunt")
             print(f"New event added: {event}")
-            log_notification(f"New event added: {event}")
+            log_notification(f"New event added: {event}", True)
 
-        # Update the list of previously seen events
         previously_seen_events.update(new_events)
 
     print(len(current_events))
@@ -972,7 +972,6 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
 
     results = service.users().labels().list(userId='me').execute()
     labels = results.get('labels', [])
-    # Find the ID of the 'Oddsmonkey' label
     oddsmonkey_label_id = None
     for label in labels:
         if label['name'] == 'ODDSMONKEY':
@@ -982,19 +981,15 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
     if oddsmonkey_label_id is None:
         print("Label 'Oddsmonkey' not found")
         return
-
-    # Get the messages in the 'Oddsmonkey' label from today
     results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=query).execute()
 
     messages = results.get('messages', [])
     length = len(messages)
 
-    # Initialize an empty dictionary to store all selections
     all_selections = {}
 
     for message in messages if num_messages is None else messages[:num_messages]:
         try:
-            # Get the message details
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
 
             payload = msg['payload']
@@ -1006,13 +1001,11 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
                 if d['name'] == 'From':
                     sender = d['value']
 
-            # Get the message body
             parts = payload.get('parts')
             if parts is not None:
                 part = parts[0]
                 data = part['body']['data']
             else:
-                # If there are no parts, get the body from the 'body' field
                 data = payload['body']['data']
 
             data = data.replace("-","+").replace("_","/")
@@ -1020,10 +1013,8 @@ def get_oddsmonkey_selections(app, num_messages=None, query=''):
 
             soup = BeautifulSoup(decoded_data , "lxml")
             
-            # Find all 'td' tags with the specific style attribute
             td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
 
-            # Extract selections from this message and add them to the all_selections dictionary
             try:
                 selections = extract_oddsmonkey_selections(td_tags)
                 all_selections.update(selections)
@@ -1774,7 +1765,7 @@ def main(app):
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     schedule.every(50).seconds.do(check_closures_and_race_times)
-    schedule.every(20).minutes.do(fetch_and_print_new_events)
+    schedule.every(10).minutes.do(fetch_and_print_new_events)
     schedule.every(1).hour.do(run_find_rg_issues)
     schedule.every(1).minute.do(run_staff_report_notification)
     schedule.every(1).minute.do(run_activity_report_notification)
