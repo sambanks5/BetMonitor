@@ -901,23 +901,16 @@ def check_closures_and_race_times():
         race_time = race.split(', ')[1]
         if current_time == race_time and race not in processed_races:
             if race in enhanced_places:
-                race_status = "Enhanced race"
                 processed_races.add(race)
-                remaining_races = len([r for r in races_today if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
-                log_notification(f"{race_status}: {race} is past off time. {index}/{total_races_today} with {remaining_races} races remaining today.", important=True)
+                log_notification(f"Enhanced Race {race} is past off time - {index}/{total_races_today}", important=True)
             else:
-                race_status = "Race"
                 processed_races.add(race)
-                remaining_races = len([r for r in races_today if datetime.strptime(r.split(', ')[1], '%H:%M') > datetime.strptime(current_time, '%H:%M')])
-                log_notification(f"{race_status}: {race} is past off time. {index}/{total_races_today} with {remaining_races} races remaining today.")
+                log_notification(f"{race} is past off time - {index}/{total_races_today}")
     
-    # if races_tomorrow:
-    #     log_notification(f"Tomorrow's races count: {len(races_tomorrow)}")
-
 def fetch_and_print_new_events():
     global previously_seen_events
     print("Fetching new events...")
-    url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S'
+    url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M'
     response = requests.get(url)
     data = response.json() 
 
@@ -932,9 +925,7 @@ def fetch_and_print_new_events():
         print(len(new_events))
 
         for event in new_events:
-            print("hello cunt")
-            print(f"New event added: {event}")
-            log_notification(f"New event added: {event}", True)
+            log_notification(f"New event live: {event}", True)
 
         previously_seen_events.update(new_events)
 

@@ -1,3 +1,12 @@
+####################################################################################
+##                                BETVIEWERBETA.PY                                    
+
+
+## FORMAT AND DISPLAY INCOMING BETS, FIND RUNS ON SELECTIONS, TRACK RACE UPDATION,
+## DISPLAY NEXT 3 HORSE & GREYHOUND RACES, CREATE DAILY, CLIENT, STAFF REPORTS,
+## SCREEN FOR RISK CLIENTS, OTHER VARIOUS QOL IMPROVEMENTS
+####################################################################################
+
 import os
 import re
 import threading
@@ -69,7 +78,6 @@ def get_database_cached():
 
         cached_data = load_database_data(json_file_path)
 
-        # Retry logic if cached_data is empty
         if not cached_data:
             print("Database returned nothing. Retrying...")
             time.sleep(2)
@@ -165,13 +173,11 @@ class BetDataFetcher:
         return cls._instance
 
     def update_data(self):
-        # Simulate data fetching, e.g., loading from a file or making a network request
         with self.lock:
             with open('src/data.json', 'r') as file:
                 self.data = json.load(file)
 
     def get_data(self):
-        # Return the latest data
         with self.lock:
             return self.data
 
@@ -207,7 +213,7 @@ def schedule_data_updates():
     print("Starting data updates...")   
     while True:
         fetcher.update_data()
-        time.sleep(60)  # Update every minute
+        time.sleep(60)
 
 def access_data():
     fetcher = BetDataFetcher()
@@ -226,7 +232,6 @@ class BetFeed:
         self.start_feed_update()
 
     def initialize_ui(self):
-        # BET FEED UI Setup
         self.feed_frame = ttk.LabelFrame(self.root, style='Card', text="Bet Feed")
         self.feed_frame.place(x=5, y=5, width=550, height=640)
         self.feed_frame.grid_columnconfigure(0, weight=1)
@@ -294,11 +299,9 @@ class BetFeed:
         self.filter_frame.grid_columnconfigure(8, weight=1)
         self.filter_frame.grid_columnconfigure(9, weight=1)
 
-        # ACTIVITY STATUS UI Setup
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
         self.activity_frame.place(x=560, y=5, width=335, height=150)
         
-        # Replace labels with a Text widget for activity status
         self.activity_text = tk.Text(self.activity_frame, font=("Helvetica", 10, "bold"), wrap='word', padx=10, pady=10, bd=0, fg="#000000")
         self.activity_text.config(state='disabled')
         self.activity_text.pack(fill='both', expand=True)
@@ -306,14 +309,11 @@ class BetFeed:
     def start_feed_update(self):
         scroll_pos = self.feed_text.yview()[0]
         
-        # Check if the scroll position is at the top (or close to the top)
         if scroll_pos <= 0.05:
-            # The view is at the top, safe to refresh
             self.bet_feed()
         else:
             pass
         
-        # Schedule start_feed_update to be called again after 5 seconds
         self.feed_frame.after(12000, self.start_feed_update)
 
     def bet_feed(self, date_str=None):
@@ -328,19 +328,18 @@ class BetFeed:
 
         if self.data is None:
             self.feed_text.config(state="normal")
-            self.feed_text.delete('1.0', tk.END)  # Clear existing text
+            self.feed_text.delete('1.0', tk.END)
             self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
             self.feed_text.config(state="disabled")
-            return  # Exit the function early
+            return 
 
-        # Retrieve current filter values
         username = self.current_filters['username']
         unit_stake = self.current_filters['unit_stake']
         risk_category = self.current_filters['risk_category']
         sport = self.current_filters['sport']
         selection_search_term = self.current_filters['selection']
 
-        # Check if any filters are active
+
         filters_active = any([
             username,
             unit_stake,
@@ -349,62 +348,54 @@ class BetFeed:
             selection_search_term
         ])
 
-        # Filter bets based on current filter settings if any filters are active
         if filters_active:
             filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport, selection_search_term)
         else:
-            filtered_bets = self.data  # Use all data if no filters are active
+            filtered_bets = self.data
 
         self.initialize_text_tags()
 
-        # Enable text widget for updates
         self.feed_text.config(state="normal")
-        self.feed_text.delete('1.0', tk.END)  # Clear existing text
+        self.feed_text.delete('1.0', tk.END)
 
-        if not filtered_bets:  # Check if filtered_bets is empty
+        if not filtered_bets:
             self.feed_text.insert('end', "No bets found with the current filters.", 'center')
         else:
             separator = '\n-------------------------------------------------------------------------------------------------------\n'
-            # Access additional data needed for display
             self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
 
-            for bet in filtered_bets:  # Iterate through each filtered bet
+            for bet in filtered_bets:
                 self.display_bet(bet)
                 self.feed_text.insert('end', separator, "notices")
             
             self.sport_count = self.count_sport(self.data)
             self.update_activity_frame(reporting_data, self.sport_count)
         
-        # Disable the text widget to prevent user edits
         self.feed_text.config(state="disabled")
 
     def apply_filters(self):
-        # Retrieve current filter values from the UI elements
         self.current_filters['username'] = self.username_filter_entry.get()
         self.current_filters['unit_stake'] = self.unit_stake_filter_entry.get()
         self.current_filters['risk_category'] = self.risk_category_filter_entry.get()
         self.current_filters['sport'] = self.sport_combobox_entry.get()
         self.current_filters['selection'] = self.selection_filter_entry.get()
 
-        # Check if any filters are applied
         filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
 
-        # Update the tick button style based on whether any filters are applied
         if filters_applied:
             self.tick_button.configure(style='Accent.TButton')
         else:
-            self.tick_button.configure(style='TButton')  # Assuming 'TButton' is your default style
+            self.tick_button.configure(style='TButton')
 
-        # Call bet_feed with the current filters
         self.bet_feed()
 
     def reset_filters(self):
         self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
-        self.username_filter_entry.delete(0, tk.END)  # Clear the username filter entry
-        self.unit_stake_filter_entry.delete(0, tk.END)  # Clear the unit stake filter entry
-        self.risk_category_filter_entry.delete(0, tk.END)  # Clear the risk category filter entry
-        self.sport_combobox_entry.set('')  # Reset the sport combobox to its default state or an empty string
-        self.selection_filter_entry.delete(0, tk.END)  # Clear the selection filter entry
+        self.username_filter_entry.delete(0, tk.END) 
+        self.unit_stake_filter_entry.delete(0, tk.END) 
+        self.risk_category_filter_entry.delete(0, tk.END) 
+        self.sport_combobox_entry.set('') 
+        self.selection_filter_entry.delete(0, tk.END) 
         
         self.tick_button.configure(style='TButton')
 
@@ -412,18 +403,14 @@ class BetFeed:
 
     def filter_bets(self, bets, username, unit_stake_filter, risk_category, sport, selection_search_term=None):
         filtered_bets = []        
-        # Mapping for sport names to numbers
         sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
         
-        # Convert sport to its corresponding number using the mapping
-        sport_number = sport_mapping.get(sport, -1)  # Default to -1 if sport is not found
+        sport_number = sport_mapping.get(sport, -1)
 
-        # Convert unit_stake_filter from string to float
         if unit_stake_filter:
             try:
                 unit_stake_filter_value = float(unit_stake_filter.replace('£', ''))
             except ValueError:
-                # Handle the case where the conversion fails
                 unit_stake_filter_value = None
         else:
             unit_stake_filter_value = None
@@ -434,51 +421,44 @@ class BetFeed:
                 selections = bet['details'].get('selections', [])
                 selection_match = False
                 if selection_search_term:
-                    if bet.get('type') == "WAGER KNOCKBACK":  # Check if it's a knockback
+                    if bet.get('type') == "WAGER KNOCKBACK":
                         for selection in selections:
-                            # Construct the selection string for knockbacks
                             meeting_name = selection.get("- Meeting Name", "")
                             selection_name = selection.get("- Selection Name", "")
                             selection_str = f"{meeting_name}, {selection_name}"
                             if selection_search_term.lower() in selection_str.lower():
                                 selection_match = True
                                 break
-                    else:  # For other bet types
+                    else: 
                         for selection in selections:
                             if isinstance(selection, list) and selection_search_term.lower() in selection[0].lower():
                                 selection_match = True
                                 break
-                            elif isinstance(selection, dict):  # Fallback for unexpected dict format in non-knockback bets
-                                selection_str = selection.get("Selection Name", "")  # Assuming a similar key exists
+                            elif isinstance(selection, dict):
+                                selection_str = selection.get("Selection Name", "") 
                                 if selection_search_term.lower() in selection_str.lower():
                                     selection_match = True
                                     break
                 else:
-                    selection_match = True  # If no search term is provided, don't filter out based on selections
+                    selection_match = True 
 
                 if not selection_match:
-                    continue  # Skip this bet if it doesn't match the selection search term
+                    continue  
 
-                #Access 'unit_stake' from the nested 'details' dictionary and convert it to float
                 unit_stake_str = bet['details'].get('unit_stake', '£0')
                 try:
                     unit_stake_value = float(unit_stake_str.replace('£', ''))
                 except ValueError:
-                    # If conversion fails, skip this bet
                     continue
 
-                # Check if the bet's unit_stake is equal to or greater than the filter value
                 if unit_stake_filter_value is not None and unit_stake_value < unit_stake_filter_value:
-                    continue  # Skip this bet if it doesn't meet the unit stake criteria
+                    continue
 
-                # Check if the bet's customer_ref matches the username filter
                 if username and bet.get('customer_ref') != username.upper():
-                    continue  # Skip this bet if it doesn't match the username filter
+                    continue 
 
-                # Access 'risk_category' from the nested 'details' dictionary
                 risk_category_value = bet.get('details', {}).get('risk_category', '-')
 
-                # Determine if the bet should be included based on the risk category filter
                 include_bet = False
                 if risk_category is None or risk_category == '':
                     include_bet = True
@@ -487,22 +467,18 @@ class BetFeed:
                 elif risk_category_value == risk_category:
                     include_bet = True
 
-                # Apply sport filter
                 if include_bet and (sport_number == -1 or sport_number in bet.get('Sport', [])):
                     filtered_bets.append(bet)
             elif bet.get('type') == 'SMS WAGER':
                 if specific_filters_applied:
                     continue
 
-                # Apply username filter
                 if username and bet.get('customer_ref') != username.upper():
-                    continue  # Skip if it doesn't match the username filter
+                    continue 
                 
-                # Check for selection search term in the details string
                 if selection_search_term and selection_search_term.lower() not in bet.get('details', '').lower():
-                    continue  # Skip if the search term is not found
+                    continue  
                 
-                # Since 'unit_stake' and 'risk_category' cannot be directly applied, and sport is not specified, add the bet directly
                 filtered_bets.append(bet)
         
         return filtered_bets
@@ -601,13 +577,10 @@ class BetFeed:
             tag = None
             self.norisk_clients.add(customer_reference)
 
-        # Prepare the selection text
         selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
 
-        # Use insert_feed_text for inserting the text with the appropriate tag
         self.insert_feed_text(f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}", tag)
 
-        # Check for Oddsmonkey selections and insert them with the "Oddsmonkey" tag
         if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() for sel in parsed_selections for om_sel in self.oddsmonkey_selections.items()):
             self.insert_feed_text(f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
         
@@ -635,7 +608,6 @@ class BetFeed:
 
         avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
 
-        # Format the current date as a long date string
         current_date_str = datetime.now().strftime("%A %d %B")
 
         status_text = (
@@ -688,19 +660,19 @@ class BetRuns:
         self.spinbox_frame.grid_columnconfigure(2, weight=1)
         self.spinbox_frame.grid_columnconfigure(3, weight=1)
 
-        self.spinbox_label.grid(row=0, column=0, sticky='e', padx=6)  # Adjusted sticky to 'ew'
+        self.spinbox_label.grid(row=0, column=0, sticky='e', padx=6) 
         self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='ew') 
         self.num_run_bets_var.set("2")
         self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
         self.num_run_bets_var.trace("w", self.set_num_run_bets)
 
         self.combobox_label = ttk.Label(self.spinbox_frame, text=' Num bets: ')
-        self.combobox_label.grid(row=0, column=2, sticky='e', padx=6)  # Adjusted sticky to 'ew'
+        self.combobox_label.grid(row=0, column=2, sticky='e', padx=6)
 
         self.combobox_values = [20, 50, 100, 300, 1000, 2000]
         self.combobox = ttk.Combobox(self.spinbox_frame, textvariable=self.combobox_var, values=self.combobox_values, width=4)
         self.combobox_var.trace("w", self.set_recent_bets)
-        self.combobox.grid(row=0, column=3, pady=(0, 3), sticky='ew')  # Adjusted sticky to 'ew'
+        self.combobox.grid(row=0, column=3, pady=(0, 3), sticky='ew')
         self.runs_scroll = ttk.Scrollbar(self.runs_frame, orient='vertical', command=self.runs_text.yview, cursor="hand2")
         self.runs_scroll.grid(row=0, column=1, sticky='ns')
         self.runs_text.configure(yscrollcommand=self.runs_scroll.set)
@@ -721,7 +693,7 @@ class BetRuns:
         
         if database_data is None:
             self.runs_text.config(state="normal")
-            self.runs_text.delete('1.0', tk.END)  # Clear existing text
+            self.runs_text.delete('1.0', tk.END) 
             self.runs_text.insert('end', "No bet data available for the selected date or the database can't be found.")
             self.runs_text.config(state="disabled")
             return 
@@ -785,10 +757,8 @@ class BetRuns:
                                 else:
                                     self.runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
 
-                # Extract the meeting name and time from the selection
                 meeting_time = ' '.join(selection.split(' ')[:2])
 
-                # Check if the meeting name and time is in the enhanced_places list
                 if meeting_time in enhanced_places:
                     self.runs_text.insert(tk.END, 'Enhanced Place Race\n', "oddsmonkey")
                 
@@ -799,7 +769,6 @@ class BetRuns:
     def refresh_bets(self):
         scroll_pos = self.runs_text.yview()[0]
 
-        # Method to refresh bets every 10 seconds
         num_bets = self.num_recent_files
         num_run_bets = self.num_run_bets
 
@@ -829,7 +798,7 @@ class RaceUpdaton:
     def get_courses(self):
         today = date.today()
         courses = set()
-        api_data = []  # Initialize api_data as an empty list
+        api_data = []
 
         try:
             response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h')
@@ -911,20 +880,16 @@ class RaceUpdaton:
         button_frame = ttk.Frame(self.race_updation_frame)
         button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
 
-        # Create the add button and align it to the left of the Frame
         add_button = ttk.Button(button_frame, text="+", command=self.add_course, width=2, cursor="hand2")
         add_button.pack(side='left')
 
-        # Add an indicator in the middle
         update_indicator = ttk.Label(button_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
         update_indicator.pack(side='left', padx=2, expand=True)
 
-        # Create the remove button and align it to the right of the Frame
         remove_button = ttk.Button(button_frame, text="-", command=self.remove_course, width=2, cursor="hand2")
         remove_button.pack(side='right')
 
         for i, course in enumerate(courses_page):
-            # Replace the course label with a button
             course_button = ttk.Button(self.race_updation_frame, text=course, command=lambda course=course: self.update_course(course), width=15, cursor="hand2")
             course_button.grid(row=i, column=0, padx=5, pady=2, sticky="w")
 
@@ -970,7 +935,6 @@ class RaceUpdaton:
         forward_button = ttk.Button(navigation_frame, text=">", command=self.forward, width=2, cursor="hand2")
         forward_button.grid(row=0, column=1, padx=2, pady=2)
 
-        # Check if any course on other pages needs updating
         other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
         if any(self.course_needs_update(course, data) for course in other_courses):
             update_indicator.pack()
@@ -988,7 +952,6 @@ class RaceUpdaton:
             forward_button.config(state='normal')
 
     def remove_course(self):
-        # Open a dialog box to get the course name
         course = simpledialog.askstring("Remove Course", "Enter the course name:")
         
         
@@ -1088,11 +1051,11 @@ class Notebook:
         self.last_notification = None
         self.generated_string = None
         self.confirm_betty_update_bool = tk.BooleanVar()
-        self.confirm_betty_update_bool.set(False)  # Set the initial state to False
+        self.confirm_betty_update_bool.set(False)
         self.send_confirmation_email_bool = tk.BooleanVar()
-        self.send_confirmation_email_bool.set(True)  # Set the initial state to True
+        self.send_confirmation_email_bool.set(True) 
         self.archive_email_bool = tk.BooleanVar()
-        self.archive_email_bool.set(False)  # Set the initial state to True
+        self.archive_email_bool.set(False)
 
         with open('src/creds.json') as f:
             data = json.load(f)
@@ -1114,15 +1077,14 @@ class Notebook:
     def initialize_ui(self):
         self.notebook = ttk.Notebook(self.root)
         self.notebook.place(x=238, y=655, width=470, height=265)
-        ### RISK BETS TAB
         tab_1 = ttk.Frame(self.notebook)
         tab_1.grid_rowconfigure(0, weight=1)
-        tab_1.grid_columnconfigure(0, weight=3)  # Text widget column
-        tab_1.grid_columnconfigure(1, weight=0)  # Separator column, minimal weight
-        tab_1.grid_columnconfigure(2, weight=1)  # Buttons frame column
+        tab_1.grid_columnconfigure(0, weight=3) 
+        tab_1.grid_columnconfigure(1, weight=0) 
+        tab_1.grid_columnconfigure(2, weight=1)
         self.notebook.add(tab_1, text="Staff Feed")
         self.staff_feed = tk.Text(tab_1, font=("Helvetica", 10), bd=0, wrap='word', padx=2, pady=2, fg="#000000", bg="#ffffff")
-        self.staff_feed.grid(row=0, column=0, sticky="nsew")  # Make the text widget expand in all directions
+        self.staff_feed.grid(row=0, column=0, sticky="nsew")
         self.staff_feed.tag_configure("spacing", spacing1=5, spacing3=5)
         self.staff_feed.tag_add("spacing", "1.0", "end")
         self.staff_feed_buttons_frame = ttk.Frame(tab_1)
@@ -1132,9 +1094,9 @@ class Notebook:
         self.pinned_message_frame = ttk.Frame(self.staff_feed_buttons_frame, style='Card')
         self.pinned_message_frame.pack(side="top", pady=5, padx=(5, 0))
         self.pinned_message = tk.Text(self.pinned_message_frame, font=("Helvetica", 10, 'bold'), bd=0, wrap='word', pady=2, fg="#000000", bg="#ffffff", height=3, width=35)  # Adjust height as needed
-        self.pinned_message.insert('1.0', "Pinned Notifications: No pinned notifications")  # Example pinned message
-        self.pinned_message.config(state='disabled')  # Make the text widget read-only if the pinned message should not be editable
-        self.pinned_message.pack(side="top", pady=5, padx=5)  # Place it under the post message button
+        self.pinned_message.insert('1.0', "Pinned Notifications: No pinned notifications")
+        self.pinned_message.config(state='disabled') 
+        self.pinned_message.pack(side="top", pady=5, padx=5) 
         self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post Message", command=user_notification, cursor="hand2", width=17)
         self.post_message_button.pack(side="top", pady=(10, 5))
         separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
@@ -1144,19 +1106,18 @@ class Notebook:
         self.password_result_label = ttk.Label(self.staff_feed_buttons_frame, text="GB000000", font=("Helvetica", 12), wraplength=200)
         self.password_result_label.pack(side="top", pady=2)
         
-        ### REPORT TAB
         tab_2 = ttk.Frame(self.notebook)
         self.notebook.add(tab_2, text="Reports/Screener")
         tab_2.grid_rowconfigure(0, weight=1)
         tab_2.grid_rowconfigure(1, weight=1)
-        tab_2.grid_columnconfigure(0, weight=3)  # Adjusted to match tab_1, Text widget column
-        tab_2.grid_columnconfigure(1, weight=0)  # Separator column, minimal weight
-        tab_2.grid_columnconfigure(2, weight=1)  # Buttons frame column
+        tab_2.grid_columnconfigure(0, weight=3)
+        tab_2.grid_columnconfigure(1, weight=0) 
+        tab_2.grid_columnconfigure(2, weight=1)
         self.report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
         self.report_ticket.tag_configure("center", justify='center')
         self.report_ticket.insert('1.0', "Daily Report\nGenerate a report for the days betting activity.\n\nStaff Report\nGenerate a report on staff activity.\n\nTraders Screener\nScan for potential 'risk' users.\n\nRG Screener\nScan for indicators of irresponsible gambling.", "center")    
         self.report_ticket.config(state='disabled')
-        self.report_ticket.grid(row=0, column=0, sticky="nsew")  # Make the text widget expand in all directions
+        self.report_ticket.grid(row=0, column=0, sticky="nsew") 
         separator_tab_2 = ttk.Separator(tab_2, orient='vertical')
         separator_tab_2.grid(row=0, column=1, sticky='ns')
         self.report_buttons_frame = ttk.Frame(tab_2)
@@ -1168,11 +1129,9 @@ class Notebook:
         self.progress = ttk.Progressbar(self.report_buttons_frame, orient='horizontal', length=200, mode='determinate')
         self.progress.pack(side="top", pady=(20, 10), padx=(5, 0))
 
-        ### CLIENT FACTORING TAB
         tab_3 = ttk.Frame(self.notebook)
         self.notebook.add(tab_3, text="Factoring Diary")
 
-        # CONFIGURING THE TREEVIEW
         self.tree = ttk.Treeview(tab_3)
         columns = ["A", "B", "C", "D", "E", "F"]
         headings = ["Date", "Time", "User", "Risk", "Rating", ""]
@@ -1191,13 +1150,11 @@ class Notebook:
         self.tree.grid(row=0, column=0, sticky="nsew")
         tab_3.grid_columnconfigure(0, weight=1)
         tab_3.grid_rowconfigure(0, weight=1)
-        tab_3.grid_columnconfigure(1, weight=0)  # New column for buttons
+        tab_3.grid_columnconfigure(1, weight=0) 
 
-        # BUTTONS FRAME SIMILAR TO tab_2
         factoring_buttons_frame = ttk.Frame(tab_3)
         factoring_buttons_frame.grid(row=0, column=1, sticky='ns', padx=(10, 0))
 
-        # BUTTONS AND TOOLTIP LABEL FOR FACTORING TAB
         add_restriction_button = ttk.Button(factoring_buttons_frame, text="Add", command=self.open_factoring_wizard, cursor="hand2")
         add_restriction_button.pack(side="top", pady=(10, 5))
         refresh_factoring_button = ttk.Button(factoring_buttons_frame, text="Refresh", command=self.run_factoring_sheet_thread, cursor="hand2")
@@ -1214,7 +1171,7 @@ class Notebook:
 
     def update_notifications(self):
         self.staff_feed.tag_configure("important", font=("TkDefaultFont", 10, "bold"))
-        self.staff_feed.config(state='normal')  # Temporarily enable editing to update text
+        self.staff_feed.config(state='normal')  
         file_lock = fasteners.InterProcessLock('notifications.lock')
 
         with file_lock:
@@ -1222,20 +1179,17 @@ class Notebook:
                 with open('notifications.json', 'r') as f:
                     notifications = json.load(f)
 
-                # Separate pinned notifications from regular notifications
                 pinned_notifications = [n for n in notifications if n.get('pinned', False)]
                 regular_notifications = [n for n in notifications if not n.get('pinned', False)]
 
-                # Update the pinned_message widget with pinned notifications
-                self.pinned_message.config(state='normal')  # Temporarily enable editing to update text
-                self.pinned_message.delete('1.0', 'end')  # Clear existing text
+                self.pinned_message.config(state='normal') 
+                self.pinned_message.delete('1.0', 'end')  
                 if not pinned_notifications:
                     self.pinned_message.insert('end', "No pinned notices.\n")
                 for notification in pinned_notifications:
                     self.pinned_message.insert('end', f"{notification['time']}: {notification['message']}\n")
-                self.pinned_message.config(state='disabled')  # Disable editing after updating
+                self.pinned_message.config(state='disabled') 
 
-                # Update the staff_feed widget with regular notifications
                 if regular_notifications and (self.last_notification is None or self.last_notification != regular_notifications[0]):
                     last_index = next((index for index, notification in enumerate(regular_notifications) if notification == self.last_notification), len(regular_notifications))
                     for notification in reversed(regular_notifications[:last_index]):
@@ -1251,8 +1205,7 @@ class Notebook:
 
             except FileNotFoundError:
                 pass
-        self.staff_feed.config(state='disabled')  # Disable editing after updating
-        # Schedule the next update
+        self.staff_feed.config(state='disabled') 
         self.staff_feed.after(1500, self.update_notifications)
 
     def generate_report(self):
@@ -1272,7 +1225,6 @@ class Notebook:
         data = get_database()
         report_output = ""
         
-        # Get the current time
         time = datetime.now()
         date = time.strftime("%d/%m/%Y")
         formatted_time = time.strftime("%H:%M:%S")
@@ -1928,9 +1880,7 @@ class Notebook:
         print("Updating RG Report")
         user_scores = self.create_rg_report()
         print("RG Report Updated")
-        # Sort the user_scores dictionary by total score
         user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
-        # Create a dictionary to map the keys to more descriptive sentences
         key_descriptions = {
             'num_bets': 'High Number of Bets',
             'stake_increase': 'Stakes Increasing',
@@ -2098,7 +2048,7 @@ class Notebook:
             worksheet.update_cell(next_row, 3, entry2_value)
             worksheet.update_cell(next_row, 4, entry3.get())
             worksheet.update_cell(next_row, 5, user) 
-            worksheet.update_cell(next_row, 6, current_date)  # Column F
+            worksheet.update_cell(next_row, 6, current_date)
 
             worksheet3 = spreadsheet.get_worksheet(3)
             username = entry1.get().upper()
@@ -2174,25 +2124,20 @@ class Notebook:
         progress_bar.pack(padx=5, pady=5)
 
     def display_closure_requests(self):
-        # Clear the old requests from the UI
         for widget in self.requests_frame.winfo_children():
             widget.destroy()
 
         def handle_request(request):
             log_notification(f"{user} Handling {request['Restriction']} request for {request['Username']} ")
 
-            # Define the mapping for the 'restriction' field
             restriction_mapping = {
                 'Further Options': 'Self Exclusion'
             }
 
-            # Map the 'restriction' field
             request['Restriction'] = restriction_mapping.get(request['Restriction'], request['Restriction'])
 
-            # Get the current date
             current_date = datetime.now()
 
-            # Convert the 'Length' string to a number of years or days
             length_mapping = {
                 'One Day': timedelta(days=1),
                 'One Week': timedelta(weeks=1),
@@ -2208,27 +2153,21 @@ class Notebook:
             }
             length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
 
-            # Calculate the reopen date
             reopen_date = current_date + length_in_time
 
-            # Format the string to be copied to the clipboard
             copy_string = f"{request['Restriction']}"
 
-            # Add the 'Length' to the string if it's not 'None' or 'Null'
             if request['Length'] not in [None, 'None', 'Null']:
                 copy_string += f" {request['Length']}"
 
             copy_string += f" {current_date.strftime('%d/%m/%Y')}"
             copy_string = copy_string.upper()
 
-            # If the restriction is 'Take-a-break' or 'Self Exclusion', add the reopen date to the string
             if request['Restriction'] in ['Take-A-Break', 'Self Exclusion']:
                 copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
 
-            # Add the user to the string
             copy_string += f" {user}"
 
-            # Copy the string to the clipboard
             pyperclip.copy(copy_string)
 
             def handle_submit():
@@ -2250,17 +2189,13 @@ class Notebook:
                     except Exception as e:
                         print(f"Error reporting closure requests: {e}")
 
-                    # Mark the request as completed
                     request['completed'] = True
 
-                    # Write the updated data back to 'data.json'
                     with open('src/data.json', 'w') as f:
                         json.dump(data, f, indent=4)
 
-                    # Destroy the request window
                     handle_closure_request.destroy()
 
-                    # Redisplay the closure requests
                     if request['completed']:
                         self.display_closure_requests()
 
@@ -2294,11 +2229,9 @@ class Notebook:
             submit_button = ttk.Button(handle_closure_request_frame, text="Submit", command=handle_submit, cursor="hand2")
             submit_button.place(x=80, y=190)
 
-            ## Labels
             closure_request_label = ttk.Label(handle_closure_request_frame, text=f"Close on Betty before anything else!\n\nPlease double check:\n- Request details above are correct\n- Confirmation email was sent to client.\n\nReport to Sam any errors.", anchor='center', justify='center')
             closure_request_label.place(x=10, y=240)
 
-        # Read the data from data.json
         with open('src/data.json', 'r') as f:
             data = json.load(f)
             requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
@@ -2306,25 +2239,19 @@ class Notebook:
         if not requests:
             ttk.Label(self.requests_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center').grid(row=0, column=1, padx=10, pady=2)
         
-        # Define the mapping for the 'restriction' field
         restriction_mapping = {
             'Account Deactivation': 'Deactivation',
             'Further Options': 'Self Exclusion'
         }
 
-        # Loop over the requests on the current page and create a label and a tick button for each one
         for i, request in enumerate(requests):
-            # Map the 'restriction' field
             restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
 
-            # Check if the 'length' field is None or Null
             length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
 
-            # Create a label with the request data
             request_label = ttk.Label(self.requests_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
             request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
 
-            # Create a tick button
             tick_button = ttk.Button(self.requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
             tick_button.grid(row=i, column=0, padx=3, pady=2)
 
@@ -2428,18 +2355,14 @@ class Notebook:
                     'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.modify'])
                 creds = flow.run_local_server(port=0)
 
-            # Save the credentials for the next run
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
 
-        # Call the Gmail API
         service = build('gmail', 'v1', credentials=creds)
 
-        # Get the current labels of the message
         message = service.users().messages().get(userId='me', id=msg_id).execute()
         current_labels = message['labelIds']
 
-        # Remove all current labels from the message
         return service.users().messages().modify(
         userId='me',
         id=msg_id,
@@ -2530,10 +2453,9 @@ class Settings:
         self.set_database_label = ttk.Label(self.settings_frame, text="Set Database", font=("Helvetica", 10))
         self.set_database_label.pack(pady=(10, 0))
 
-        # Extract the date part from each filename and sort them
         database_files = [f for f in os.listdir('database') if f.endswith('.json')]
         formatted_dates = [f.split('-wager_database')[0] for f in database_files]
-        formatted_dates.sort(reverse=True)  # Sort dates in descending order
+        formatted_dates.sort(reverse=True) 
 
         self.databases_combobox = ttk.Combobox(self.settings_frame, values=formatted_dates, width=10, state='readonly')
         self.databases_combobox.pack(pady=5)
@@ -2594,33 +2516,29 @@ class Next3Panel:
         horses_frame.place(relx=0, rely=0.05, relwidth=0.55, relheight=0.9)
         horses_frame.bind("<Button-1>", self.toggle_horse_url)
 
-        # Configure the grid layout for horses_frame to allocate space for the horse_url_indicator_label in a new column
         horses_frame.columnconfigure(0, weight=1)
         horses_frame.columnconfigure(1, weight=1)
         horses_frame.columnconfigure(2, weight=1)
-        horses_frame.columnconfigure(3, weight=1)  # New column for the horse_url_indicator_label
-        horses_frame.columnconfigure(4, weight=1)  # New column for the horse_url_indicator_label
+        horses_frame.columnconfigure(3, weight=1) 
+        horses_frame.columnconfigure(4, weight=1)
 
         horses_frame.rowconfigure(0, weight=1)
 
-        # Create the labels for the horse data
         self.horse_labels = [ttk.Label(horses_frame, justify='center', font=("Helvetica", 8, "bold")) for _ in range(3)]
         for i, label in enumerate(self.horse_labels):
-            label.grid(row=0, column=i)  # Use sticky='ew' to stretch the label horizontally
-            label.bind("<Button-1>", self.toggle_horse_url)  # Bind the toggle_horse_url method to each label
+            label.grid(row=0, column=i)  
+            label.bind("<Button-1>", self.toggle_horse_url) 
 
         Separator = ttk.Separator(horses_frame, orient='vertical')
         Separator.grid(row=0, column=3, sticky='ns')
 
-        # Add a label to display the horse URL indicator in its own column
         self.horse_url_indicator_label = ttk.Label(horses_frame, text=self.horse_url_indicator, font=("Helvetica", 9, "bold"), width=3, cursor="hand2", justify='center')
-        self.horse_url_indicator_label.grid(row=0, column=4, sticky='ew', padx=1)  # Place in the new column, spanning all rows
+        self.horse_url_indicator_label.grid(row=0, column=4, sticky='ew', padx=1) 
         self.horse_url_indicator_label.bind("<Button-1>", self.toggle_horse_url)
 
         greyhounds_frame = ttk.Frame(next_races_frame, style='Card')
         greyhounds_frame.place(relx=0.56, rely=0.05, relwidth=0.44, relheight=0.9)
 
-        # Create the labels for the greyhound data
         self.greyhound_labels = [ttk.Label(greyhounds_frame, justify='center', font=("Helvetica", 8, "bold")) for _ in range(3)]
         for i, label in enumerate(self.greyhound_labels):
             label.grid(row=0, column=i, padx=0, pady=5)
@@ -2638,7 +2556,6 @@ class Next3Panel:
             if not status:
                 status = '-'
             
-            ## Map ptype to a more readable format
             if ptype == 'Board Price':
                 ptype = 'BP'
             elif ptype == 'Early Price':
@@ -2655,12 +2572,10 @@ class Next3Panel:
             else:
                 labels[i].config(foreground='black')
 
-            # Create a label for each meeting and place it in the grid
             labels[i].config(text=f"{race} ({ptype})\n{status}")
 
 
     def update_horse_url_indicator(self):
-        # Update the text of the horse_url_indicator_label to reflect the current indicator
         self.horse_url_indicator_label.config(text=self.horse_url_indicator)
 
     def display_next_3(self):
@@ -2672,7 +2587,6 @@ class Next3Panel:
             horse_data = horse_response.json()
             greyhound_data = greyhound_response.json()
 
-            # Use root's thread-safe method to update the UI
             self.root.after(0, self.process_data, horse_data, 'horse')
             self.root.after(0, self.process_data, greyhound_data, 'greyhound')
         else:
@@ -2682,7 +2596,6 @@ class BetViewerApp:
     def __init__(self, root):
         self.root = root
 
-        # Start the scheduler in a background thread
         threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
         user_login()
