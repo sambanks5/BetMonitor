@@ -29,12 +29,15 @@ The solution was to create an updated version of this that would:
 20/03/2024 - Update to feed now shows colours for each bet. Colours are identifiers depending on the user/bet. Red - Risk client/bet or watchlist, Purple - New Registration, Green - Good client/bet
 08/06/2024 - Added 'Staff Feed' for logging notices for staff on live activity. Additionally, added bottom panel 'Next 3' races for Horses and Greyhounds, so staff can see what is coming up and the race 'Status'
 
-Bet Viewer UI with test data:
-![image](https://github.com/user-attachments/assets/89e23b1c-d581-4acb-8c88-bff135da83b7)
-![image](https://github.com/user-attachments/assets/b8b49319-a2e9-4ef2-8fcb-d8bc25b705e6)
+Bet Viewer UI:
+
+User data and any other sensitive data has been blanked out, hence gaps. 
+
+![image](https://github.com/user-attachments/assets/802d9ccb-9255-4fef-a680-849d57a2fe68)
+![image](https://github.com/user-attachments/assets/958737de-9bd8-43dd-a418-890fa9d64aae)
 ![image](https://github.com/user-attachments/assets/b5dea8b7-ab72-4e47-b2df-21e2f79ca092)
-![image](https://github.com/user-attachments/assets/0237cb28-e02d-47d0-8627-24909cf6377e)
-![image](https://github.com/user-attachments/assets/2a2570b1-b76f-4a96-9fac-97b147e22fa3)
+![image](https://github.com/user-attachments/assets/258713b8-e964-4f7f-a3a7-0101611ce933)
+![image](https://github.com/user-attachments/assets/7199be27-e30e-400b-bb1e-18448cc9fca3)
 
 
 # Bet Processor
