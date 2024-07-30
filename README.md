@@ -42,8 +42,11 @@ User data and any other sensitive data has been blanked out, hence gaps.
 
 # Bet Processor
 
-Bet Processor UI with test data:
-![image](https://github.com/sambanks5/BetMonitor/assets/121309218/7733c2e1-618f-4b18-93af-e921b936aecc)
+Bet Processor UI:
+
+User data and any other sensitive data has been blanked out, hence gaps. 
+
+![image](https://github.com/user-attachments/assets/b8e3def8-de9b-47f7-85d8-9bf8c389ca13)
   
   A simple UI containing a scroll text widget outputting processed bets, button to set the folder containing bet files and 'reprocess' button to delete and re-process all bet files from the folder in case of error.
 
