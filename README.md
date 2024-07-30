@@ -51,6 +51,6 @@ User data and any other sensitive data has been blanked out, hence gaps.
   A simple UI containing a scroll text widget outputting processed bets, button to set the folder containing bet files and 'reprocess' button to delete and re-process all bet files from the folder in case of error.
 
 
-Contains multiple tKinter 'frames' displaying data from various functions. 
-
+Data sources (updated 06/04/2024)
+![External Sources](https://github.com/user-attachments/assets/169e8616-2c45-4b9c-8192-5a95c1ebf7df)
 
