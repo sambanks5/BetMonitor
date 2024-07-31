@@ -105,6 +105,37 @@ def user_login():
         else:
             messagebox.showerror("Error", "Maximum of 2 characters.")
 
+def log_notification(message, important=False, pinned=False):
+    # Get the current time
+    time_str = datetime.now().strftime('%H:%M:%S')
+    file_lock = fasteners.InterProcessLock('notifications.lock')
+    try:
+        with file_lock:
+            try:
+                with open('notifications.json', 'r') as f:
+                    notifications = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                notifications = []
+
+            # If the notification is pinned, remove the existing pinned notification
+            if pinned:
+                notifications = [notification for notification in notifications if not notification.get('pinned', False)]
+            
+            # Insert the new notification at the beginning
+            notifications.insert(0, {'time': time_str, 'message': message, 'important': important, 'pinned': pinned})
+            
+            # Write to a temporary file first
+            temp_filename = 'notifications_temp.json'
+            with open(temp_filename, 'w') as f:
+                json.dump(notifications, f, indent=4)
+            
+            # Small delay to ensure the file system is ready
+            time.sleep(0.1)
+            
+            # Rename the temporary file to the actual file
+            os.replace(temp_filename, 'notifications.json')
+    except Exception as e:
+        print(f"Error logging notification: {e}")
 
 def user_notification():
     if not user:
@@ -138,29 +169,7 @@ def user_notification():
     button = ttk.Button(window, text="Submit", command=submit)
     button.pack(padx=5, pady=10)
 
-def log_notification(message, important=False, pinned=False):
-    # Get the current time
-    time = datetime.now().strftime('%H:%M:%S')
 
-    file_lock = fasteners.InterProcessLock('notifications.lock')
-
-    try:
-        with file_lock:
-            with open('notifications.json', 'r') as f:
-                notifications = json.load(f)
-    except FileNotFoundError:
-        notifications = []
-
-    # If the notification is pinned, remove the existing pinned notification
-    if pinned:
-        notifications = [notification for notification in notifications if not notification.get('pinned', False)]
-
-    # Insert the new notification at the beginning
-    notifications.insert(0, {'time': time, 'message': message, 'important': important, 'pinned': pinned})
-
-    with file_lock:
-        with open('notifications.json', 'w') as f:
-            json.dump(notifications, f, indent=4)
 
 class BetDataFetcher:
     _instance = None
@@ -1193,17 +1202,17 @@ class Notebook:
                 if regular_notifications and (self.last_notification is None or self.last_notification != regular_notifications[0]):
                     last_index = next((index for index, notification in enumerate(regular_notifications) if notification == self.last_notification), len(regular_notifications))
                     for notification in reversed(regular_notifications[:last_index]):
-                        time = notification['time']
+                        time_str = notification['time']
                         message = notification['message']
                         important = notification.get('important', False)
                         if important:
-                            message = f'{time}: {message}\n'
+                            message = f'{time_str}: {message}\n'
                             self.staff_feed.insert('1.0', message, "important")
                         else:
-                            self.staff_feed.insert('1.0', f'{time}: {message}\n')
+                            self.staff_feed.insert('1.0', f'{time_str}: {message}\n')
                     self.last_notification = regular_notifications[0] if regular_notifications else None
 
-            except FileNotFoundError:
+            except (FileNotFoundError, json.JSONDecodeError):
                 pass
         self.staff_feed.config(state='disabled') 
         self.staff_feed.after(1500, self.update_notifications)
@@ -2449,7 +2458,7 @@ class Settings:
 
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
-
+        
         self.set_database_label = ttk.Label(self.settings_frame, text="Set Database", font=("Helvetica", 10))
         self.set_database_label.pack(pady=(10, 0))
 

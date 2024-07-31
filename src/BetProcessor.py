@@ -250,7 +250,9 @@ def log_notification(message, important=False):
                 notifications = json.load(f)
     except FileNotFoundError:
         notifications = []
-
+    except json.JSONDecodeError:
+        notifications = []
+        
     notifications.insert(0, {'time': time, 'message': message, 'important': important})
 
     with file_lock:
@@ -495,11 +497,16 @@ def rg_report_notification():
                 if late_avg - early_avg > 4:  # Set the threshold as needed
                     scores['scores']['chasing_losses'] = 1
 
+    high_risk_users = []
+
     for user, scores in user_scores.items():
         scores['score'] = sum(scores['scores'].values())
-        if scores['score'] >= 5:
-            log_notification(f"RG Alert: {user} has a score of {scores['score']}", True)
-                
+        if scores['score'] >= 6:
+            high_risk_users.append(user)
+
+    if high_risk_users:
+        log_notification(f"RG Alert: Users with a score of 6 or above: {', '.join(high_risk_users)}", True)
+
 def staff_report_notification():
     global USER_NAMES
     global notified_users 
