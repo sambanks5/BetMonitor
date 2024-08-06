@@ -505,7 +505,7 @@ def rg_report_notification():
             high_risk_users.append(user)
 
     if high_risk_users:
-        log_notification(f"RG Alert: Users with a score of 6 or above: {', '.join(high_risk_users)}", True)
+        log_notification(f"Processor: >5 RG score: {', '.join(high_risk_users)}", True)
 
 def staff_report_notification():
     global USER_NAMES
@@ -536,7 +536,7 @@ def staff_report_notification():
 
     for user, count in staff_updates_today.items():
         if count >= 50 and user not in notified_users:
-            log_notification(f"{user} has {count} updates!", True)
+            log_notification(f"Processor: {user} has {count} updates!", True)
             notified_users.add(user)
 
 def activity_report_notification():
@@ -545,6 +545,7 @@ def activity_report_notification():
     knockback_count = len([bet for bet in data if bet['type'] == 'WAGER KNOCKBACK'])
 
     thresholds = {
+        250: {'count': bet_count, 'flag': 'bet_count_250', 'message': 'bets taken'},
         500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
         750: {'count': bet_count, 'flag': 'bet_count_750', 'message': 'bets taken'},
         1000: {'count': bet_count, 'flag': 'bet_count_1000', 'message': 'bets taken'},
@@ -553,9 +554,8 @@ def activity_report_notification():
 
     for threshold, data in thresholds.items():
         if data['count'] == threshold and not globals()[data['flag']]:
-            log_notification(f"{data['count']} {data['message']}", True)
+            log_notification(f"Processor: {data['count']} {data['message']}", True)
             globals()[data['flag']] = True
-
 
 
 ####################################################################################
@@ -869,7 +869,7 @@ def check_closures_and_race_times():
         if closure['email_id'] in processed_closures:
             continue
         if not closure.get('completed', False):
-            log_notification(f"{closure['Restriction']} request from {closure['Username'].strip()}")
+            log_notification(f"Processor: {closure['Restriction']} request from {closure['Username'].strip()}")
             processed_closures.add(closure['email_id'])
 
     try:
@@ -909,10 +909,10 @@ def check_closures_and_race_times():
         if current_time == race_time and race not in processed_races:
             if race in enhanced_places:
                 processed_races.add(race)
-                log_notification(f"Enhanced Race {race} is past off time - {index}/{total_races_today}", important=True)
+                log_notification(f"Processor: {race} (enhanced) is past off time - {index}/{total_races_today}", important=True)
             else:
                 processed_races.add(race)
-                log_notification(f"{race} is past off time - {index}/{total_races_today}")
+                log_notification(f"Processor: {race} is past off time - {index}/{total_races_today}")
     
 def fetch_and_print_new_events():
     global previously_seen_events
@@ -932,7 +932,7 @@ def fetch_and_print_new_events():
         print(len(new_events))
 
         for event in new_events:
-            log_notification(f"New event live: {event}", True)
+            log_notification(f"Processor: New event live: {event}", True)
 
         previously_seen_events.update(new_events)
 
@@ -1215,7 +1215,6 @@ def get_deposits(app):
 
     # Call the Gmail API
     service = build('gmail', 'v1', credentials=creds)
-
     results = service.users().labels().list(userId='me').execute()
     labels = results.get('labels', [])
 
@@ -1225,17 +1224,13 @@ def get_deposits(app):
             if label['name'] == label_name:
                 label_ids[label_name] = label['id']
                 break
-
     # Get the current date in your local time zone
     now_local = datetime.now(timezone('Europe/London'))
-
     # Format the current date and the next date as strings
     date_str = now_local.strftime('%Y/%m/%d')
     next_date_str = (now_local + timedelta(days=1)).strftime('%Y/%m/%d')
-    
     # Define the filename for today's deposits
     today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
-
     # Load the existing messages from the JSON file for today's date
     if os.path.exists(today_filename):
         with open(today_filename, 'r') as f:
@@ -1367,6 +1362,10 @@ def calculate_deposit_summary():
         'most_deposits_user': most_deposits_user,
         'most_sum_user': most_sum_user,
     }
+
+def log_deposit_summary():
+    deposit_summary = calculate_deposit_summary()
+    log_notification(f"Processor: Most Deposits: {deposit_summary['most_deposits_user']} Highest Total: {deposit_summary['most_sum_user']}", True)
 
 def reprocess_deposits(app):
     creds = None
@@ -1558,27 +1557,14 @@ def update_data_file(app):
             with open('src/data.json', 'r') as f:
                 data = json.load(f)
 
-            print("Test")
             # Update data
             data['vip_clients'] = get_vip_clients(app)
-            print(1)
-
             data['new_registrations'] = get_new_registrations(app)
-            print(2)
-
             data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'], data['enhanced_places'] = get_reporting_data(app)
-            print(3)
-
             data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
-            print(4)
-
             data['closures'] = get_closures(app)
-            print(5)
-
             data['deposits_summary'] = calculate_deposit_summary()
-            print(6)
 
-            # Write updated data back to file
             with open('src/data.json', 'w') as f:
                 json.dump(data, f, indent=4)
             
@@ -1586,7 +1572,7 @@ def update_data_file(app):
 
         except Exception as e:
             app.log_message(f"An error occurred while updating the data file: {e}")
-            log_notification(f"Bet Processor could not update data file.", True)
+            log_notification(f"Processor: Could not update data file.", True)
 
 
 
@@ -1751,7 +1737,7 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    log_notification("Bet Processor started")
+    log_notification("Processor: Started")
     run_get_data(app)
     run_get_deposit_data(app)
     run_update_todays_oddsmonkey_selections()
@@ -1759,16 +1745,18 @@ def main(app):
     fetch_and_print_new_events()
 
     schedule.every(2).minutes.do(run_get_data, app)
+
     schedule.every(10).minutes.do(run_get_deposit_data, app)
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
     schedule.every(50).seconds.do(check_closures_and_race_times)
     schedule.every(10).minutes.do(fetch_and_print_new_events)
-    schedule.every(1).hour.do(run_find_rg_issues)
+    schedule.every(3).hours.do(run_find_rg_issues)
     schedule.every(1).minute.do(run_staff_report_notification)
     schedule.every(1).minute.do(run_activity_report_notification)
 
     schedule.every().day.at("23:57").do(run_get_deposit_data, app)
+    schedule.every().day.at("17:00").do(log_deposit_summary)
     schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
@@ -1801,7 +1789,7 @@ def main(app):
             pass
     if observer is not None:
         observer.stop()
-        log_notification("Bet Processor stopped")
+        log_notification("Processor: Stopped")
         print("OBSERVER STOPPED!")  
         observer.join()
 

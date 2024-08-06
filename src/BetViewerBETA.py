@@ -69,7 +69,7 @@ def load_database_data(json_file_path):
 def get_database_cached():
     global current_database, last_cache_time, cached_data
 
-    if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=20):
+    if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=15):
         last_cache_time = datetime.now()
         date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
         if not date_str.endswith('-wager_database.json'):
@@ -1102,18 +1102,21 @@ class Notebook:
         self.staff_feed_buttons_frame.grid(row=0, column=2, sticky='nsew')
         self.pinned_message_frame = ttk.Frame(self.staff_feed_buttons_frame, style='Card')
         self.pinned_message_frame.pack(side="top", pady=5, padx=(5, 0))
-        self.pinned_message = tk.Text(self.pinned_message_frame, font=("Helvetica", 10, 'bold'), bd=0, wrap='word', pady=2, fg="#000000", bg="#ffffff", height=3, width=35)  # Adjust height as needed
-        self.pinned_message.insert('1.0', "Pinned Notifications: No pinned notifications")
+        self.pinned_message = tk.Text(self.pinned_message_frame, font=("Helvetica", 10, 'bold'), bd=0, wrap='word', pady=2, fg="#000000", bg="#ffffff", height=5, width=35)  # Adjust height as needed
         self.pinned_message.config(state='disabled') 
         self.pinned_message.pack(side="top", pady=5, padx=5) 
-        self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post Message", command=user_notification, cursor="hand2", width=17)
+        self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post", command=user_notification, cursor="hand2", width=10)
         self.post_message_button.pack(side="top", pady=(10, 5))
+
         separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
-        separator.pack(side="top", fill='x', pady=(14, 5))
-        self.copy_button = ttk.Button(self.staff_feed_buttons_frame, text="Generate Password", command=self.copy_to_clipboard, cursor="hand2", width=17)
-        self.copy_button.pack(side="top", pady=(16, 5))
-        self.password_result_label = ttk.Label(self.staff_feed_buttons_frame, text="GB000000", font=("Helvetica", 12), wraplength=200)
-        self.password_result_label.pack(side="top", pady=2)
+        separator.pack(side="top", fill='x', pady=(12, 8), padx=5)
+
+        self.copy_frame = ttk.Frame(self.staff_feed_buttons_frame)
+        self.copy_frame.pack(side="top", pady=(5, 0))
+        self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
+        self.copy_button.grid(row=0, column=0)
+        self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 12), wraplength=200)
+        self.password_result_label.grid(row=0, column=1, padx=(5, 5))
         
         tab_2 = ttk.Frame(self.notebook)
         self.notebook.add(tab_2, text="Reports/Screener")
@@ -1177,7 +1180,6 @@ class Notebook:
         self.requests_frame = ttk.Frame(self.tab_4)
         self.requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
-
     def update_notifications(self):
         self.staff_feed.tag_configure("important", font=("TkDefaultFont", 10, "bold"))
         self.staff_feed.config(state='normal')  
@@ -1194,9 +1196,9 @@ class Notebook:
                 self.pinned_message.config(state='normal') 
                 self.pinned_message.delete('1.0', 'end')  
                 if not pinned_notifications:
-                    self.pinned_message.insert('end', "No pinned notices.\n")
+                    self.pinned_message.insert('end', "No pinned message.\n")
                 for notification in pinned_notifications:
-                    self.pinned_message.insert('end', f"{notification['time']}: {notification['message']}\n")
+                    self.pinned_message.insert('end', f"{notification['message']}\n")
                 self.pinned_message.config(state='disabled') 
 
                 if regular_notifications and (self.last_notification is None or self.last_notification != regular_notifications[0]):
@@ -2444,8 +2446,8 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v10.1", font=("Helvetica", 10))
-        self.version_label.pack(pady=(0, 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v10.2", font=("Helvetica", 10))
+        self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
@@ -2460,18 +2462,27 @@ class Settings:
         self.separator.pack(fill='x', pady=5)
         
         self.set_database_label = ttk.Label(self.settings_frame, text="Set Database", font=("Helvetica", 10))
-        self.set_database_label.pack(pady=(10, 0))
+        self.set_database_label.pack(pady=(6, 0))
 
         database_files = [f for f in os.listdir('database') if f.endswith('.json')]
         formatted_dates = [f.split('-wager_database')[0] for f in database_files]
         formatted_dates.sort(reverse=True) 
 
-        self.databases_combobox = ttk.Combobox(self.settings_frame, values=formatted_dates, width=10, state='readonly')
-        self.databases_combobox.pack(pady=5)
+        self.databases_frame = ttk.Frame(self.settings_frame)
+        self.databases_frame.pack(pady=5)
+
+        self.databases_combobox = ttk.Combobox(self.databases_frame, values=formatted_dates, width=10, state='readonly')
+        self.databases_combobox.grid(row=0, column=0, padx=(0, 3))
         self.databases_combobox.bind("<<ComboboxSelected>>", self.update_current_database)
 
-        self.reset_database_button = ttk.Button(self.settings_frame, text="Reset", command=self.reset_database, cursor="hand2", width=10)
-        self.reset_database_button.pack(pady=5)
+        self.reset_database_button = ttk.Button(self.databases_frame, text="↻", command=self.reset_database, cursor="hand2", width=2)
+        self.reset_database_button.grid(row=0, column=1)
+
+        self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
+        self.separator.pack(fill='x', pady=5)
+
+        self.view_events_button = ttk.Button(self.settings_frame, text="Live Events", command=self.show_live_events, cursor="hand2", width=12)
+        self.view_events_button.pack(pady=(4, 0))
 
     def update_current_database(self, event):
         global current_database
@@ -2481,6 +2492,137 @@ class Settings:
         global current_database
         current_database = None
         self.databases_combobox.set('')
+
+    def fetch_and_save_events(self):
+        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M'
+        
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an HTTPError for bad responses
+            data = response.json()
+        except requests.RequestException as e:
+            messagebox.showerror("Error", f"Failed to fetch events: {e}")
+            return
+
+        if os.path.exists('events.json'):
+            with open('events.json', 'r') as f:
+                existing_data = json.load(f)
+        else:
+            existing_data = []
+
+        existing_data_map = {event['eventName']: event for event in existing_data}
+
+        for event in data:
+            existing_event = existing_data_map.get(event['eventName'])
+            if existing_event:
+                event['lastUpdate'] = existing_event.get('lastUpdate', '-')
+                event['user'] = existing_event.get('user', '-')
+            else:
+                event['lastUpdate'] = '-'
+                event['user'] = '-'
+
+        with open('events.json', 'w') as f:
+            json.dump(data, f, indent=4)
+
+    def load_events(self):
+        with open('events.json', 'r') as f:
+            data = json.load(f)
+        return data
+
+    def show_live_events(self):
+        self.fetch_and_save_events()
+        data = self.load_events()
+
+        live_events_window = tk.Toplevel(self.root)
+        live_events_window.geometry("650x700")
+        live_events_window.title("Live Events")
+        live_events_window.iconbitmap('src/splash.ico')
+        screen_width = live_events_window.winfo_screenwidth()
+        live_events_window.geometry(f"+{screen_width - 800}+50")
+        live_events_window.resizable(False, False)
+        live_events_frame = ttk.Frame(live_events_window)
+        live_events_frame.pack(fill=tk.BOTH, expand=True)
+        live_events_title = ttk.Label(live_events_frame, text="Live Events", font=("Helvetica", 12, "bold"))
+        live_events_title.pack(pady=5)
+        total_events_label = ttk.Label(live_events_frame, text=f"Total Events: {len(data)}")
+        total_events_label.pack(pady=5)
+        tree_frame = ttk.Frame(live_events_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        tree_scroll = ttk.Scrollbar(tree_frame)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set, selectmode="extended")
+        tree.pack(fill=tk.BOTH, expand=True)
+        tree_scroll.config(command=tree.yview)
+
+        tree["columns"] = ("eventFile", "numChildren", "eventDate", "lastUpdate", "user")
+        tree.column("#0", width=200, minwidth=200)
+        tree.column("eventFile", width=50, minwidth=50)
+        tree.column("numChildren", width=50, minwidth=50)
+        tree.column("eventDate", width=50, minwidth=50)
+        tree.column("lastUpdate", width=120, minwidth=120)
+        tree.column("user", width=10, minwidth=10)
+        tree.heading("#0", text="Event Name", anchor=tk.W)
+        tree.heading("eventFile", text="Event File", anchor=tk.W)
+        tree.heading("numChildren", text="Markets", anchor=tk.W)
+        tree.heading("eventDate", text="Event Date", anchor=tk.W)
+        tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
+        tree.heading("user", text="User", anchor=tk.W)
+
+        for event in data:
+            event_name = event["eventName"]
+            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
+            num_children = len(event["meetings"])
+            last_update = event.get("lastUpdate", "-")
+            user = event.get("user", "-")
+            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
+            for meeting in event["meetings"]:
+                meeting_name = meeting["meetinName"]
+                event_date = meeting["eventDate"]
+                tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
+
+        def on_button_click():
+            global user
+            selected_items = tree.selection()
+            for item_id in selected_items:
+                item = tree.item(item_id)
+                event_name = item['text']
+                for event in data:
+                    if event['eventName'] == event_name:
+                        event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                        event['user'] = user
+                        break
+
+            # Save updated data back to the file
+            with open('events.json', 'w') as f:
+                json.dump(data, f, indent=4)
+
+            # Update the tree
+            self.populate_tree(tree, data)
+
+        action_button = ttk.Button(live_events_frame, text="Take Action", command=on_button_click)
+        action_button.pack(pady=10)
+        not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
+        not_included_events_label.pack(pady=5)
+
+    def populate_tree(self, tree, data):
+        # Clear existing tree items
+        for item in tree.get_children():
+            tree.delete(item)
+
+        for event in data:
+            event_name = event["eventName"]
+            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
+            num_children = len(event["meetings"])
+            last_update = event.get("lastUpdate", "-")
+            user = event.get("user", "-")
+            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
+            for meeting in event["meetings"]:
+                meeting_name = meeting["meetinName"]
+                event_date = meeting["eventDate"]
+                tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
+
+
+
 
 class Next3Panel:
     def __init__(self, root):
@@ -2762,7 +2904,7 @@ class BetViewerApp:
         user_notification()
 
     def about(self):
-        messagebox.showinfo("About", "Geoff Banks Bet Monitoring v10.1")
+        messagebox.showinfo("About", "Geoff Banks Bet Monitoring v10.2")
 
 
 if __name__ == "__main__":
