@@ -45,7 +45,9 @@ USER_NAMES = {
     'SB': 'Sam',
     'JJ': 'Joji',
     'AE': 'Arch',
-    'EK': 'Ed'
+    'EK': 'Ed',
+    'VO': 'Victor',
+    'MF': 'Mark'
 }
 
 current_database = None
@@ -2494,11 +2496,11 @@ class Settings:
         self.databases_combobox.set('')
 
     def fetch_and_save_events(self):
-        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M'
+        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M,F'
         
         try:
             response = requests.get(url)
-            response.raise_for_status()  # Raise an HTTPError for bad responses
+            response.raise_for_status() 
             data = response.json()
         except requests.RequestException as e:
             messagebox.showerror("Error", f"Failed to fetch events: {e}")
@@ -2532,6 +2534,13 @@ class Settings:
     def show_live_events(self):
         self.fetch_and_save_events()
         data = self.load_events()
+
+        # Separate antepost and non-antepost events
+        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+
+        # Concatenate antepost events first, followed by non-antepost events
+        sorted_data = antepost_events + non_antepost_events
 
         live_events_window = tk.Toplevel(self.root)
         live_events_window.geometry("650x700")
@@ -2568,7 +2577,7 @@ class Settings:
         tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
         tree.heading("user", text="User", anchor=tk.W)
 
-        for event in data:
+        for event in sorted_data:
             event_name = event["eventName"]
             event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
             num_children = len(event["meetings"])
@@ -2590,26 +2599,35 @@ class Settings:
                     if event['eventName'] == event_name:
                         event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                         event['user'] = user
+                        log_notification(f"{user} updated {event_name}")
+                        self.log_update(event_name, event['lastUpdate'], user)   
                         break
 
-            # Save updated data back to the file
             with open('events.json', 'w') as f:
                 json.dump(data, f, indent=4)
 
-            # Update the tree
             self.populate_tree(tree, data)
 
-        action_button = ttk.Button(live_events_frame, text="Take Action", command=on_button_click)
+        action_button = ttk.Button(live_events_frame, text="Update Event", command=on_button_click)
         action_button.pack(pady=10)
+        update_events_label = ttk.Label(live_events_frame, text="Select an event (or multiple) and click 'Update Event' to log latest refresh.", wraplength=600)
+        update_events_label.pack(pady=5)
         not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
-        not_included_events_label.pack(pady=5)
+        not_included_events_label.pack(pady=2)
 
     def populate_tree(self, tree, data):
         # Clear existing tree items
         for item in tree.get_children():
             tree.delete(item)
 
-        for event in data:
+        # Separate antepost and non-antepost events
+        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+
+        # Concatenate antepost events first, followed by non-antepost events
+        sorted_data = antepost_events + non_antepost_events
+
+        for event in sorted_data:
             event_name = event["eventName"]
             event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
             num_children = len(event["meetings"])
@@ -2621,8 +2639,41 @@ class Settings:
                 event_date = meeting["eventDate"]
                 tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
 
+    def log_update(self, course, full_time, user):
+        # Extract just the time in HH:MM format
+        log_time = datetime.strptime(full_time, '%d-%m-%Y %H:%M:%S').strftime('%H:%M')
 
+        now = datetime.now()
+        date_string = now.strftime('%d-%m-%Y')
+        log_file = f'logs/updatelogs/update_log_{date_string}.txt'
 
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                data = f.readlines()
+        else:
+            data = []
+
+        update = f"{log_time} - {user}\n"
+
+        course_index = None
+        for i, line in enumerate(data):
+            if line.strip() == course + ":":
+                course_index = i
+                break
+
+        if course_index is not None:
+            data.insert(course_index + 1, update)
+        else:
+            if data and not data[-1].endswith('\n'):
+                data.append('\n')
+            data.append(f"{course}:\n")
+            data.append(update)
+
+        with open(log_file, 'w') as f:
+            f.writelines(data)
 
 class Next3Panel:
     def __init__(self, root):
@@ -2747,6 +2798,9 @@ class BetViewerApp:
     def __init__(self, root):
         self.root = root
 
+        # Initialize Google Sheets API client
+        self.initialize_gspread()
+
         threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
         user_login()
@@ -2756,6 +2810,13 @@ class BetViewerApp:
         self.next3_panel = Next3Panel(root)
         self.notebook = Notebook(root)
         self.settings = Settings(root)
+
+    def initialize_gspread(self):
+        with open('src/creds.json') as f:
+            data = json.load(f)
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+        self.gc = gspread.authorize(credentials)
 
     def initialize_ui(self):
         self.root.title("Bet Viewer")
@@ -2789,6 +2850,7 @@ class BetViewerApp:
         
         # Additional Features Menu
         menu_bar.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
+        menu_bar.add_command(label="Send RG Popup", command=self.display_rg_popup, foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
         self.root.config(menu=menu_bar)
@@ -2802,12 +2864,6 @@ class BetViewerApp:
         if not user:
             user_login()
 
-        with open('src/creds.json') as f:
-            data = json.load(f)
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
-        gc = gspread.authorize(credentials)
-        
         progress = IntVar()
         progress.set(0)
 
@@ -2824,7 +2880,7 @@ class BetViewerApp:
 
             spreadsheet_name = 'Reporting ' + current_month
             try:
-                spreadsheet = gc.open(spreadsheet_name)
+                spreadsheet = self.gc.open(spreadsheet_name)
             except gspread.SpreadsheetNotFound:
                 messagebox.showerror("Error", f"Spreadsheet '{spreadsheet_name}' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
                 return
@@ -2888,6 +2944,123 @@ class BetViewerApp:
 
         progress_bar = ttk.Progressbar(report_freebet_frame, length=200, mode='determinate', variable=progress)
         progress_bar.pack(padx=5, pady=5)
+
+    def display_rg_popup(self):
+        # Load credentials and Pipedrive API token
+        with open('src/creds.json') as f:
+            data = json.load(f)
+        pipedrive_api_token = data['pipedrive_api_key']
+
+        custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'  # Your custom field ID
+
+        def handle_submit():
+            today = date.today()
+
+            if not entry1.get():
+                messagebox.showerror("Error", "Please make sure you enter a username.")
+                return 
+            
+            # Get the provided username
+            username = entry1.get().strip()
+            
+            # Search for the person using the provided username
+            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={pipedrive_api_token}'
+            params = {
+                'term': username,
+                'item_types': 'person',
+                'fields': 'custom_fields',
+                'exact_match': 'true'
+            }
+
+            response = requests.get(search_url, params=params)
+            if response.status_code == 200:
+                persons = response.json().get('data', {}).get('items', [])
+
+                if not persons:
+                    messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or enter the risk category in Pipedrive manually.")
+                    return
+
+                for person in persons:
+                    person_id = person['item']['id']
+                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
+                    update_data = {
+                        custom_field_id: today.strftime('%m/%d/%Y')
+                    }
+                    update_response = requests.put(update_url, json=update_data)
+                    if update_response.status_code == 200:
+                        wizard_window.destroy()
+                        log_notification(f"{user} applied RG Popup to {username.upper()}", True)
+                        self.report_rg_notification(username.upper())
+                    else:
+                        messagebox.showerror("Error", f"Error updating person {person_id}: {update_response.status_code}")
+            else:
+                print(f'Error: {response.status_code}')
+
+        def fetch_usernames_and_compliance_dates():
+            filter_id = 65  # Your filter ID
+            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
+            response = requests.get(filter_url)
+            if response.status_code == 200:
+                persons = response.json().get('data', [])
+                user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
+                
+                # Sort the data by 'Compliance Popup' date in descending order
+                user_data.sort(key=lambda x: x[1], reverse=True)
+                
+                return user_data
+            else:
+                messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
+                return []
+
+        wizard_window = tk.Toplevel(root)
+        wizard_window.geometry("270x450")
+        wizard_window.title("Apply RG Popup")
+        wizard_window.iconbitmap('src/splash.ico')
+
+        screen_width = wizard_window.winfo_screenwidth()
+        wizard_window.geometry(f"+{screen_width - 350}+50")
+        wizard_window_frame = ttk.Frame(wizard_window, style='Card')
+        wizard_window_frame.place(x=5, y=5, width=260, height=440)
+
+        username_label = ttk.Label(wizard_window_frame, text="Username")
+        username_label.pack(padx=5, pady=5)
+        entry1 = ttk.Entry(wizard_window_frame)
+        entry1.pack(padx=5, pady=5)
+
+        popup_note = ttk.Label(wizard_window_frame, text="Enter a username above to apply popup on next login.", wraplength=200, anchor='center', justify='center')
+        popup_note.pack(padx=5, pady=5)
+
+        submit_button = ttk.Button(wizard_window_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
+        submit_button.pack(padx=5, pady=5)
+
+        Separator = ttk.Separator(wizard_window_frame, orient='horizontal')
+        Separator.pack(fill='x', pady=5)
+
+        user_data = fetch_usernames_and_compliance_dates()
+        tree = ttk.Treeview(wizard_window_frame, columns=('Username', 'Compliance Popup'), show='headings')
+        tree.heading('Username', text='Username')
+        tree.heading('Compliance Popup', text='Popup Date')
+        tree.column('Username', width=30) 
+        tree.column('Compliance Popup', width=30) 
+
+        for username, compliance_date in user_data:
+            tree.insert('', tk.END, values=(username, compliance_date))
+        tree.pack(padx=5, pady=5, fill='both', expand=True)
+
+    def report_rg_notification(self, username):
+        global user
+        try:
+            spreadsheet = self.gc.open("Compliance Diary")
+        except gspread.SpreadsheetNotFound:
+            messagebox.showerror("Error", f"Spreadsheet 'Compliance Diary' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
+            return
+        
+        worksheet = spreadsheet.get_worksheet(11)
+        next_row = len(worksheet.col_values(1)) + 1
+        current_date = datetime.now().strftime("%d/%m/%Y")
+        worksheet.update_cell(next_row, 1, username)
+        worksheet.update_cell(next_row, 2, current_date)
+        worksheet.update_cell(next_row, 3, user)
 
     def open_settings(self):
         settings_window = tk.Toplevel(root)

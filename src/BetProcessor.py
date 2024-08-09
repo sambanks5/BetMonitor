@@ -505,7 +505,7 @@ def rg_report_notification():
             high_risk_users.append(user)
 
     if high_risk_users:
-        log_notification(f"Processor: >5 RG score: {', '.join(high_risk_users)}", True)
+        log_notification(f">5 RG score: {', '.join(high_risk_users)}", True)
 
 def staff_report_notification():
     global USER_NAMES
@@ -536,7 +536,7 @@ def staff_report_notification():
 
     for user, count in staff_updates_today.items():
         if count >= 50 and user not in notified_users:
-            log_notification(f"Processor: {user} has {count} updates!", True)
+            log_notification(f"{user} has {count} updates!", True)
             notified_users.add(user)
 
 def activity_report_notification():
@@ -554,7 +554,7 @@ def activity_report_notification():
 
     for threshold, data in thresholds.items():
         if data['count'] == threshold and not globals()[data['flag']]:
-            log_notification(f"Processor: {data['count']} {data['message']}", True)
+            log_notification(f"{data['count']} {data['message']}", True)
             globals()[data['flag']] = True
 
 
@@ -769,7 +769,7 @@ def reprocess_file(app):
         app.log_message('No existing database found. Will begin processing todays bets...\n\n')
 
 def process_existing_bets(directory, app):
-    log_notification(f'Processor: Reprocessing bets', True)
+    log_notification(f'Reprocessing bets', True)
     database = load_database(app)
 
     files = os.listdir(directory)
@@ -786,7 +786,7 @@ def process_existing_bets(directory, app):
 
     save_database(database)
     app.log_message('Bet processing complete. Waiting for new files...\n')
-    log_notification(f'Processor: Finished reprocessing', True)
+    log_notification(f'Finished reprocessing', True)
 
 
 
@@ -869,7 +869,7 @@ def check_closures_and_race_times():
         if closure['email_id'] in processed_closures:
             continue
         if not closure.get('completed', False):
-            log_notification(f"Processor: {closure['Restriction']} request from {closure['Username'].strip()}")
+            log_notification(f"{closure['Restriction']} request from {closure['Username'].strip()}")
             processed_closures.add(closure['email_id'])
 
     try:
@@ -909,10 +909,10 @@ def check_closures_and_race_times():
         if current_time == race_time and race not in processed_races:
             if race in enhanced_places:
                 processed_races.add(race)
-                log_notification(f"Processor: {race} (enhanced) is past off time - {index}/{total_races_today}", important=True)
+                log_notification(f"{race} (enhanced) is past off time - {index}/{total_races_today}", important=True)
             else:
                 processed_races.add(race)
-                log_notification(f"Processor: {race} is past off time - {index}/{total_races_today}")
+                log_notification(f"{race} is past off time - {index}/{total_races_today}")
     
 def fetch_and_print_new_events():
     global previously_seen_events
@@ -932,11 +932,46 @@ def fetch_and_print_new_events():
         print(len(new_events))
 
         for event in new_events:
-            log_notification(f"Processor: New event live: {event}", True)
+            log_notification(f"New event live: {event}", True)
 
         previously_seen_events.update(new_events)
 
     print(len(current_events))
+
+def find_stale_antepost_events():
+    with open('events.json', 'r') as f:
+        data = json.load(f)
+
+    current_date = datetime.now()
+    stale_antepost_events = []
+    stale_events = []
+
+    for event in data:
+        event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
+        last_update_str = event.get("lastUpdate", "-")
+        
+        if len(event_file) > 5 and event_file[3:5].lower() == 'ap':
+            try:
+                last_update_date = datetime.strptime(last_update_str, '%d-%m-%Y %H:%M:%S')
+            except ValueError:
+                continue
+            
+            if current_date - last_update_date > timedelta(weeks=1):
+                stale_antepost_events.append(event["eventName"])
+                
+        elif len(event_file) > 5:
+            try:
+                last_update_date = datetime.strptime(last_update_str, '%d-%m-%Y %H:%M:%S')
+            except ValueError:
+                continue
+            
+            if current_date - last_update_date > timedelta(days=1):
+                stale_events.append(event["eventName"])
+
+    if stale_antepost_events:
+        log_notification(f"{stale_antepost_events} may need updating", True)
+    if stale_events:
+        log_notification(f"{stale_events} may need updating", True)
 
 
 ####################################################################################
@@ -1365,7 +1400,7 @@ def calculate_deposit_summary():
 
 def log_deposit_summary():
     deposit_summary = calculate_deposit_summary()
-    log_notification(f"Processor: Most Deposits: {deposit_summary['most_deposits_user']} Highest Total: {deposit_summary['most_sum_user']}", True)
+    log_notification(f"Most Deposits: {deposit_summary['most_deposits_user']} Highest Total: {deposit_summary['most_sum_user']}", True)
 
 def reprocess_deposits(app):
     creds = None
@@ -1572,7 +1607,7 @@ def update_data_file(app):
 
         except Exception as e:
             app.log_message(f"An error occurred while updating the data file: {e}")
-            log_notification(f"Processor: Could not update data file.", True)
+            log_notification(f"Processor Could not update data file.", True)
 
 
 
@@ -1737,12 +1772,13 @@ def main(app):
     observer_started = False
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    log_notification("Processor: Started")
+    log_notification("Processor Started")
     run_get_data(app)
     run_get_deposit_data(app)
     run_update_todays_oddsmonkey_selections()
     check_closures_and_race_times()
     fetch_and_print_new_events()
+    find_stale_antepost_events()
 
     schedule.every(2).minutes.do(run_get_data, app)
 
@@ -1757,6 +1793,7 @@ def main(app):
 
     schedule.every().day.at("23:57").do(run_get_deposit_data, app)
     schedule.every().day.at("17:00").do(log_deposit_summary)
+    schedule.every().day.at("13:00").do(find_stale_antepost_events)
     schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
@@ -1789,7 +1826,7 @@ def main(app):
             pass
     if observer is not None:
         observer.stop()
-        log_notification("Processor: Stopped")
+        log_notification("Processor Stopped")
         print("OBSERVER STOPPED!")  
         observer.join()
 
