@@ -2506,11 +2506,16 @@ class Settings:
             messagebox.showerror("Error", f"Failed to fetch events: {e}")
             return
 
+        if not data:
+            messagebox.showerror("Error", "Couldn't get any events from API")
+            return
+
         if os.path.exists('events.json'):
             with open('events.json', 'r') as f:
                 existing_data = json.load(f)
         else:
-            existing_data = []
+            messagebox.showerror("Error", "Events file not found.")
+            return
 
         existing_data_map = {event['eventName']: event for event in existing_data}
 
