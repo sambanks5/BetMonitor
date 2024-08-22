@@ -795,7 +795,7 @@ def process_existing_bets(directory, app):
 ####################################################################################
 def get_vip_clients(app):
     spreadsheet = gc.open('Management Tool')
-    worksheet = spreadsheet.get_worksheet(4)
+    worksheet = spreadsheet.get_worksheet(33)
     data = worksheet.get_all_values()
 
     vip_clients = [row[0] for row in data if row[0]]

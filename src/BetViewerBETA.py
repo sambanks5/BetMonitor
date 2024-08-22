@@ -2157,13 +2157,14 @@ class Notebook:
                 'Two Weeks': timedelta(weeks=2),
                 'Four Weeks': timedelta(weeks=4),
                 'Six Weeks': timedelta(weeks=6),
-                '6 Months': relativedelta(months=6),
+                'Six Months': relativedelta(months=6),
                 'One Year': relativedelta(years=1),
                 'Two Years': relativedelta(years=2),
                 'Three Years': relativedelta(years=3),
                 'Four Years': relativedelta(years=4),
                 'Five Years': relativedelta(years=5),
             }
+
             length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
 
             reopen_date = current_date + length_in_time
@@ -2394,27 +2395,27 @@ class Notebook:
             messagebox.showerror("Error", f"Spreadsheet 'Management Tool' not found. Please notify Sam, or enter the exclusion details manually.")
             return
 
-
+        print(restriction, username, length)
         if restriction == 'Account Deactivation':
-            worksheet = spreadsheet.get_worksheet(31)
+            worksheet = spreadsheet.get_worksheet(18)
             next_row = len(worksheet.col_values(1)) + 1
             worksheet.update_cell(next_row, 2, username.upper())
             worksheet.update_cell(next_row, 1, current_date)
-
-        elif restriction == 'Further Options':
-            worksheet = spreadsheet.get_worksheet(34)
-            next_row = len(worksheet.col_values(1)) + 1
-            worksheet.update_cell(next_row, 2, username.upper())
-            worksheet.update_cell(next_row, 1, current_date)
-            worksheet.update_cell(next_row, 3, length)
 
         elif restriction == 'Take-A-Break':
-            worksheet = spreadsheet.get_worksheet(33)
+            worksheet = spreadsheet.get_worksheet(19)
             next_row = len(worksheet.col_values(1)) + 1
             worksheet.update_cell(next_row, 2, username.upper())
             worksheet.update_cell(next_row, 1, current_date)
             worksheet.update_cell(next_row, 3, length.upper())
-        
+
+        elif restriction == 'Self Exclusion':
+            worksheet = spreadsheet.get_worksheet(20)
+            next_row = len(worksheet.col_values(1)) + 1
+            worksheet.update_cell(next_row, 2, username.upper())
+            worksheet.update_cell(next_row, 1, current_date)
+            worksheet.update_cell(next_row, 3, length)      
+
         else:
             print("Error: Invalid restriction")
 
@@ -2504,18 +2505,18 @@ class Settings:
             data = response.json()
         except requests.RequestException as e:
             messagebox.showerror("Error", f"Failed to fetch events: {e}")
-            return
+            return None
 
         if not data:
             messagebox.showerror("Error", "Couldn't get any events from API")
-            return
+            return None
 
         if os.path.exists('events.json'):
             with open('events.json', 'r') as f:
                 existing_data = json.load(f)
         else:
             messagebox.showerror("Error", "Events file not found.")
-            return
+            return None
 
         existing_data_map = {event['eventName']: event for event in existing_data}
 
@@ -2531,106 +2532,85 @@ class Settings:
         with open('events.json', 'w') as f:
             json.dump(data, f, indent=4)
 
-    def load_events(self):
-        with open('events.json', 'r') as f:
-            data = json.load(f)
         return data
 
     def show_live_events(self):
-        self.fetch_and_save_events()
-        data = self.load_events()
+        data = self.fetch_and_save_events()
 
-        # Separate antepost and non-antepost events
-        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
-        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+        if data:
+            sorted_data = self.sort_events(data)
 
-        # Concatenate antepost events first, followed by non-antepost events
-        sorted_data = antepost_events + non_antepost_events
+            live_events_window = tk.Toplevel(self.root)
+            live_events_window.geometry("650x700")
+            live_events_window.title("Live Events")
+            live_events_window.iconbitmap('src/splash.ico')
+            screen_width = live_events_window.winfo_screenwidth()
+            live_events_window.geometry(f"+{screen_width - 800}+50")
+            live_events_window.resizable(False, False)
+            live_events_frame = ttk.Frame(live_events_window)
+            live_events_frame.pack(fill=tk.BOTH, expand=True)
+            live_events_title = ttk.Label(live_events_frame, text="Live Events", font=("Helvetica", 12, "bold"))
+            live_events_title.pack(pady=5)
+            total_events_label = ttk.Label(live_events_frame, text=f"Total Events: {len(data)}")
+            total_events_label.pack(pady=5)
+            tree_frame = ttk.Frame(live_events_frame)
+            tree_frame.pack(fill=tk.BOTH, expand=True)
+            tree_scroll = ttk.Scrollbar(tree_frame)
+            tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+            tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set, selectmode="extended")
+            tree.pack(fill=tk.BOTH, expand=True)
+            tree_scroll.config(command=tree.yview)
 
-        live_events_window = tk.Toplevel(self.root)
-        live_events_window.geometry("650x700")
-        live_events_window.title("Live Events")
-        live_events_window.iconbitmap('src/splash.ico')
-        screen_width = live_events_window.winfo_screenwidth()
-        live_events_window.geometry(f"+{screen_width - 800}+50")
-        live_events_window.resizable(False, False)
-        live_events_frame = ttk.Frame(live_events_window)
-        live_events_frame.pack(fill=tk.BOTH, expand=True)
-        live_events_title = ttk.Label(live_events_frame, text="Live Events", font=("Helvetica", 12, "bold"))
-        live_events_title.pack(pady=5)
-        total_events_label = ttk.Label(live_events_frame, text=f"Total Events: {len(data)}")
-        total_events_label.pack(pady=5)
-        tree_frame = ttk.Frame(live_events_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
-        tree_scroll = ttk.Scrollbar(tree_frame)
-        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set, selectmode="extended")
-        tree.pack(fill=tk.BOTH, expand=True)
-        tree_scroll.config(command=tree.yview)
+            tree["columns"] = ("eventFile", "numChildren", "eventDate", "lastUpdate", "user")
+            tree.column("#0", width=200, minwidth=200)
+            tree.column("eventFile", width=50, minwidth=50)
+            tree.column("numChildren", width=50, minwidth=50)
+            tree.column("eventDate", width=50, minwidth=50)
+            tree.column("lastUpdate", width=120, minwidth=120)
+            tree.column("user", width=10, minwidth=10)
+            tree.heading("#0", text="Event Name", anchor=tk.W)
+            tree.heading("eventFile", text="Event File", anchor=tk.W)
+            tree.heading("numChildren", text="Markets", anchor=tk.W)
+            tree.heading("eventDate", text="Event Date", anchor=tk.W)
+            tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
+            tree.heading("user", text="User", anchor=tk.W)
 
-        tree["columns"] = ("eventFile", "numChildren", "eventDate", "lastUpdate", "user")
-        tree.column("#0", width=200, minwidth=200)
-        tree.column("eventFile", width=50, minwidth=50)
-        tree.column("numChildren", width=50, minwidth=50)
-        tree.column("eventDate", width=50, minwidth=50)
-        tree.column("lastUpdate", width=120, minwidth=120)
-        tree.column("user", width=10, minwidth=10)
-        tree.heading("#0", text="Event Name", anchor=tk.W)
-        tree.heading("eventFile", text="Event File", anchor=tk.W)
-        tree.heading("numChildren", text="Markets", anchor=tk.W)
-        tree.heading("eventDate", text="Event Date", anchor=tk.W)
-        tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
-        tree.heading("user", text="User", anchor=tk.W)
+            self.populate_tree(tree, sorted_data)
 
-        for event in sorted_data:
-            event_name = event["eventName"]
-            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
-            num_children = len(event["meetings"])
-            last_update = event.get("lastUpdate", "-")
-            user = event.get("user", "-")
-            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
-            for meeting in event["meetings"]:
-                meeting_name = meeting["meetinName"]
-                event_date = meeting["eventDate"]
-                tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
+            def on_button_click():
+                global user
+                selected_items = tree.selection()
+                for item_id in selected_items:
+                    item = tree.item(item_id)
+                    event_name = item['text']
+                    for event in data:
+                        if event['eventName'] == event_name:
+                            event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                            event['user'] = user
+                            log_notification(f"{user} updated {event_name}")
+                            self.log_update(event_name, event['lastUpdate'], user)
+                            break
 
-        def on_button_click():
-            global user
-            selected_items = tree.selection()
-            for item_id in selected_items:
-                item = tree.item(item_id)
-                event_name = item['text']
-                for event in data:
-                    if event['eventName'] == event_name:
-                        event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-                        event['user'] = user
-                        log_notification(f"{user} updated {event_name}")
-                        self.log_update(event_name, event['lastUpdate'], user)   
-                        break
+                with open('events.json', 'w') as f:
+                    json.dump(data, f, indent=4)
 
-            with open('events.json', 'w') as f:
-                json.dump(data, f, indent=4)
+                self.populate_tree(tree, data)
 
-            self.populate_tree(tree, data)
-
-        action_button = ttk.Button(live_events_frame, text="Update Event", command=on_button_click)
-        action_button.pack(pady=10)
-        update_events_label = ttk.Label(live_events_frame, text="Select an event (or multiple) and click 'Update Event' to log latest refresh.", wraplength=600)
-        update_events_label.pack(pady=5)
-        not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
-        not_included_events_label.pack(pady=2)
+            action_button = ttk.Button(live_events_frame, text="Update Event", command=on_button_click)
+            action_button.pack(pady=10)
+            update_events_label = ttk.Label(live_events_frame, text="Select an event (or multiple) and click 'Update Event' to log latest refresh.", wraplength=600)
+            update_events_label.pack(pady=5)
+            not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
+            not_included_events_label.pack(pady=2)
+        else:
+            messagebox.showerror("Error", "Failed to fetch events. Please tell Sam.")
 
     def populate_tree(self, tree, data):
         # Clear existing tree items
         for item in tree.get_children():
             tree.delete(item)
 
-        # Separate antepost and non-antepost events
-        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
-        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
-
-        # Concatenate antepost events first, followed by non-antepost events
-        sorted_data = antepost_events + non_antepost_events
+        sorted_data = self.sort_events(data)
 
         for event in sorted_data:
             event_name = event["eventName"]
@@ -2643,6 +2623,11 @@ class Settings:
                 meeting_name = meeting["meetinName"]
                 event_date = meeting["eventDate"]
                 tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
+
+    def sort_events(self, data):
+        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+        return antepost_events + non_antepost_events
 
     def log_update(self, course, full_time, user):
         # Extract just the time in HH:MM format
