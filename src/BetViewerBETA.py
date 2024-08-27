@@ -13,6 +13,7 @@ import threading
 import pyperclip
 import fasteners
 import json
+import sqlite3
 import requests
 import random
 import gspread
@@ -54,43 +55,48 @@ current_database = None
 last_cache_time = None
 cached_data = None
 
-def load_database_data(json_file_path):
-    try:
-        with open(json_file_path, 'r') as json_file:
-            data = json.load(json_file)
-        data.reverse()
-        return data
-    except FileNotFoundError:
-        print(f"No bet data available for {json_file_path}.")
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from file: {json_file_path}.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    return []
+# def load_database_data(json_file_path):
+#     try:
+#         with open(json_file_path, 'r') as json_file:
+#             data = json.load(json_file)
+#         data.reverse()
+#         return data
+#     except FileNotFoundError:
+#         print(f"No bet data available for {json_file_path}.")
+#     except json.JSONDecodeError:
+#         print(f"Error: Could not decode JSON from file: {json_file_path}.")
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
+#     return []
 
-def get_database_cached():
-    global current_database, last_cache_time, cached_data
+# def get_database_cached():
+#     global current_database, last_cache_time, cached_data
 
-    if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=15):
-        last_cache_time = datetime.now()
-        date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
-        if not date_str.endswith('-wager_database.json'):
-            date_str += '-wager_database.json'
-        json_file_path = f"database/{date_str}"
+#     if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=15):
+#         last_cache_time = datetime.now()
+#         date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
+#         if not date_str.endswith('-wager_database.json'):
+#             date_str += '-wager_database.json'
+#         json_file_path = f"database/{date_str}"
 
-        cached_data = load_database_data(json_file_path)
+#         cached_data = load_database_data(json_file_path)
 
-        if not cached_data:
-            print("Database returned nothing. Retrying...")
-            time.sleep(2)
-            cached_data = load_database_data(json_file_path)
-    else:
-        pass
+#         if not cached_data:
+#             print("Database returned nothing. Retrying...")
+#             time.sleep(2)
+#             cached_data = load_database_data(json_file_path)
+#     else:
+#         pass
 
-    return cached_data
+#     return cached_data
+
+# def get_database():
+#     return get_database_cached()
 
 def get_database():
-    return get_database_cached()
+    conn = sqlite3.connect('wager_database.sqlite')
+    cursor = conn.cursor()
+    return conn, cursor
 
 def user_login():
     global user, full_name
@@ -317,6 +323,32 @@ class BetFeed:
         self.activity_text.config(state='disabled')
         self.activity_text.pack(fill='both', expand=True)
 
+    def count_sport(self, data):
+        sport_counts = {0: 0, 1: 0, 2: 0}
+
+        for bet in data:
+            if "Sport" in bet:
+                for sport in bet["Sport"]:
+                    if sport in sport_counts:
+                        sport_counts[sport] += 1
+        return sport_counts
+
+    def insert_feed_text(self, text, tag=None):
+        if tag:
+            self.feed_text.insert('end', text, tag)
+        else:
+            self.feed_text.insert('end', text)
+
+    def initialize_text_tags(self):
+        self.feed_text.tag_configure("risk", foreground="#8f0000")
+        self.feed_text.tag_configure("newreg", foreground="purple")
+        self.feed_text.tag_configure("vip", foreground="#009685")
+        self.feed_text.tag_configure("sms", foreground="orange")
+        self.feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
+        self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
+        self.feed_text.tag_configure('center', justify='center')
+
+
     def start_feed_update(self):
         scroll_pos = self.feed_text.yview()[0]
         
@@ -335,9 +367,9 @@ class BetFeed:
         self.w_clients = set()
         self.norisk_clients = set()
 
-        self.data = get_database()
+        conn, cursor = get_database()
 
-        if self.data is None:
+        if conn is None:
             self.feed_text.config(state="normal")
             self.feed_text.delete('1.0', tk.END)
             self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
@@ -350,7 +382,6 @@ class BetFeed:
         sport = self.current_filters['sport']
         selection_search_term = self.current_filters['selection']
 
-
         filters_active = any([
             username,
             unit_stake,
@@ -359,10 +390,27 @@ class BetFeed:
             selection_search_term
         ])
 
-        if filters_active:
-            filtered_bets = self.filter_bets(self.data, username, unit_stake, risk_category, sport, selection_search_term)
-        else:
-            filtered_bets = self.data
+        query = "SELECT * FROM database WHERE 1=1"
+        params = []
+
+        if username:
+            query += " AND username = ?"
+            params.append(username)
+        if unit_stake:
+            query += " AND unit_stake = ?"
+            params.append(unit_stake)
+        if risk_category:
+            query += " AND risk_category = ?"
+            params.append(risk_category)
+        if sport:
+            query += " AND sport = ?"
+            params.append(sport)
+        if selection_search_term:
+            query += " AND selection LIKE ?"
+            params.append(f"%{selection_search_term}%")
+
+        cursor.execute(query, params)
+        filtered_bets = cursor.fetchall()
 
         self.initialize_text_tags()
 
@@ -379,10 +427,11 @@ class BetFeed:
                 self.display_bet(bet)
                 self.feed_text.insert('end', separator, "notices")
             
-            self.sport_count = self.count_sport(self.data)
+            self.sport_count = self.count_sport(filtered_bets)
             self.update_activity_frame(reporting_data, self.sport_count)
         
         self.feed_text.config(state="disabled")
+        conn.close()
 
     def apply_filters(self):
         self.current_filters['username'] = self.username_filter_entry.get()
@@ -493,33 +542,6 @@ class BetFeed:
                 filtered_bets.append(bet)
         
         return filtered_bets
-
-
-    def count_sport(self, data):
-        sport_counts = {0: 0, 1: 0, 2: 0}
-
-        for bet in data:
-            if "Sport" in bet:
-                for sport in bet["Sport"]:
-                    if sport in sport_counts:
-                        sport_counts[sport] += 1
-        return sport_counts
-
-    def insert_feed_text(self, text, tag=None):
-        if tag:
-            self.feed_text.insert('end', text, tag)
-        else:
-            self.feed_text.insert('end', text)
-
-    def initialize_text_tags(self):
-        self.feed_text.tag_configure("risk", foreground="#8f0000")
-        self.feed_text.tag_configure("newreg", foreground="purple")
-        self.feed_text.tag_configure("vip", foreground="#009685")
-        self.feed_text.tag_configure("sms", foreground="orange")
-        self.feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
-        self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
-        self.feed_text.tag_configure('center', justify='center')
-
 
     def display_bet(self, bet):
         wager_type = bet.get('type', '').lower()
@@ -825,7 +847,6 @@ class RaceUpdaton:
                 for meeting in event['meetings']:
                     courses.add(meeting['meetinName'])
 
-        courses.add("Football")
         courses.add("SIS Greyhounds")
         courses.add("TRP Greyhounds")
 
@@ -870,7 +891,7 @@ class RaceUpdaton:
 
         time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
 
-        if course in ["SIS Greyhounds", "TRP Greyhounds", "Football"]:
+        if course in ["SIS Greyhounds", "TRP Greyhounds"]:
             return time_diff >= 60
         else:
             return time_diff >= 25
@@ -965,19 +986,25 @@ class RaceUpdaton:
     def remove_course(self):
         course = simpledialog.askstring("Remove Course", "Enter the course name:")
         
-        
-        with open('update_times.json', 'r') as f:
-            data = json.load(f)
-        if course in data['courses']:
-            del data['courses'][course]
-
-        with open('update_times.json', 'w') as f:
-            json.dump(data, f)
-
         if course:
-            log_notification(f"'{course}' removed by {user}")
+            course = course.lower()  # Convert input to lowercase
 
-        self.display_courses()
+            with open('update_times.json', 'r') as f:
+                data = json.load(f)
+            
+            # Convert dictionary keys to lowercase for comparison
+            courses_lower = {k.lower(): k for k in data['courses']}
+            
+            if course in courses_lower:
+                original_course = courses_lower[course]
+                del data['courses'][original_course]
+
+                with open('update_times.json', 'w') as f:
+                    json.dump(data, f)
+
+                log_notification(f"'{original_course}' removed by {user}")
+
+            self.display_courses()
 
     def add_course(self):
         course_name = simpledialog.askstring("Add Course", "Enter the course name:")
@@ -2795,11 +2822,11 @@ class BetViewerApp:
         self.initialize_ui()
         user_login()
         self.bet_feed = BetFeed(root)
-        self.bet_runs = BetRuns(root)
-        self.race_updation = RaceUpdaton(root)
-        self.next3_panel = Next3Panel(root)
-        self.notebook = Notebook(root)
-        self.settings = Settings(root)
+        #self.bet_runs = BetRuns(root)
+        #self.race_updation = RaceUpdaton(root)
+        #self.next3_panel = Next3Panel(root)
+        #self.notebook = Notebook(root)
+        #self.settings = Settings(root)
 
     def initialize_gspread(self):
         with open('src/creds.json') as f:
