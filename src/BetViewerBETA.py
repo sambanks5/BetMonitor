@@ -27,7 +27,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar
+from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar, font
 from functools import lru_cache
 from googleapiclient.discovery import build
 from pytz import timezone
@@ -50,48 +50,6 @@ USER_NAMES = {
     'VO': 'Victor',
     'MF': 'Mark'
 }
-
-current_database = None
-last_cache_time = None
-cached_data = None
-
-# def load_database_data(json_file_path):
-#     try:
-#         with open(json_file_path, 'r') as json_file:
-#             data = json.load(json_file)
-#         data.reverse()
-#         return data
-#     except FileNotFoundError:
-#         print(f"No bet data available for {json_file_path}.")
-#     except json.JSONDecodeError:
-#         print(f"Error: Could not decode JSON from file: {json_file_path}.")
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
-#     return []
-
-# def get_database_cached():
-#     global current_database, last_cache_time, cached_data
-
-#     if last_cache_time is None or datetime.now() - last_cache_time > timedelta(seconds=15):
-#         last_cache_time = datetime.now()
-#         date_str = current_database if current_database else datetime.now().strftime('%Y-%m-%d')
-#         if not date_str.endswith('-wager_database.json'):
-#             date_str += '-wager_database.json'
-#         json_file_path = f"database/{date_str}"
-
-#         cached_data = load_database_data(json_file_path)
-
-#         if not cached_data:
-#             print("Database returned nothing. Retrying...")
-#             time.sleep(2)
-#             cached_data = load_database_data(json_file_path)
-#     else:
-#         pass
-
-#     return cached_data
-
-# def get_database():
-#     return get_database_cached()
 
 def get_database():
     conn = sqlite3.connect('wager_database.sqlite')
@@ -177,8 +135,6 @@ def user_notification():
     button = ttk.Button(window, text="Submit", command=submit)
     button.pack(padx=5, pady=10)
 
-
-
 class BetDataFetcher:
     _instance = None
 
@@ -244,18 +200,18 @@ def access_data():
 class BetFeed:
     def __init__(self, root):
         self.root = root
-        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
+        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None, 'type': None}
         self.initialize_ui()
         self.start_feed_update()
 
     def initialize_ui(self):
         self.feed_frame = ttk.LabelFrame(self.root, style='Card', text="Bet Feed")
-        self.feed_frame.place(x=5, y=5, width=550, height=640)
+        self.feed_frame.place(x=5, y=5, width=520, height=640)
         self.feed_frame.grid_columnconfigure(0, weight=1)
         self.feed_frame.grid_columnconfigure(1, weight=0)
         self.feed_frame.grid_rowconfigure(0, weight=1)
         
-        self.feed_text = tk.Text(self.feed_frame, font=("Helvetica", 11, "bold"), wrap='word', padx=10, pady=10, bd=0, fg="#000000")
+        self.feed_text = tk.Text(self.feed_frame, font=("Helvetica", 10, "bold"), wrap='word', padx=10, pady=10, bd=0, fg="#000000")
         self.feed_text.config(state='disabled')
         self.feed_text.grid(row=0, column=0, sticky='nsew')
         
@@ -264,51 +220,57 @@ class BetFeed:
         self.feed_text.configure(yscrollcommand=self.feed_scroll.set)
 
         self.filter_frame = ttk.Frame(self.feed_frame)
-        self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(5, 0))
+        self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(3, 0))
 
-        self.username_filter_label = ttk.Label(self.filter_frame, text='Client:')
-        self.username_filter_label.grid(row=0, column=0, sticky='e', padx=5)
         self.username_filter_entry = ttk.Entry(self.filter_frame, width=8)
-        self.username_filter_entry.grid(row=0, column=1, pady=(0, 3), sticky='ew')
+        self.username_filter_entry.grid(row=0, column=0, pady=(0, 2), padx=4, sticky='ew')
+        self.set_placeholder(self.username_filter_entry, 'Client')
 
-        self.unit_stake_filter_label = ttk.Label(self.filter_frame, text='Unit Stake:')
-        self.unit_stake_filter_label.grid(row=0, column=2, sticky='e', padx=5)
         self.unit_stake_filter_entry = ttk.Entry(self.filter_frame, width=3)
-        self.unit_stake_filter_entry.grid(row=0, column=3, pady=(0, 3), sticky='ew')
+        self.unit_stake_filter_entry.grid(row=0, column=1, pady=(0, 2), padx=4, sticky='ew')
+        self.set_placeholder(self.unit_stake_filter_entry, '£')
 
-        self.risk_category_filter = ttk.Label(self.filter_frame, text='Risk Category:')
-        self.risk_category_filter.grid(row=0, column=4, sticky='e', padx=5)
         self.risk_category_combobox_values = ["", "Any", "M", "W", "S", "O", "X"]
         self.risk_category_filter_entry = ttk.Combobox(self.filter_frame, values=self.risk_category_combobox_values, width=3)
-        self.risk_category_filter_entry.grid(row=0, column=5, pady=(0, 3), sticky='ew')
+        self.risk_category_filter_entry.grid(row=0, column=2, pady=(0, 2), padx=4, sticky='ew')
+        self.set_placeholder(self.risk_category_filter_entry, 'R Cat.')
 
-        
-        self.selection_filter_label = ttk.Label(self.filter_frame, text='Selection:')
-        self.selection_filter_label.grid(row=1, column=0, sticky='e', padx=5)
-        self.selection_filter_entry = ttk.Entry(self.filter_frame, width=8)
-        self.selection_filter_entry.grid(row=1, column=1, pady=(0, 3), sticky='ew', columnspan=3)
+        self.type_combobox_values = ["", "Bet", "Knockback", "SMS"]
+        self.type_combobox_entry = ttk.Combobox(self.filter_frame, values=self.type_combobox_values, width=5)
+        self.type_combobox_entry.grid(row=0, column=3, pady=(0, 2), padx=4, sticky='ew')
+        self.set_placeholder(self.type_combobox_entry, 'Type')
 
-        self.sport_filter = ttk.Label(self.filter_frame, text='Sport:')
-        self.sport_filter.grid(row=1, column=4, sticky='e', padx=5)
+        self.selection_filter_entry = ttk.Entry(self.filter_frame, width=6)
+        self.selection_filter_entry.grid(row=1, column=0, pady=(0, 2), padx=4, sticky='ew', columnspan=3)
+        self.set_placeholder(self.selection_filter_entry, 'Selection')
+
         self.sport_combobox_values = ["", "Horses", "Dogs", "Other"]
         self.sport_combobox_entry = ttk.Combobox(self.filter_frame, values=self.sport_combobox_values, width=5)
-        self.sport_combobox_entry.grid(row=1, column=5, pady=(0, 3), sticky='ew')
+        self.sport_combobox_entry.grid(row=1, column=3, pady=(0, 2), padx=4, sticky='ew')
+        self.set_placeholder(self.sport_combobox_entry, 'Sport')
 
         self.tick_button = ttk.Button(self.filter_frame, text='✔', command=self.apply_filters, width=2)
-        self.tick_button.grid(row=0, column=8, padx=(10, 0), sticky='ew', pady=(0, 3)) 
-
-        self.reset_button = ttk.Button(self.filter_frame, text='X', command=self.reset_filters, width=2)
-        self.reset_button.grid(row=1, column=8, padx=(10, 0), sticky='ew', pady=(0, 3)) 
+        self.tick_button.grid(row=0, column=5, sticky='ew', padx=2, pady=(0, 3))
+        
+        self.reset_button = ttk.Button(self.filter_frame, text='✖', command=self.reset_filters, width=2)
+        self.reset_button.grid(row=1, column=5, sticky='ew', padx=2, pady=(0, 3)) 
 
         self.separator = ttk.Separator(self.filter_frame, orient='vertical')
-        self.separator.grid(row=0, column=7, rowspan=2, sticky='ns')
+        self.separator.grid(row=0, column=6, rowspan=2, sticky='ns', pady=1, padx=(12, 5))
+
+        style = ttk.Style()
+        large_font = font.Font(size=15)
+        style.configure('Large.TButton', font=large_font)
+
+        self.refresh_button = ttk.Button(self.filter_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
+        self.refresh_button.grid(row=0, column=7, padx=2, pady=2, rowspan=2)
 
         self.filter_frame.grid_rowconfigure(0, weight=1)
         self.filter_frame.grid_rowconfigure(1, weight=1)
         self.filter_frame.grid_columnconfigure(0, weight=0)
         self.filter_frame.grid_columnconfigure(1, weight=0)
         self.filter_frame.grid_columnconfigure(2, weight=1)
-        self.filter_frame.grid_columnconfigure(3, weight=1)
+        self.filter_frame.grid_columnconfigure(3, weight=2)
         self.filter_frame.grid_columnconfigure(4, weight=1)
         self.filter_frame.grid_columnconfigure(5, weight=1)
         self.filter_frame.grid_columnconfigure(6, weight=1)
@@ -317,12 +279,28 @@ class BetFeed:
         self.filter_frame.grid_columnconfigure(9, weight=1)
 
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
-        self.activity_frame.place(x=560, y=5, width=335, height=150)
+        self.activity_frame.place(x=530, y=5, width=365, height=150)
         
         self.activity_text = tk.Text(self.activity_frame, font=("Helvetica", 10, "bold"), wrap='word', padx=10, pady=10, bd=0, fg="#000000")
         self.activity_text.config(state='disabled')
         self.activity_text.pack(fill='both', expand=True)
 
+    def set_placeholder(self, widget, placeholder):
+        widget.insert(0, placeholder)
+        widget.config(foreground='grey')
+        widget.bind("<FocusIn>", lambda event: self.clear_placeholder(event, placeholder))
+        widget.bind("<FocusOut>", lambda event: self.add_placeholder(event, placeholder))
+
+    def clear_placeholder(self, event, placeholder):
+        if event.widget.get() == placeholder:
+            event.widget.delete(0, tk.END)
+            event.widget.config(foreground='black')
+
+    def add_placeholder(self, event, placeholder):
+        if not event.widget.get():
+            event.widget.insert(0, placeholder)
+            event.widget.config(foreground='grey')
+            
     def count_sport(self, data):
         sport_counts = {0: 0, 1: 0, 2: 0}
 
@@ -348,7 +326,6 @@ class BetFeed:
         self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
         self.feed_text.tag_configure('center', justify='center')
 
-
     def start_feed_update(self):
         scroll_pos = self.feed_text.yview()[0]
         
@@ -360,7 +337,7 @@ class BetFeed:
         self.feed_frame.after(12000, self.start_feed_update)
 
     def bet_feed(self, date_str=None):
-        self.total_bets = 0
+        print("Refreshing feed...")
         self.total_knockbacks = 0
         self.total_sms_wagers = 0
         self.m_clients = set()
@@ -381,33 +358,42 @@ class BetFeed:
         risk_category = self.current_filters['risk_category']
         sport = self.current_filters['sport']
         selection_search_term = self.current_filters['selection']
+        type_filter = self.current_filters['type']
 
-        filters_active = any([
-            username,
-            unit_stake,
-            risk_category,
-            sport,
-            selection_search_term
-        ])
+        # Mapping for sports filter
+        sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
+        sport_value = sport_mapping.get(sport)
 
-        query = "SELECT * FROM database WHERE 1=1"
-        params = []
+        type_mapping = {'Bet': 'BET', 'Knockback': 'WAGER KNOCKBACK', 'SMS': 'SMS WAGER'}
+        type_value = type_mapping.get(type_filter)
+
+        # Get today's date
+        today = datetime.today().strftime('%d/%m/%Y')
+        query = "SELECT * FROM database WHERE date = ?"
+        params = [today]
 
         if username:
-            query += " AND username = ?"
-            params.append(username)
+            query += " AND customer_ref = ?"
+            params.append(username.upper())
         if unit_stake:
             query += " AND unit_stake = ?"
             params.append(unit_stake)
         if risk_category:
             query += " AND risk_category = ?"
             params.append(risk_category)
-        if sport:
-            query += " AND sport = ?"
-            params.append(sport)
+        if sport_value is not None:
+            query += " AND EXISTS (SELECT 1 FROM json_each(database.sports) WHERE json_each.value = ?)"
+            params.append(sport_value)
+            print(sport_value)
         if selection_search_term:
-            query += " AND selection LIKE ?"
+            query += " AND selections LIKE ?"
             params.append(f"%{selection_search_term}%")
+        if type_value:
+            query += " AND type = ?"
+            params.append(type_value)
+
+        # Order by timestamp in descending order
+        query += " ORDER BY time DESC"
 
         cursor.execute(query, params)
         filtered_bets = cursor.fetchall()
@@ -420,128 +406,123 @@ class BetFeed:
         if not filtered_bets:
             self.feed_text.insert('end', "No bets found with the current filters.", 'center')
         else:
-            separator = '\n-------------------------------------------------------------------------------------------------------\n'
+            separator = '\n-------------------------------------------------------------------------------------------------\n'
             self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
 
+            column_names = [desc[0] for desc in cursor.description]
+
             for bet in filtered_bets:
-                self.display_bet(bet)
+                bet_dict = dict(zip(column_names, bet))
+                if bet_dict['bet_type'] != 'SMS wager' and bet_dict['selections'] is not None:
+                    bet_dict['selections'] = json.loads(bet_dict['selections'])  # Convert JSON string to dictionary
+                self.display_bet(bet_dict)
                 self.feed_text.insert('end', separator, "notices")
             
             self.sport_count = self.count_sport(filtered_bets)
-            self.update_activity_frame(reporting_data, self.sport_count)
+            self.update_activity_frame(reporting_data, self.sport_count, conn, cursor)
         
         self.feed_text.config(state="disabled")
         conn.close()
 
-    def apply_filters(self):
-        self.current_filters['username'] = self.username_filter_entry.get()
-        self.current_filters['unit_stake'] = self.unit_stake_filter_entry.get()
-        self.current_filters['risk_category'] = self.risk_category_filter_entry.get()
-        self.current_filters['sport'] = self.sport_combobox_entry.get()
-        self.current_filters['selection'] = self.selection_filter_entry.get()
+    def update_activity_frame(self, reporting_data, sport_count, conn, cursor):
+        global current_database
+
+        # Get the current date and the previous date
+        current_date = datetime.now().date()
+        previous_date = current_date - timedelta(days=1)
+
+        # Fetch the count of bets for the current day
+        cursor.execute("SELECT COUNT(*) FROM database WHERE DATE(date) = ?", (current_date,))
+        current_bets = cursor.fetchone()[0]
+
+        # Fetch the count of bets for the previous day
+        cursor.execute("SELECT COUNT(*) FROM database WHERE DATE(date) = ?", (previous_date,))
+        previous_bets = cursor.fetchone()[0]
+
+        # Calculate the percentage change
+        if previous_bets > 0:
+            percentage_change = ((current_bets - previous_bets) / previous_bets) * 100
+        else:
+            percentage_change = 0
+
+        unique_m_clients = len(self.m_clients)
+        unique_w_clients = len(self.w_clients)
+        unique_norisk_clients = len(self.norisk_clients)
+        total_unique_clients = len(self.m_clients.union(self.w_clients, self.norisk_clients))
+        knockback_percentage = (self.total_knockbacks / current_bets * 100) if current_bets > 0 else 0
+
+        daily_turnover = reporting_data.get('daily_turnover', 'N/A')
+        daily_profit = reporting_data.get('daily_profit', 'N/A')
+        daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
+        total_deposits = reporting_data.get('total_deposits', 'N/A')
+        total_sum_deposits = reporting_data.get('total_sum', 'N/A')
+        horse_bets = sport_count.get(0, 0)
+        dog_bets = sport_count.get(1, 0)
+        other_bets = sport_count.get(2, 0)
 
         filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
 
+        avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
+
+        current_date_str = datetime.now().strftime("%A %d %B")
+
+        status_text = (
+            f"{'-- Viewing Database From ' + current_database + ' --' if current_database != None else f'{current_date_str}'}\n"
+            f"Bets: {current_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%){'**' if filters_applied else ''}\n"
+            f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
+            f"Deposits: {total_deposits} | Total: £{total_sum_deposits:,.2f} (~£{avg_deposit:,.2f})\n"
+            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}{'**' if filters_applied else ''}\n"
+            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n"
+            f"Percentage Change in Bets: {percentage_change:.2f}%\n"
+            f"{'**Feed Filters Currently Applied!' if filters_applied else ''}"
+        )
+
+        self.activity_text.config(state='normal') 
+        self.activity_text.delete('1.0', tk.END)  
+        
+        self.activity_text.tag_configure('center', justify='center')
+        self.activity_text.insert(tk.END, status_text, 'center')  
+        
+        self.activity_text.config(state='disabled')
+
+
+    def apply_filters(self):
+        self.current_filters['username'] = '' if self.username_filter_entry.get() == 'Client' else self.username_filter_entry.get()
+        self.current_filters['unit_stake'] = '' if self.unit_stake_filter_entry.get() == '£' else self.unit_stake_filter_entry.get()
+        self.current_filters['risk_category'] = '' if self.risk_category_filter_entry.get() == 'R Cat.' else self.risk_category_filter_entry.get()
+        self.current_filters['sport'] = '' if self.sport_combobox_entry.get() == 'Sport' else self.sport_combobox_entry.get()
+        self.current_filters['selection'] = '' if self.selection_filter_entry.get() == 'Selection' else self.selection_filter_entry.get()
+        self.current_filters['type'] = '' if self.type_combobox_entry.get() == 'Type' else self.type_combobox_entry.get()
+
+        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
+    
         if filters_applied:
             self.tick_button.configure(style='Accent.TButton')
         else:
             self.tick_button.configure(style='TButton')
-
+    
         self.bet_feed()
 
     def reset_filters(self):
-        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None}
-        self.username_filter_entry.delete(0, tk.END) 
-        self.unit_stake_filter_entry.delete(0, tk.END) 
-        self.risk_category_filter_entry.delete(0, tk.END) 
-        self.sport_combobox_entry.set('') 
-        self.selection_filter_entry.delete(0, tk.END) 
+        self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None, 'type': None}
         
+        self.username_filter_entry.delete(0, tk.END)
+        self.unit_stake_filter_entry.delete(0, tk.END)
+        self.risk_category_filter_entry.delete(0, tk.END)
+        self.sport_combobox_entry.set('')
+        self.selection_filter_entry.delete(0, tk.END)
+        self.type_combobox_entry.set('')
+
+        self.set_placeholder(self.username_filter_entry, 'Client')
+        self.set_placeholder(self.unit_stake_filter_entry, '£')
+        self.set_placeholder(self.risk_category_filter_entry, 'R Cat.')
+        self.set_placeholder(self.selection_filter_entry, 'Selection')
+        self.set_placeholder(self.sport_combobox_entry, 'Sport')
+        self.set_placeholder(self.type_combobox_entry, 'Type')
+
         self.tick_button.configure(style='TButton')
 
         self.bet_feed()
-
-    def filter_bets(self, bets, username, unit_stake_filter, risk_category, sport, selection_search_term=None):
-        filtered_bets = []        
-        sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
-        
-        sport_number = sport_mapping.get(sport, -1)
-
-        if unit_stake_filter:
-            try:
-                unit_stake_filter_value = float(unit_stake_filter.replace('£', ''))
-            except ValueError:
-                unit_stake_filter_value = None
-        else:
-            unit_stake_filter_value = None
-
-        specific_filters_applied = unit_stake_filter_value is not None or sport_number != -1 or (risk_category and risk_category not in ['Any', ''])
-        for bet in bets:
-            if isinstance(bet.get('details'), dict):
-                selections = bet['details'].get('selections', [])
-                selection_match = False
-                if selection_search_term:
-                    if bet.get('type') == "WAGER KNOCKBACK":
-                        for selection in selections:
-                            meeting_name = selection.get("- Meeting Name", "")
-                            selection_name = selection.get("- Selection Name", "")
-                            selection_str = f"{meeting_name}, {selection_name}"
-                            if selection_search_term.lower() in selection_str.lower():
-                                selection_match = True
-                                break
-                    else: 
-                        for selection in selections:
-                            if isinstance(selection, list) and selection_search_term.lower() in selection[0].lower():
-                                selection_match = True
-                                break
-                            elif isinstance(selection, dict):
-                                selection_str = selection.get("Selection Name", "") 
-                                if selection_search_term.lower() in selection_str.lower():
-                                    selection_match = True
-                                    break
-                else:
-                    selection_match = True 
-
-                if not selection_match:
-                    continue  
-
-                unit_stake_str = bet['details'].get('unit_stake', '£0')
-                try:
-                    unit_stake_value = float(unit_stake_str.replace('£', ''))
-                except ValueError:
-                    continue
-
-                if unit_stake_filter_value is not None and unit_stake_value < unit_stake_filter_value:
-                    continue
-
-                if username and bet.get('customer_ref') != username.upper():
-                    continue 
-
-                risk_category_value = bet.get('details', {}).get('risk_category', '-')
-
-                include_bet = False
-                if risk_category is None or risk_category == '':
-                    include_bet = True
-                elif risk_category == 'Any' and risk_category_value != '-':
-                    include_bet = True
-                elif risk_category_value == risk_category:
-                    include_bet = True
-
-                if include_bet and (sport_number == -1 or sport_number in bet.get('Sport', [])):
-                    filtered_bets.append(bet)
-            elif bet.get('type') == 'SMS WAGER':
-                if specific_filters_applied:
-                    continue
-
-                if username and bet.get('customer_ref') != username.upper():
-                    continue 
-                
-                if selection_search_term and selection_search_term.lower() not in bet.get('details', '').lower():
-                    continue  
-                
-                filtered_bets.append(bet)
-        
-        return filtered_bets
 
     def display_bet(self, bet):
         wager_type = bet.get('type', '').lower()
@@ -552,20 +533,28 @@ class BetFeed:
         elif wager_type == 'bet':
             self.display_regular_bet(bet)
 
-
     def display_wager_knockback(self, bet):
         customer_ref = bet.get('customer_ref', '')
         knockback_id = bet.get('id', '')
         knockback_id = knockback_id.rsplit('-', 1)[0]
-        knockback_details = bet.get('details', {})
+        knockback_details = bet.get('selections', {})
         time = bet.get('time', '') 
-        formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
-        formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for i, selection in enumerate(knockback_details.get('Selections', []))])
+
+        if isinstance(knockback_details, dict):
+            formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
+            formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for selection in knockback_details.get('Selections', [])])
+        elif isinstance(knockback_details, list):
+            formatted_knockback_details = ''
+            formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for selection in knockback_details])
+        else:
+            formatted_knockback_details = ''
+            formatted_selections = ''
+
         formatted_knockback_details += '\n   ' + formatted_selections
-        error_message = knockback_details.get('Error Message', '')
+        error_message = bet.get('error_message', '')
         if 'Maximum stake available' in error_message:
             error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
-        formatted_knockback_details = f"Error Message: {error_message}\n   {formatted_knockback_details}"
+        formatted_knockback_details = f"Error Message: {error_message}   {formatted_knockback_details}"
         if customer_ref in self.vip_clients:
             tag = "vip"
         elif customer_ref in self.newreg_clients:
@@ -574,25 +563,29 @@ class BetFeed:
             tag = None
         
         self.insert_feed_text(f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}", tag)
-        self.total_knockbacks += 1
 
     def display_sms_wager(self, bet):
         wager_number = bet.get('id', '')
         customer_reference = bet.get('customer_ref', '')
-        sms_wager_text = bet.get('details', '')
+        sms_wager_text = bet.get('text_request', '')
         self.insert_feed_text(f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}", "sms")
-        self.total_sms_wagers += 1
 
     def display_regular_bet(self, bet):
         bet_no = bet.get('id', '')
-        details = bet.get('details', {})
-        parsed_selections = details.get('selections', [])
+        details = bet.get('selections', [])
+        
+        # Check if details is a list of lists
+        if isinstance(details, list) and all(isinstance(item, list) for item in details):
+            parsed_selections = details
+        else:
+            parsed_selections = []
+        
         timestamp = bet.get('time', '')
         customer_reference = bet.get('customer_ref', '')
-        customer_risk_category = details.get('risk_category', '')
-        bet_details = details.get('bet_details', '')
-        unit_stake = details.get('unit_stake', '')
-        bet_type = details.get('bet_type', '')
+        customer_risk_category = bet.get('risk_category', '')
+        bet_details = bet.get('bet_details', '')
+        unit_stake = bet.get('unit_stake', '')
+        bet_type = bet.get('bet_type', '')
         
         if customer_reference in self.vip_clients:
             tag = "vip"
@@ -617,49 +610,7 @@ class BetFeed:
         if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() for sel in parsed_selections for om_sel in self.oddsmonkey_selections.items()):
             self.insert_feed_text(f"\n ^ Oddsmonkey Selection Detected ^ ", "Oddsmonkey")
         
-        self.total_bets += 1
 
-
-    def update_activity_frame(self, reporting_data, sport_count):
-        global current_database
-        unique_m_clients = len(self.m_clients)
-        unique_w_clients = len(self.w_clients)
-        unique_norisk_clients = len(self.norisk_clients)
-        total_unique_clients = len(self.m_clients.union(self.w_clients, self.norisk_clients))
-        knockback_percentage = (self.total_knockbacks / self.total_bets * 100) if self.total_bets > 0 else 0
-
-        daily_turnover = reporting_data.get('daily_turnover', 'N/A')
-        daily_profit = reporting_data.get('daily_profit', 'N/A')
-        daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
-        total_deposits = reporting_data.get('total_deposits', 'N/A')
-        total_sum_deposits = reporting_data.get('total_sum', 'N/A')
-        horse_bets = sport_count.get(0, 0)
-        dog_bets = sport_count.get(1, 0)
-        other_bets = sport_count.get(2, 0)
-
-        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
-
-        avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
-
-        current_date_str = datetime.now().strftime("%A %d %B")
-
-        status_text = (
-            f"{'-- Viewing Database From ' + current_database + ' --' if current_database != None else f'{current_date_str}'}\n"
-            f"Bets: {self.total_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%){'**' if filters_applied else ''}\n"
-            f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
-            f"Deposits: {total_deposits} | Total: £{total_sum_deposits:,.2f} (~£{avg_deposit:,.2f})\n"
-            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}{'**' if filters_applied else ''}\n"
-            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n"
-            f"{'**Feed Filters Currently Applied!' if filters_applied else ''}"
-        )
-
-        self.activity_text.config(state='normal') 
-        self.activity_text.delete('1.0', tk.END)  
-        
-        self.activity_text.tag_configure('center', justify='center')
-        self.activity_text.insert(tk.END, status_text, 'center')  
-        
-        self.activity_text.config(state='disabled')
 
 class BetRuns:
     def __init__(self, root):
@@ -3095,7 +3046,6 @@ class BetViewerApp:
 
     def about(self):
         messagebox.showinfo("About", "Geoff Banks Bet Monitoring v10.2")
-
 
 if __name__ == "__main__":
     root = tk.Tk()

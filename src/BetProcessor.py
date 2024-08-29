@@ -39,7 +39,6 @@ from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 
 
-
 ####################################################################################
 ## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
 ####################################################################################
@@ -93,13 +92,13 @@ def load_database():
     return conn
 
 def parse_file(file_path, app):
+    start_time = time.time()
     with open(file_path, 'r') as file:
         bet_text = file.read()
         bet_text_lower = bet_text.lower()
         is_sms = 'sms' in bet_text_lower
         is_bet = 'website' in bet_text_lower
         is_wageralert = 'knockback' in bet_text_lower
-
         if is_wageralert:
             details = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{details['Knockback ID']}-{details['Time']}"
@@ -114,6 +113,7 @@ def parse_file(file_path, app):
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_sms:
@@ -130,6 +130,7 @@ def parse_file(file_path, app):
             }
             print('SMS Processed ' + wager_number)
             app.log_message(f'SMS Processed {wager_number}, {customer_reference}')
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_bet:
@@ -152,9 +153,11 @@ def parse_file(file_path, app):
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
         
     print('File not processed ' + file_path + ' IF YOU SEE THIS TELL SAM - CODE 4')
+    print(f"parse_file took {time.time() - start_time} seconds")
     return {}
 
 def process_file(file_path):
@@ -180,18 +183,18 @@ def add_bet(conn, bet, app):
             selections = json.dumps(details.get('Selections', []))
             requested_stake = float(details['Total Stake'].replace('£', '').replace(',', ''))
             cursor.execute('''
-                INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date))
+                INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date, json.dumps(bet['Sport'])))
         elif bet['type'] == 'BET':
             details = bet['details']
             selections = json.dumps(details['selections'])
             unit_stake = float(details['unit_stake'].replace('£', '').replace(',', ''))
             total_stake = float(details['payment'].replace('£', '').replace(',', ''))
             cursor.execute('''
-                INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date))
+                INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date, json.dumps(bet['Sport'])))
         conn.commit()
     except sqlite3.IntegrityError:
         app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
@@ -199,59 +202,45 @@ def add_bet(conn, bet, app):
         print(f"SQLite error: {e}")
         app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
 
-
-####################################################################################
-## IDENTIFY BET TYPE AND PARSE TEXT ACCORDINGLY
-####################################################################################
 def identify_sport(selection):
-    print(f"Type of selection: {type(selection)}, Content: {selection}")
-
-    # Adjusted to handle both lists/tuples of selections and single selections within a tuple
     if isinstance(selection, (list, tuple)):
-        # Check if the first element is a list or tuple, indicating a list of selections
         if all(isinstance(sel, (list, tuple)) for sel in selection):
             for sel in selection:
                 if len(sel) > 0:
-                    selection_str = sel[0]  # Extract the selection name from the first element
-                    print(f"Processing selection: {selection_str}")
+                    selection_str = sel[0]
                     if 'trap' in selection_str.lower():
-                        return 1  # Greyhound
+                        return 1
                     elif re.search(r'\d{2}:\d{2}', selection_str):
-                        return 0  # Horse
+                        return 0
                     else:
-                        return 2  # Other
+                        return 2
                 else:
                     print("Inner element is empty or not a list/tuple")
-                    return 3  # Default for unrecognized format within list/tuple
-        # New case: Handle single selection within a tuple
+                    return 3
         else:
-            selection_str = selection[0]  # Assuming the first element is the selection name
-            print(f"Processing single selection: {selection_str}")
+            selection_str = selection[0]
             if 'trap' in selection_str.lower():
-                return 1  # Greyhound
+                return 1
             elif re.search(r'\d{2}:\d{2}', selection_str):
-                return 0  # Horse
+                return 0
             else:
-                return 2  # Other
+                return 2
             
     elif isinstance(selection, dict):
         if selection is None or '- Meeting Name' not in selection or selection['- Meeting Name'] is None:
-            print("Dictionary format not as expected")
-            return 3  # Default identifier for null values
+            return 3
         if 'trap' in selection['- Selection Name'].lower():
-            return 1  # Greyhound
+            return 1
         elif re.search(r'\d{2}:\d{2}', selection['- Meeting Name']):
-            return 0  # Horse
+            return 0
         else:
-            return 2  # Other
+            return 2
     else:
-        print("Selection format unrecognized")
-        return 3  # Default for unrecognized format
+        return 3
 
 def add_sport_to_selections(selections):
     sports = set()
     for selection in selections:
-        # Directly pass the selection to identify_sport without checking its type here
         sport = identify_sport(selection)
         sports.add(sport)
     return list(sports)
@@ -486,8 +475,8 @@ def activity_report_notification():
     cursor.execute("SELECT * FROM database WHERE date = ?", (today,))
     todays_records = cursor.fetchall()
     
-    bet_count = len([bet for bet in todays_records if bet[2] == 'BET'])
-    knockback_count = len([bet for bet in todays_records if bet[2] == 'WAGER KNOCKBACK'])
+    bet_count = len([bet for bet in todays_records if bet[5] == 'BET'])
+    knockback_count = len([bet for bet in todays_records if bet[5] == 'WAGER KNOCKBACK'])
 
     print(f"Bet count: {bet_count}, Knockback count: {knockback_count}")
 
@@ -1502,17 +1491,18 @@ class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         global last_processed_time
         if not os.path.isdir(event.src_path):
-            max_retries = 5
+            max_retries = 6  ## In case it takes a while to write the bet text 
             for attempt in range(max_retries):
                 try:
                     process_file(event.src_path)
                     last_processed_time = datetime.now()
                     break
                 except Exception as e:
-                    print(f"An error occurred while processing the file {event.src_path}: {e}")
-        else: 
-            print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
-
+                    print(f"Attempt {attempt + 1} - An error occurred while processing the file {event.src_path}: {e}")
+            else:
+                print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
+        else:
+            print(f"Directory created: {event.src_path}, skipping processing.")
 
 ####################################################################################
 ## MAIN FUNCTIONS CONTAINING MAIN LOOP
