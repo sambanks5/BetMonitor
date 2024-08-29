@@ -28,6 +28,7 @@ from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from tkinter import messagebox, filedialog, simpledialog, Text, scrolledtext, IntVar, font
+from tkcalendar import DateEntry
 from functools import lru_cache
 from googleapiclient.discovery import build
 from pytz import timezone
@@ -36,7 +37,6 @@ from tkinter.ttk import *
 from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
-current_database = None
 user = ""
 USER_NAMES = {
     'GB': 'George B',
@@ -204,6 +204,7 @@ class BetFeed:
         self.initialize_ui()
         self.start_feed_update()
 
+
     def initialize_ui(self):
         self.feed_frame = ttk.LabelFrame(self.root, style='Card', text="Bet Feed")
         self.feed_frame.place(x=5, y=5, width=520, height=640)
@@ -233,7 +234,7 @@ class BetFeed:
         self.risk_category_combobox_values = ["", "Any", "M", "W", "S", "O", "X"]
         self.risk_category_filter_entry = ttk.Combobox(self.filter_frame, values=self.risk_category_combobox_values, width=3)
         self.risk_category_filter_entry.grid(row=0, column=2, pady=(0, 2), padx=4, sticky='ew')
-        self.set_placeholder(self.risk_category_filter_entry, 'R Cat.')
+        self.set_placeholder(self.risk_category_filter_entry, 'Risk')
 
         self.type_combobox_values = ["", "Bet", "Knockback", "SMS"]
         self.type_combobox_entry = ttk.Combobox(self.filter_frame, values=self.type_combobox_values, width=5)
@@ -259,14 +260,19 @@ class BetFeed:
         self.separator.grid(row=0, column=6, rowspan=2, sticky='ns', pady=1, padx=(12, 5))
 
         style = ttk.Style()
-        large_font = font.Font(size=15)
+        large_font = font.Font(size=13)
         style.configure('Large.TButton', font=large_font)
 
         self.refresh_button = ttk.Button(self.filter_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
-        self.refresh_button.grid(row=0, column=7, padx=2, pady=2, rowspan=2)
+        self.refresh_button.grid(row=0, column=7, padx=2, pady=2)
+
+        self.date_entry = DateEntry(self.filter_frame, width=7, background='#fecd45', foreground='white', borderwidth=1)
+        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew')
+        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
 
         self.filter_frame.grid_rowconfigure(0, weight=1)
         self.filter_frame.grid_rowconfigure(1, weight=1)
+        self.filter_frame.grid_rowconfigure(2, weight=1)
         self.filter_frame.grid_columnconfigure(0, weight=0)
         self.filter_frame.grid_columnconfigure(1, weight=0)
         self.filter_frame.grid_columnconfigure(2, weight=1)
@@ -285,6 +291,8 @@ class BetFeed:
         self.activity_text.config(state='disabled')
         self.activity_text.pack(fill='both', expand=True)
 
+
+
     def set_placeholder(self, widget, placeholder):
         widget.insert(0, placeholder)
         widget.config(foreground='grey')
@@ -300,16 +308,6 @@ class BetFeed:
         if not event.widget.get():
             event.widget.insert(0, placeholder)
             event.widget.config(foreground='grey')
-            
-    def count_sport(self, data):
-        sport_counts = {0: 0, 1: 0, 2: 0}
-
-        for bet in data:
-            if "Sport" in bet:
-                for sport in bet["Sport"]:
-                    if sport in sport_counts:
-                        sport_counts[sport] += 1
-        return sport_counts
 
     def insert_feed_text(self, text, tag=None):
         if tag:
@@ -334,8 +332,8 @@ class BetFeed:
         else:
             pass
         
-        self.feed_frame.after(12000, self.start_feed_update)
-
+        self.feed_frame.after(10000, self.start_feed_update)
+    
     def bet_feed(self, date_str=None):
         print("Refreshing feed...")
         self.total_knockbacks = 0
@@ -367,10 +365,10 @@ class BetFeed:
         type_mapping = {'Bet': 'BET', 'Knockback': 'WAGER KNOCKBACK', 'SMS': 'SMS WAGER'}
         type_value = type_mapping.get(type_filter)
 
-        # Get today's date
-        today = datetime.today().strftime('%d/%m/%Y')
+        # Get the selected date from the DateEntry widget
+        selected_date = self.date_entry.get_date().strftime('%d/%m/%Y')
         query = "SELECT * FROM database WHERE date = ?"
-        params = [today]
+        params = [selected_date]
 
         if username:
             query += " AND customer_ref = ?"
@@ -418,65 +416,116 @@ class BetFeed:
                 self.display_bet(bet_dict)
                 self.feed_text.insert('end', separator, "notices")
             
-            self.sport_count = self.count_sport(filtered_bets)
-            self.update_activity_frame(reporting_data, self.sport_count, conn, cursor)
+            self.update_activity_frame(reporting_data, cursor, selected_date)
         
         self.feed_text.config(state="disabled")
         conn.close()
 
-    def update_activity_frame(self, reporting_data, sport_count, conn, cursor):
-        global current_database
-
-        # Get the current date and the previous date
-        current_date = datetime.now().date()
+    def update_activity_frame(self, reporting_data, cursor, selected_date_str):    
+        # Convert the selected date string to a datetime object
+        current_date = datetime.strptime(selected_date_str, '%d/%m/%Y')
         previous_date = current_date - timedelta(days=1)
-
-        # Fetch the count of bets for the current day
-        cursor.execute("SELECT COUNT(*) FROM database WHERE DATE(date) = ?", (current_date,))
+    
+        current_time = datetime.now().strftime('%H:%M:%S')
+        
+        # Convert the datetime objects back to strings in the format 'dd/mm/yyyy'
+        current_date_str = current_date.strftime('%d/%m/%Y')
+        previous_date_str = previous_date.strftime('%d/%m/%Y')
+    
+        # Fetch the count of bets for the current day up to the current time
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND time <= ?", (current_date_str, current_time))
         current_bets = cursor.fetchone()[0]
-
-        # Fetch the count of bets for the previous day
-        cursor.execute("SELECT COUNT(*) FROM database WHERE DATE(date) = ?", (previous_date,))
+        print(f"Current Bets: {current_bets}")
+    
+        # Fetch the count of bets for the previous day up to the same time
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND time <= ?", (previous_date_str, current_time))
         previous_bets = cursor.fetchone()[0]
-
-        # Calculate the percentage change
+        print(f"Previous Bets: {previous_bets}")
+    
+        # Fetch the count of knockbacks for the current day up to the current time
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND time <= ?", (current_date_str, current_time))
+        current_knockbacks = cursor.fetchone()[0]
+        print(f"Current Knockbacks: {current_knockbacks}")
+    
+        # Fetch the count of knockbacks for the previous day up to the same time
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND time <= ?", (previous_date_str, current_time))
+        previous_knockbacks = cursor.fetchone()[0]
+        print(f"Previous Knockbacks: {previous_knockbacks}")
+        
+        # Calculate the percentage change in bets
         if previous_bets > 0:
-            percentage_change = ((current_bets - previous_bets) / previous_bets) * 100
+            percentage_change_bets = ((current_bets - previous_bets) / previous_bets) * 100
         else:
-            percentage_change = 0
+            percentage_change_bets = 0
+        
+        # Calculate the percentage change in knockbacks
+        if previous_knockbacks > 0:
+            percentage_change_knockbacks = ((current_knockbacks - previous_knockbacks) / previous_knockbacks) * 100
+        else:
+            percentage_change_knockbacks = 0
+    
+        # Fetch the count of unique clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ?", (current_date_str,))
+        total_unique_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of M clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M'", (current_date_str,))
+        unique_m_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of W clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W'", (current_date_str,))
+        unique_w_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of no risk clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (risk_category = '-' OR risk_category IS NULL)", (current_date_str,))
+        unique_norisk_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of bets for each sport for the current day
+        cursor.execute("SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY sports", (current_date_str,))
+        sport_counts = cursor.fetchall()
+    
+        # Initialize sport counts
+        horse_bets = 0
+        dog_bets = 0
+        other_bets = 0
+        
 
-        unique_m_clients = len(self.m_clients)
-        unique_w_clients = len(self.w_clients)
-        unique_norisk_clients = len(self.norisk_clients)
-        total_unique_clients = len(self.m_clients.union(self.w_clients, self.norisk_clients))
-        knockback_percentage = (self.total_knockbacks / current_bets * 100) if current_bets > 0 else 0
+        # Map the sport counts
+        sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
+        for sport, count in sport_counts:
+            sport_list = eval(sport)  # Convert string representation of list to actual list
+            if sport_mapping['Horses'] in sport_list:
+                horse_bets += count
+            if sport_mapping['Dogs'] in sport_list:
+                dog_bets += count
+            if sport_mapping['Other'] in sport_list:
+                other_bets += count
+        
+        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
 
+        knockback_percentage = (current_knockbacks / current_bets * 100) if current_bets > 0 else 0
         daily_turnover = reporting_data.get('daily_turnover', 'N/A')
         daily_profit = reporting_data.get('daily_profit', 'N/A')
         daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
-        total_deposits = reporting_data.get('total_deposits', 'N/A')
-        total_sum_deposits = reporting_data.get('total_sum', 'N/A')
-        horse_bets = sport_count.get(0, 0)
-        dog_bets = sport_count.get(1, 0)
-        other_bets = sport_count.get(2, 0)
+        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())    
+        full_name = USER_NAMES.get(user, user)
 
-        filters_applied = any(value not in [None, '', 'none'] for value in self.current_filters.values())
-
-        avg_deposit = total_sum_deposits / total_deposits if total_deposits else 0
-
-        current_date_str = datetime.now().strftime("%A %d %B")
-
+        # Determine the change indicators for bets and knockbacks
+        bet_change_indicator = "↑" if current_bets > previous_bets else "↓" if current_bets < previous_bets else "→"
+        knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
+    
         status_text = (
-            f"{'-- Viewing Database From ' + current_database + ' --' if current_database != None else f'{current_date_str}'}\n"
-            f"Bets: {current_bets} | Knockbacks: {self.total_knockbacks} ({knockback_percentage:.2f}%){'**' if filters_applied else ''}\n"
-            f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
-            f"Deposits: {total_deposits} | Total: £{total_sum_deposits:,.2f} (~£{avg_deposit:,.2f})\n"
-            f"Clients: {total_unique_clients} | M: {unique_m_clients} | W: {unique_w_clients} | --: {unique_norisk_clients}{'**' if filters_applied else ''}\n"
-            f"Horses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n"
-            f"Percentage Change in Bets: {percentage_change:.2f}%\n"
-            f"{'**Feed Filters Currently Applied!' if filters_applied else ''}"
-        )
+            f"{selected_date_str} {'- ' + full_name if user else ''}\n"
+            f"Bets: {current_bets:,} {bet_change_indicator} {percentage_change_bets:.2f}% (Prev: {previous_bets:,})\n"
+            f"Knockbacks: {current_knockbacks:,} {knockback_change_indicator} {percentage_change_knockbacks:.2f}% (Prev: {previous_knockbacks:,})\n"
+            f"Knockback Percentage: ({knockback_percentage:.2f}%)\n"
+            f"{'Turnover: ' + daily_turnover + ' | Profit: ' + daily_profit + ' (' + daily_profit_percentage + ')\n' if not filters_applied else ''}"
+            f"Clients: {total_unique_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,} | --: {unique_norisk_clients:,}\n"
+            f"Horses: {horse_bets:,} | Dogs: {dog_bets:,} | Other: {other_bets:,}"
+            f"{'\n- Feed Filters Applied -' if filters_applied else ''}"
 
+        )
+    
         self.activity_text.config(state='normal') 
         self.activity_text.delete('1.0', tk.END)  
         
@@ -485,11 +534,10 @@ class BetFeed:
         
         self.activity_text.config(state='disabled')
 
-
     def apply_filters(self):
         self.current_filters['username'] = '' if self.username_filter_entry.get() == 'Client' else self.username_filter_entry.get()
         self.current_filters['unit_stake'] = '' if self.unit_stake_filter_entry.get() == '£' else self.unit_stake_filter_entry.get()
-        self.current_filters['risk_category'] = '' if self.risk_category_filter_entry.get() == 'R Cat.' else self.risk_category_filter_entry.get()
+        self.current_filters['risk_category'] = '' if self.risk_category_filter_entry.get() == 'Risk' else self.risk_category_filter_entry.get()
         self.current_filters['sport'] = '' if self.sport_combobox_entry.get() == 'Sport' else self.sport_combobox_entry.get()
         self.current_filters['selection'] = '' if self.selection_filter_entry.get() == 'Selection' else self.selection_filter_entry.get()
         self.current_filters['type'] = '' if self.type_combobox_entry.get() == 'Type' else self.type_combobox_entry.get()
@@ -505,17 +553,15 @@ class BetFeed:
 
     def reset_filters(self):
         self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None, 'type': None}
-        
         self.username_filter_entry.delete(0, tk.END)
         self.unit_stake_filter_entry.delete(0, tk.END)
         self.risk_category_filter_entry.delete(0, tk.END)
         self.sport_combobox_entry.set('')
         self.selection_filter_entry.delete(0, tk.END)
         self.type_combobox_entry.set('')
-
         self.set_placeholder(self.username_filter_entry, 'Client')
         self.set_placeholder(self.unit_stake_filter_entry, '£')
-        self.set_placeholder(self.risk_category_filter_entry, 'R Cat.')
+        self.set_placeholder(self.risk_category_filter_entry, 'Risk')
         self.set_placeholder(self.selection_filter_entry, 'Selection')
         self.set_placeholder(self.sport_combobox_entry, 'Sport')
         self.set_placeholder(self.type_combobox_entry, 'Type')
@@ -573,8 +619,6 @@ class BetFeed:
     def display_regular_bet(self, bet):
         bet_no = bet.get('id', '')
         details = bet.get('selections', [])
-        
-        # Check if details is a list of lists
         if isinstance(details, list) and all(isinstance(item, list) for item in details):
             parsed_selections = details
         else:
@@ -625,7 +669,7 @@ class BetRuns:
     
     def initialize_ui(self):
         self.runs_frame = ttk.LabelFrame(root, style='Card', text="Runs on Selections")
-        self.runs_frame.place(x=560, y=160, width=335, height=485)
+        self.runs_frame.place(x=530, y=160, width=365, height=485)
         self.runs_frame.grid_columnconfigure(0, weight=1)
         self.runs_frame.grid_rowconfigure(0, weight=1)
         self.runs_frame.grid_columnconfigure(1, weight=0)
@@ -636,27 +680,29 @@ class BetRuns:
 
         self.spinbox_frame = ttk.Frame(self.runs_frame)
         self.spinbox_frame.grid(row=1, column=0, sticky='ew', pady=(5, 0))
-        self.spinbox_label = ttk.Label(self.spinbox_frame, text='Run: ')
-        self.spinbox = ttk.Spinbox(self.spinbox_frame, from_=2, to=10, textvariable=self.num_run_bets_var, width=2)
+
         self.spinbox_frame.grid(row=1, column=0, sticky='ew')
         self.spinbox_frame.grid_columnconfigure(0, weight=1)
         self.spinbox_frame.grid_columnconfigure(1, weight=1)
         self.spinbox_frame.grid_columnconfigure(2, weight=1)
-        self.spinbox_frame.grid_columnconfigure(3, weight=1)
 
-        self.spinbox_label.grid(row=0, column=0, sticky='e', padx=6) 
-        self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='ew') 
+        self.spinbox = ttk.Spinbox(self.spinbox_frame, from_=2, to=10, textvariable=self.num_run_bets_var, width=2)
         self.num_run_bets_var.set("2")
-        self.spinbox.grid(row=0, column=1, pady=(0, 3), sticky='w')
+        self.spinbox.grid(row=0, column=0, pady=(0, 3))
         self.num_run_bets_var.trace("w", self.set_num_run_bets)
-
-        self.combobox_label = ttk.Label(self.spinbox_frame, text=' Num bets: ')
-        self.combobox_label.grid(row=0, column=2, sticky='e', padx=6)
 
         self.combobox_values = [20, 50, 100, 300, 1000, 2000]
         self.combobox = ttk.Combobox(self.spinbox_frame, textvariable=self.combobox_var, values=self.combobox_values, width=4)
         self.combobox_var.trace("w", self.set_recent_bets)
-        self.combobox.grid(row=0, column=3, pady=(0, 3), sticky='ew')
+        self.combobox.grid(row=0, column=1, pady=(0, 3))
+
+        style = ttk.Style()
+        large_font = font.Font(size=13)
+        style.configure('Large.TButton', font=large_font)
+
+        self.refresh_button = ttk.Button(self.spinbox_frame, text='⟳', command=self.refresh_bets, width=2, style='Large.TButton')
+        self.refresh_button.grid(row=0, column=2, pady=(0, 3))
+
         self.runs_scroll = ttk.Scrollbar(self.runs_frame, orient='vertical', command=self.runs_text.yview, cursor="hand2")
         self.runs_scroll.grid(row=0, column=1, sticky='ns')
         self.runs_text.configure(yscrollcommand=self.runs_scroll.set)
@@ -673,82 +719,92 @@ class BetRuns:
             pass
 
     def bet_runs(self, num_bets, num_run_bets):
-        database_data = get_database()
+        conn, cursor = get_database()
         
-        if database_data is None:
+        cursor.execute("SELECT * FROM database ORDER BY date DESC LIMIT ?", (num_bets,))
+        database_data = cursor.fetchall()
+        
+        if not database_data:
             self.runs_text.config(state="normal")
             self.runs_text.delete('1.0', tk.END) 
             self.runs_text.insert('end', "No bet data available for the selected date or the database can't be found.")
             self.runs_text.config(state="disabled")
+            conn.close()
             return 
-
-        selection_bets = database_data[:num_bets]        
+    
         selection_to_bets = defaultdict(list)
-
-        for bet in selection_bets:
-            if isinstance(bet['details'], dict):
-                selections = [selection[0] for selection in bet['details'].get('selections', [])]
-                for selection in selections:
-                    selection_to_bets[selection].append(bet['id'])
-
+    
+        for bet in database_data:
+            bet_id = bet[0]  # Assuming 'id' is the first column
+            if ':' in bet_id:
+                continue  # Ignore IDs that contain a time
+            selections = eval(bet[10])  # Assuming 'selection' is the eleventh column and stored as a string representation of a list
+            for selection in selections:
+                selection_name = selection[0]
+                selection_to_bets[selection_name].append(bet_id)
+    
         sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
         
-        self.update_ui_with_selections(sorted_selections, selection_bets, num_run_bets)
-
-
-    def update_ui_with_selections(self, sorted_selections, selection_bets, num_run_bets):
+        self.update_ui_with_selections(sorted_selections, database_data, num_run_bets, conn, cursor)
+        conn.close()
+    
+    
+    def update_ui_with_selections(self, sorted_selections, selection_bets, num_run_bets, conn, cursor):
         vip_clients, newreg_clients, _, todays_oddsmonkey_selections, reporting_data = access_data()
         enhanced_places = reporting_data.get('enhanced_places', [])
-
+    
         self.runs_text.tag_configure("risk", foreground="#8f0000")
         self.runs_text.tag_configure("vip", foreground="#009685")
         self.runs_text.tag_configure("newreg", foreground="purple")
         self.runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
         self.runs_text.config(state="normal")
         self.runs_text.delete('1.0', tk.END)
-
+    
         for selection, bet_numbers in sorted_selections:
             skip_selection = False
-
+    
             if skip_selection:
                 continue
-
+    
             if len(bet_numbers) >= num_run_bets:
                 selection_name = selection.split(' - ')[1] if ' - ' in selection else selection
-
+    
                 matched_odds = None
                 for om_sel in todays_oddsmonkey_selections.values():
                     if selection_name == om_sel[0]:
                         matched_odds = float(om_sel[1])
                         break
-
+    
                 if matched_odds is not None:
                     self.runs_text.insert(tk.END, f"{selection} | OM Lay: {matched_odds}\n", "oddsmonkey")
                 else:
                     self.runs_text.insert(tk.END, f"{selection}\n")
-
+    
                 for bet_number in bet_numbers:
-                    bet_info = next((bet for bet in selection_bets if bet['id'] == bet_number), None)
+                    cursor.execute("SELECT * FROM database WHERE id = ?", (bet_number,))
+                    bet_info = cursor.fetchone()
                     if bet_info:
-                        for sel in bet_info['details']['selections']:
+                        selections = eval(bet_info[10])  # Assuming 'selection' is the eleventh column and stored as a string representation of a list
+                        for sel in selections:
                             if selection == sel[0]:
-                                if 'risk_category' in bet_info['details'] and bet_info['details']['risk_category'] != '-':
-                                    self.runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "risk")
-                                elif bet_info['customer_ref'] in vip_clients:
-                                    self.runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "vip")
-                                elif bet_info['customer_ref'] in newreg_clients:
-                                    self.runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n", "newreg")
+                                if bet_info[4] != '-':  # Assuming 'risk_category' is the fifth column
+                                    self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "risk")
+                                elif bet_info[3] in vip_clients:  # Assuming 'customer_ref' is the fourth column
+                                    self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "vip")
+                                elif bet_info[3] in newreg_clients:  # Assuming 'customer_ref' is the fourth column
+                                    self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "newreg")
                                 else:
-                                    self.runs_text.insert(tk.END, f" - {bet_info['time']} - {bet_number} | {bet_info['customer_ref']} ({bet_info['details']['risk_category']}) at {sel[1]}\n")
-
+                                    self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n")
+    
                 meeting_time = ' '.join(selection.split(' ')[:2])
-
+    
                 if meeting_time in enhanced_places:
                     self.runs_text.insert(tk.END, 'Enhanced Place Race\n', "oddsmonkey")
                 
                 self.runs_text.insert(tk.END, f"\n")
-
+    
         self.runs_text.config(state=tk.DISABLED)
+        conn.close()
 
     def refresh_bets(self):
         scroll_pos = self.runs_text.yview()[0]
@@ -1213,218 +1269,406 @@ class Notebook:
             pass
 
     def create_daily_report(self):
-        data = get_database()
+        conn, cursor = get_database()
         report_output = ""
         
+
         time = datetime.now()
-        date = time.strftime("%d/%m/%Y")
+        current_date_str = time.strftime("%d/%m/%Y")
         formatted_time = time.strftime("%H:%M:%S")
 
-        # Bets Report
-        total_bets = 0
-        total_stakes = 0.0
-        total_horse_racing_bets = 0
-        total_greyhound_bets = 0
-        total_other_bets = 0
-        # Clients Report
-        active_clients = []
-        customer_payments = {}
-        active_clients_set = set()
-        w_clients = set()
-        total_w_clients = 0
-        m_clients = set()
-        total_m_clients = 0
-        norisk_clients = set()
-        total_norisk_clients = 0
-        # List of timestamps to find busiest time of day
-        timestamps = []
-        hour_ranges = {}
-        # Wageralert Report
-        total_wageralerts = 0
-        price_change = 0
-        event_ended = 0
-        user_restriction = 0
-        price_type_disallowed = 0
-        sport_disallowed = 0
-        max_stake_exceeded = 0
-        other_alert = 0
-        liability_exceeded = 0
-        wageralert_clients = []
-        # SMS Report
-        total_sms = 0
-        sms_clients = []
+        
+        # Convert current_date_str to yyyy-mm-dd format
+        current_date_obj = datetime.strptime(current_date_str, "%d/%m/%Y")
+        current_date_iso = current_date_obj.strftime("%Y-%m-%d")
+        
+        # Calculate the start of the current week (Monday)
+        start_of_current_week = current_date_obj - timedelta(days=current_date_obj.weekday())
+        start_of_current_week_iso = start_of_current_week.strftime("%Y-%m-%d")
+        
+        # Calculate the start of the previous week (Monday)
+        start_of_previous_week = start_of_current_week - timedelta(days=7)
+        start_of_previous_week_iso = start_of_previous_week.strftime("%Y-%m-%d")
+
+    
+        # Fetch the count of unique clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ?", (current_date_str,))
+        total_unique_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of M clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M'", (current_date_str,))
+        unique_m_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of W clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W'", (current_date_str,))
+        unique_w_clients = cursor.fetchone()[0]
+    
+        # Fetch the count of no risk clients for the current day
+        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (risk_category = '-' OR risk_category IS NULL)", (current_date_str,))
+        unique_norisk_clients = cursor.fetchone()[0]
+    
+        # Fetch the average count of unique clients for the current week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_unique_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_unique_clients_current_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of unique clients for the previous week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_unique_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_unique_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of M clients for the current week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_m_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND risk_category = 'M'
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_m_clients_current_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of M clients for the previous week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_m_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND risk_category = 'M'
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_m_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of W clients for the current week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_w_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND risk_category = 'W'
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_w_clients_current_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of W clients for the previous week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_w_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND risk_category = 'W'
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_w_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of no-risk clients for the current week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_norisk_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND (risk_category = '-' OR risk_category IS NULL)
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_norisk_clients_current_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average count of no-risk clients for the previous week
+        cursor.execute("""
+            SELECT AVG(daily_count) as avg_norisk_clients
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    COUNT(DISTINCT customer_ref) as daily_count
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND (risk_category = '-' OR risk_category IS NULL)
+                GROUP BY day
+            ) as daily_counts
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_norisk_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the count of bets for the current day
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+        total_bets = cursor.fetchone()[0]
+    
+        # Fetch the count of knockbacks for the current day
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK'", (current_date_str,))
+        total_wageralerts = cursor.fetchone()[0]
+    
+        # Fetch the count of SMS for the current day
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'SMS WAGER'", (current_date_str,))
+        total_sms = cursor.fetchone()[0]
+    
+        # Fetch the count of bets for each sport for the current day
+        cursor.execute("SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY sports", (current_date_str,))
+        sport_counts = cursor.fetchall()
+    
+        # Fetch the count of different types of wager alerts
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Has Changed%'", (current_date_str,))
+        price_change = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Liability Exceeded: True%'", (current_date_str,))
+        liability_exceeded = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Event Has Ended%'", (current_date_str,))
+        event_ended = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%'", (current_date_str,))
+        price_type_disallowed = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Sport Disallowed%'", (current_date_str,))
+        sport_disallowed = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+        max_stake_exceeded = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message NOT LIKE '%Price Has Changed%' AND error_message NOT LIKE '%Liability Exceeded: True%' AND error_message NOT LIKE '%Event Has Ended%' AND error_message NOT LIKE '%Price Type Disallowed%' AND error_message NOT LIKE '%Sport Disallowed%' AND error_message NOT LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+        other_alert = cursor.fetchone()[0]
+    
+        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%' OR error_message LIKE '%Sport Disallowed%' OR error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+        user_restriction = cursor.fetchone()[0]
+    
+        # Fetch the total stakes for the current day
+        cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+        total_stakes = cursor.fetchone()[0] or 0.0
+    
+        # Fetch the top 5 highest stakes
+        cursor.execute("SELECT customer_ref, SUM(total_stake) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
+        top_spenders = cursor.fetchall()
+    
+        # Fetch the top 5 clients with most bets
+        cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
+        top_client_bets = cursor.fetchall()
+    
+        # Fetch the top 3 clients with most knockbacks
+        cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' GROUP BY customer_ref ORDER BY total DESC LIMIT 3", (current_date_str,))
+        top_wageralert_clients = cursor.fetchall()
+    
+        # Fetch the count of bets per hour for the current day
+        cursor.execute("SELECT strftime('%H:00', time) as hour, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY hour", (current_date_str,))
+        bets_per_hour = cursor.fetchall()
+        
+        # Fetch the average number of daily bets, knockbacks, and SMS text bets for the current week
+        cursor.execute("""
+            SELECT 
+                AVG(bets) as avg_bets, 
+                AVG(knockbacks) as avg_knockbacks, 
+                AVG(sms_bets) as avg_sms_bets
+            FROM (
+                SELECT 
+                    date,
+                    COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
+                    COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
+                    COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                      BETWEEN DATE(?) AND DATE(?)
+                GROUP BY date
+            ) as daily_counts
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_day_bets, avg_day_knockbacks, avg_day_sms_bets = cursor.fetchone()
+        
+        # Handle None values
+        avg_day_bets = avg_day_bets if avg_day_bets is not None else 0
+        avg_day_knockbacks = avg_day_knockbacks if avg_day_knockbacks is not None else 0
+        avg_day_sms_bets = avg_day_sms_bets if avg_day_sms_bets is not None else 0
+        
+        # Fetch the average number of daily bets, knockbacks, and SMS text bets for the previous week
+        cursor.execute("""
+            SELECT 
+                AVG(bets) as avg_bets, 
+                AVG(knockbacks) as avg_knockbacks, 
+                AVG(sms_bets) as avg_sms_bets
+            FROM (
+                SELECT 
+                    date,
+                    COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
+                    COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
+                    COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                      BETWEEN DATE(?) AND DATE(?)
+                GROUP BY date
+            ) as daily_counts
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_bets, avg_knockbacks, avg_sms_bets = cursor.fetchone()
+        
+        # Handle None values
+        avg_bets = avg_bets if avg_bets is not None else 0
+        avg_knockbacks = avg_knockbacks if avg_knockbacks is not None else 0
+        avg_sms_bets = avg_sms_bets if avg_sms_bets is not None else 0
+    
+        # Fetch the average total stakes for the current week
+        cursor.execute("""
+            SELECT AVG(daily_total) as avg_total_stake
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    SUM(total_stake) as daily_total
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND type = 'BET'
+                GROUP BY day
+            ) as daily_totals
+        """, (start_of_current_week_iso, current_date_iso))
+        avg_total_stake_current_week = cursor.fetchone()[0] or 0.0
+
+        # Fetch the average total stakes for the previous week
+        cursor.execute("""
+            SELECT AVG(daily_total) as avg_total_stake
+            FROM (
+                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                    SUM(total_stake) as daily_total
+                FROM database
+                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                    BETWEEN DATE(?) AND DATE(?)
+                    AND type = 'BET'
+                GROUP BY day
+            ) as daily_totals
+        """, (start_of_previous_week_iso, start_of_current_week_iso))
+        avg_total_stake_previous_week = cursor.fetchone()[0] or 0.0
+
+        
+        # Initialize sport counts
+        horse_bets = 0
+        dog_bets = 0
+        other_bets = 0
+        
+        # Map the sport counts
+        sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
+        for sport, count in sport_counts:
+            sport_list = eval(sport)
+            if sport_mapping['Horses'] in sport_list:
+                horse_bets += count
+            if sport_mapping['Dogs'] in sport_list:
+                dog_bets += count
+            if sport_mapping['Other'] in sport_list:
+                other_bets += count
+    
+        # Fetch the total stakes for the current day
+        cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+        total_stakes = cursor.fetchone()[0] or 0.0
+    
+        cursor.execute("SELECT * FROM database WHERE date = ?", (current_date_str,))
+        data = cursor.fetchall()
         self.progress["maximum"] = len(data)
         self.progress["value"] = 0
         root.update_idletasks()
+    
+        total_sport_bets = horse_bets + dog_bets + other_bets
+        percentage_horse_racing = (horse_bets / total_sport_bets) * 100
+        percentage_greyhound = (dog_bets / total_sport_bets) * 100
+        percentage_other = (other_bets / total_sport_bets) * 100
+    
+        separator = "-" * 69
+    
+        bet_change_indicator = "↑" if total_bets > avg_bets else "↓" if total_bets < avg_bets else "→"
+        knockback_change_indicator = "↑" if total_wageralerts > avg_knockbacks else "↓" if total_wageralerts < avg_knockbacks else "→"
 
-        for i, bet in enumerate(data):
-            self.progress["value"] = i + 1
-            root.update_idletasks()
+        report_output += f"DAILY REPORT TICKET\n Generated at {formatted_time}\n"
+        report_output += f"{separator}"
+        report_output += f" - Bets  |  Knockbacks  |  Knockback % - \n"
+        report_output += f"{total_bets:,}      |      {total_wageralerts:,}      |      {total_wageralerts / total_bets * 100:.2f}%\n"
+        report_output += f"This week daily average:\n"
+        report_output += f"{int(avg_day_bets):,}      |      {int(avg_day_knockbacks):,}      |      {(avg_day_knockbacks / avg_day_bets * 100):.2f}%\n"
+        report_output += f"Last week daily average:\n"
+        report_output += f"{int(avg_bets):,}      |      {int(avg_knockbacks):,}      |      {(avg_knockbacks / avg_bets * 100):.2f}%\n"
 
-            bet_type = bet['type'].lower()
-            is_sms = bet_type == 'sms wager'
-            is_bet = bet_type == 'bet'
-            is_wageralert = bet_type == 'wager knockback'
+        report_output += f"\n\n - Stakes   |   Average Stake - \n"
+        report_output += f"£{total_stakes:,.2f}     |     ~£{total_stakes / total_bets:,.2f}\n"
+        report_output += f"This week daily average:\n"
+        report_output += f"£{avg_total_stake_current_week:,.2f}      |      ~£{avg_total_stake_current_week / avg_day_bets:,.2f}\n"
+        report_output += f"Last week daily average:\n"
+        report_output += f"£{avg_total_stake_previous_week:,.2f}      |      ~£{avg_total_stake_previous_week / avg_bets:,.2f}\n"
 
-            if is_bet:
-                bet_customer_reference = bet['customer_ref']
-                customer_risk_category = bet['details']['risk_category']
-                payment = bet['details']['payment']
-                timestamp = bet['time']
-
-                timestamps.append(timestamp)
-
-                if customer_risk_category == 'M':
-                    m_clients.add(bet_customer_reference)
-                    total_m_clients = len(m_clients)
-
-                elif customer_risk_category == 'W':
-                    w_clients.add(bet_customer_reference)
-                    total_w_clients = len(w_clients)
-
-                elif customer_risk_category == '-':
-                    norisk_clients.add(bet_customer_reference)
-                    total_norisk_clients = len(norisk_clients)
-
-                payment_value = float(payment[1:].replace(',', ''))
-                total_stakes += payment_value 
-                if bet_customer_reference in customer_payments:
-                    customer_payments[bet_customer_reference] += payment_value
-                else:
-                    customer_payments[bet_customer_reference] = payment_value
-                active_clients_set.add(bet_customer_reference)
-                total_clients = len(active_clients_set)
-                active_clients.append(bet_customer_reference)
-                total_bets += 1
-                
-                selection_name = bet['details']['selections'][0][0]
-
-                if re.search(r'\d{2}:\d{2}', selection_name) and 'trap' not in selection_name:  # if the selection name contains a time, it's horse racing
-                    total_horse_racing_bets += 1
-                elif 'trap' in selection_name.lower():  # if the selection name contains 'trap', it's greyhounds
-                    total_greyhound_bets += 1
-                else:  # otherwise, it's other sports
-                    total_other_bets += 1
-
-            if is_wageralert:
-                wageralert_customer_reference = bet['customer_ref']
-                knockback_details = bet['details']
-                is_alert = False
-                for key, value in knockback_details.items():
-                    if key == 'Error Message':
-                        if 'Price Has Changed' in value:
-                            price_change += 1
-                            is_alert = True
-                        elif 'Liability Exceeded: True' in value:
-                            liability_exceeded += 1
-                            is_alert = True
-                        elif 'Event Has Ended' in value:
-                            event_ended += 1
-                            is_alert = True
-                        elif 'Price Type Disallowed' in value:
-                            user_restriction += 1
-                            price_type_disallowed += 1
-                            is_alert = True
-                        elif 'Sport Disallowed' in value:
-                            user_restriction += 1
-                            sport_disallowed += 1
-                            is_alert = True
-                        elif 'User Max Stake Exceeded' in value:
-                            user_restriction += 1
-                            max_stake_exceeded += 1
-                            is_alert = True
-                            
-                if not is_alert:
-                    other_alert += 1
-                wageralert_clients.append(wageralert_customer_reference)
-                total_wageralerts += 1
-
-            if is_sms:
-                sms_customer_reference = bet['customer_ref']
-                sms_clients.append(sms_customer_reference)
-                total_sms += 1
-
-        total_sport_bets = total_horse_racing_bets + total_greyhound_bets + total_other_bets
-        percentage_horse_racing = (total_horse_racing_bets / total_sport_bets) * 100
-        percentage_greyhound = (total_greyhound_bets / total_sport_bets) * 100
-        percentage_other = (total_other_bets / total_sport_bets) * 100
-
-        top_spenders = Counter(customer_payments).most_common(5)
-        client_bet_counter = Counter(active_clients)
-        top_client_bets = client_bet_counter.most_common(5)
-        timestamp_hours = [timestamp.split(':')[0] + ":00" for timestamp in timestamps]
-        hour_counts = Counter(timestamp_hours)
-        wageralert_counter = Counter(wageralert_clients)
-        top_wageralert_clients = wageralert_counter.most_common(3)
-        sms_counter = Counter(sms_clients)
-        top_sms_clients = sms_counter.most_common(5)
+        report_output += f"\n\nClients: {total_unique_clients:,} | --: {unique_norisk_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,}\n"
+        report_output += f"This week daily average:\n"
+        report_output += f"Clients: {int(avg_unique_clients_current_week):,} | --: {int(avg_norisk_clients_current_week):,} | M: {int(avg_m_clients_current_week):,} | W: {int(avg_w_clients_current_week):,}\n"
+        report_output += f"Last week daily average:\n"
+        report_output += f"Clients: {int(avg_unique_clients_previous_week):,} | --: {int(avg_norisk_clients_previous_week):,} | M: {int(avg_m_clients_previous_week):,} | W: {int(avg_w_clients_previous_week):,}\n"
 
 
-        report_output += f"\tDAILY REPORT TICKET\n\t Generated at {formatted_time}\n"
-
-        report_output += f"\nStakes: £{total_stakes:,.2f} (~£{total_stakes / total_bets:,.2f})\n"
-        report_output += f"Bets: {total_bets} | Knockbacks {total_wageralerts} ({total_wageralerts / total_bets * 100:.2f}%)\n"
-        report_output += f"Horses: {percentage_horse_racing:.2f}% | Dogs: {percentage_greyhound:.2f}% | Other: {percentage_other:.2f}%\n"
-
-        report_output += f"Clients: {total_clients} | --: {total_norisk_clients} | M: {total_m_clients} | W: {total_w_clients} ({total_m_clients / total_clients * 100:.2f}%)\n"
-
+        report_output += f"\n\nHorses: {horse_bets} ({percentage_horse_racing:.2f}%) | Dogs: {dog_bets} ({percentage_greyhound:.2f}%) | Other: {other_bets} ({percentage_other:.2f}%)\n"
         report_output += "\nHighest Stakes:\n"
         for rank, (customer, spend) in enumerate(top_spenders, start=1):
             report_output += f"\t{rank}. {customer} - Stakes: £{spend:,.2f}\n"
-
         report_output += "\nMost Bets:\n"
         for rank, (client, count) in enumerate(top_client_bets, start=1):
-            report_output += f"\t{rank}. {client} - Bets: {count}\n"
-
+            report_output += f"\t{rank}. {client} - Bets: {count:,}\n"
         report_output += f"\nMost Knockbacks:\n"
         for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
-            report_output += f"\t{rank}. {client} - Knockbacks: {count}\n"
-
-        report_output += f"\nBets Per Hour:\n"
-        for hour, count in hour_counts.items():
-            start_hour = hour
-            end_hour = f"{int(start_hour.split(':')[0])+1:02d}:00"
-            hour_range = f"{start_hour} - {end_hour}"
-            if hour_range in hour_ranges:
-                hour_ranges[hour_range] += count
-            else:
-                hour_ranges[hour_range] = count
-
-        for hour_range, count in hour_ranges.items():
-            report_output += f"\t{hour_range} - Bets {count}\n"
-
+            report_output += f"\t{rank}. {client} - Knockbacks: {count:,}\n"
         report_output += f"\nKnockbacks by Type:"
         report_output += f"\nLiability: {liability_exceeded}  |  "
         report_output += f"Price Change: {price_change}  |  "
         report_output += f"Event Ended: {event_ended}"
-
         report_output += f"\n\nUser Restrictions: {user_restriction}\n"
         report_output += f"Price Type: {price_type_disallowed}  |  "
         report_output += f"Sport: {sport_disallowed}  |  "
         report_output += f"Max Stake: {max_stake_exceeded}"
-
         report_output += f"\n\nTextbets: {total_sms}"
-        report_output += f"\n\nMost Textbets: \n"
-        for rank, (client, count) in enumerate(top_sms_clients, start=1):
-            report_output += f"\t{rank}. {client} - TEXTS: {count}\n"
+        report_output += f"\nBets Per Hour:\n"
+        for hour, count in bets_per_hour:
+            report_output += f"\t{hour} - Bets: {count}\n"
 
         report_output += f"\nAll active clients by risk\n\n"
-
-        report_output += f"M Clients: \n"
-        for client in m_clients:
-            report_output += f"{client}\n"
-        report_output += f"\n\nW Clients: \n"
-        for client in w_clients:
-            report_output += f"{client}\n"
-        report_output += f"\n\nNo Risk Clients: \n"
-        for client in norisk_clients:
-            report_output += f"{client}\n"
+    
+        # report_output += f"M Clients: \n"
+        # for client in m_clients:
+        #     report_output += f"{client}\n"
+        # report_output += f"\n\nW Clients: \n"
+        # for client in w_clients:
+        #     report_output += f"{client}\n"
+        # report_output += f"\n\nNo Risk Clients: \n"
+        # for client in norisk_clients:
+        #     report_output += f"{client}\n"
         report_output += f"\n\n"
-
+    
         self.report_ticket.config(state="normal")
         self.report_ticket.delete('1.0', tk.END)
         self.report_ticket.insert('1.0', report_output)
+        self.report_ticket.tag_configure("center", justify='center')
+        self.report_ticket.tag_add("center", "1.0", "end")
         self.report_ticket.config(state="disabled")
+        conn.close()
     
     def create_staff_report(self):
         global USER_NAMES
@@ -2441,38 +2685,12 @@ class Settings:
 
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
-        
-        self.set_database_label = ttk.Label(self.settings_frame, text="Set Database", font=("Helvetica", 10))
-        self.set_database_label.pack(pady=(6, 0))
-
-        database_files = [f for f in os.listdir('database') if f.endswith('.json')]
-        formatted_dates = [f.split('-wager_database')[0] for f in database_files]
-        formatted_dates.sort(reverse=True) 
-
-        self.databases_frame = ttk.Frame(self.settings_frame)
-        self.databases_frame.pack(pady=5)
-
-        self.databases_combobox = ttk.Combobox(self.databases_frame, values=formatted_dates, width=10, state='readonly')
-        self.databases_combobox.grid(row=0, column=0, padx=(0, 3))
-        self.databases_combobox.bind("<<ComboboxSelected>>", self.update_current_database)
-
-        self.reset_database_button = ttk.Button(self.databases_frame, text="↻", command=self.reset_database, cursor="hand2", width=2)
-        self.reset_database_button.grid(row=0, column=1)
 
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
 
         self.view_events_button = ttk.Button(self.settings_frame, text="Live Events", command=self.show_live_events, cursor="hand2", width=12)
         self.view_events_button.pack(pady=(4, 0))
-
-    def update_current_database(self, event):
-        global current_database
-        current_database = self.databases_combobox.get()
-
-    def reset_database(self):
-        global current_database
-        current_database = None
-        self.databases_combobox.set('')
 
     def fetch_and_save_events(self):
         url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M,F'
@@ -2771,13 +2989,13 @@ class BetViewerApp:
 
         threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
-        user_login()
+        #user_login()
         self.bet_feed = BetFeed(root)
-        #self.bet_runs = BetRuns(root)
-        #self.race_updation = RaceUpdaton(root)
-        #self.next3_panel = Next3Panel(root)
-        #self.notebook = Notebook(root)
-        #self.settings = Settings(root)
+        self.bet_runs = BetRuns(root)
+        self.race_updation = RaceUpdaton(root)
+        self.next3_panel = Next3Panel(root)
+        self.notebook = Notebook(root)
+        self.settings = Settings(root)
 
     def initialize_gspread(self):
         with open('src/creds.json') as f:
