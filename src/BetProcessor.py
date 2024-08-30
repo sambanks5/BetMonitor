@@ -478,8 +478,6 @@ def activity_report_notification():
     bet_count = len([bet for bet in todays_records if bet[5] == 'BET'])
     knockback_count = len([bet for bet in todays_records if bet[5] == 'WAGER KNOCKBACK'])
 
-    print(f"Bet count: {bet_count}, Knockback count: {knockback_count}")
-
     thresholds = {
         250: {'count': bet_count, 'flag': 'bet_count_250', 'message': 'bets taken'},
         500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
@@ -527,9 +525,9 @@ def process_existing_bets(directory, app):
         add_bet(database, bet, app)
         print("Added a bet to JSON")
 
-    #save_database(database)
     app.log_message('Bet processing complete. Waiting for new files...\n')
     log_notification(f'Finished reprocessing', True)
+    database.close()
 
 
 
@@ -1459,7 +1457,7 @@ class Application(tk.Tk):
             path = new_folder_path
 
     def reprocess(self):
-        reprocess_file(self)
+        #reprocess_file(self)
         process_thread = threading.Thread(target=process_existing_bets, args=(path, self))
         process_thread.start()
 
@@ -1521,7 +1519,7 @@ def main(app):
     #check_closures_and_race_times()
     #fetch_and_print_new_events()
     #find_stale_antepost_events()
-    run_activity_report_notification()
+    #run_activity_report_notification()
 
     #schedule.every(2).minutes.do(run_get_data, app)
 
@@ -1532,7 +1530,7 @@ def main(app):
     #schedule.every(10).minutes.do(fetch_and_print_new_events)
     #schedule.every(3).hours.do(run_find_rg_issues)
     #schedule.every(1).minute.do(run_staff_report_notification)
-    schedule.every(1).minute.do(run_activity_report_notification)
+    #schedule.every(1).minute.do(run_activity_report_notification)
 
     #schedule.every().day.at("23:57").do(run_get_deposit_data, app)
     #schedule.every().day.at("17:00").do(log_deposit_summary)
