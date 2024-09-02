@@ -315,9 +315,12 @@ class BetFeed:
     
             try:
                 print("Refreshing feed...")
-    
+
+                start_time = time.time()
                 conn, cursor = get_database()
-    
+                database_time = time.time() - start_time
+                print(f"Database Connection Time: {database_time:.4f} seconds")
+
                 if conn is None:
                     self.feed_text.config(state="normal")
                     self.feed_text.delete('1.0', tk.END)
@@ -435,6 +438,7 @@ class BetFeed:
                         self.feed_text.tag_add(tag, start_idx, end_idx)
     
                     processing_time = time.time() - start_time
+                    
                     print(f"Data Processing Time: {processing_time:.4f} seconds")
                     print(f"JSON Conversion Time: {json_conversion_time:.4f} seconds")
                     print(f"Display Bet Time: {display_bet_time:.4f} seconds")
