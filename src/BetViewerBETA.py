@@ -210,7 +210,9 @@ class BetFeed:
         self.feed_frame.grid_columnconfigure(0, weight=1)
         self.feed_frame.grid_columnconfigure(1, weight=0)
         self.feed_frame.grid_rowconfigure(0, weight=1)
-        
+
+        self.limit_bets_var = tk.BooleanVar(value=True)
+
         self.feed_text = tk.Text(self.feed_frame, font=("Helvetica", 10, "bold"), wrap='word', padx=10, pady=10, bd=0, fg="#000000")
         self.feed_text.config(state='disabled')
         self.feed_text.grid(row=0, column=0, sticky='nsew')
@@ -266,8 +268,13 @@ class BetFeed:
         self.refresh_button.grid(row=0, column=7, padx=2, pady=2)
 
         self.date_entry = DateEntry(self.filter_frame, width=8, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
-        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew')
+        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew', columnspan=2)
         self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
+
+        # Add the Checkbutton to the UI
+        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:500]", variable=self.limit_bets_var)
+        self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e')
+
 
         self.filter_frame.grid_rowconfigure(0, weight=1)
         self.filter_frame.grid_rowconfigure(1, weight=1)
@@ -305,43 +312,38 @@ class BetFeed:
             if not self.feed_lock.acquire(blocking=False):
                 print("Feed update already in progress. Skipping this update.")
                 return
-
+    
             try:
                 print("Refreshing feed...")
-                self.total_knockbacks = 0
-                self.total_sms_wagers = 0
-                self.m_clients = set()
-                self.w_clients = set()
-                self.norisk_clients = set()
-
+    
                 conn, cursor = get_database()
-
+    
                 if conn is None:
                     self.feed_text.config(state="normal")
                     self.feed_text.delete('1.0', tk.END)
-                    self.feed_text.insert('end', "No bet data available for the selected date or the database can't be found.", "notices")
+                    self.feed_text.insert('end', "No bets found for the current date or database not found.", "notices")
                     self.feed_text.config(state="disabled")
                     return 
-
+    
                 username = self.current_filters['username']
                 unit_stake = self.current_filters['unit_stake']
                 risk_category = self.current_filters['risk_category']
                 sport = self.current_filters['sport']
                 selection_search_term = self.current_filters['selection']
                 type_filter = self.current_filters['type']
-
+    
                 # Mapping for sports filter
                 sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
                 sport_value = sport_mapping.get(sport)
-
+    
                 type_mapping = {'Bet': 'BET', 'Knockback': 'WAGER KNOCKBACK', 'SMS': 'SMS WAGER'}
                 type_value = type_mapping.get(type_filter)
-
+    
                 # Get the selected date from the DateEntry widget
                 selected_date = self.date_entry.get_date().strftime('%d/%m/%Y')
                 query = "SELECT * FROM database WHERE date = ?"
                 params = [selected_date]
-
+    
                 if username:
                     query += " AND customer_ref = ?"
                     params.append(username.upper())
@@ -361,35 +363,39 @@ class BetFeed:
                 if type_value:
                     query += " AND type = ?"
                     params.append(type_value)
-
+    
                 # Order by timestamp in descending order
                 query += " ORDER BY time DESC"
-
+    
                 # Measure the time taken to execute the query
                 start_time = time.time()
                 cursor.execute(query, params)
                 filtered_bets = cursor.fetchall()
                 query_time = time.time() - start_time
                 print(f"SQL Query Time: {query_time:.4f} seconds")
-
+    
                 self.feed_text.config(state="normal")
                 self.feed_text.delete('1.0', tk.END)
-                
+    
                 separator = '-------------------------------------------------------------------------------------------------\n'
                 self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
                 column_names = [desc[0] for desc in cursor.description]
-
+    
                 if not filtered_bets:
-                    self.feed_text.insert('end', "No bets found with the current filters.", 'center')
+                    self.feed_text.insert('end', "No bets found with the current filters or date.", 'center')
                 else:
+                    # Check the state of the checkbox to limit the number of bets displayed
+                    if self.limit_bets_var.get():
+                        filtered_bets = filtered_bets[:500]
+    
                     start_time = time.time()
                     json_conversion_time = 0
                     display_bet_time = 0
                     insert_separator_time = 0
-
+    
                     text_to_insert = ""
                     tags_to_apply = []
-
+    
                     for bet in filtered_bets:
                         bet_dict = dict(zip(column_names, bet))
                         
@@ -403,44 +409,45 @@ class BetFeed:
                         display_start_time = time.time()
                         text_segments = self.format_bet_text(bet_dict)
                         display_bet_time += time.time() - display_start_time
-
+    
                         for text, tag in text_segments:
                             start_idx = len(text_to_insert)
                             text_to_insert += text
                             end_idx = len(text_to_insert)
                             if tag:
                                 tags_to_apply.append((tag, start_idx, end_idx))
-                            
-                            # Add separator with its own tag
-                            sep_start_idx = len(text_to_insert)
-                            text_to_insert += separator
-                            sep_end_idx = len(text_to_insert)
-                            tags_to_apply.append(("bold", sep_start_idx, sep_end_idx))
-
+                        
+                        # Add separator with its own tag
+                        sep_start_idx = len(text_to_insert)
+                        text_to_insert += separator
+                        sep_end_idx = len(text_to_insert)
+                        tags_to_apply.append(("bold", sep_start_idx, sep_end_idx))
+    
                     # Measure time taken to insert all text at once
                     insert_start_time = time.time()
                     self.feed_text.insert('end', text_to_insert)
                     insert_separator_time += time.time() - insert_start_time
-
+    
                     # Apply tags
                     for tag, start_idx, end_idx in tags_to_apply:
                         start_idx = f"1.0 + {start_idx}c"
                         end_idx = f"1.0 + {end_idx}c"
                         self.feed_text.tag_add(tag, start_idx, end_idx)
-
+    
                     processing_time = time.time() - start_time
                     print(f"Data Processing Time: {processing_time:.4f} seconds")
                     print(f"JSON Conversion Time: {json_conversion_time:.4f} seconds")
                     print(f"Display Bet Time: {display_bet_time:.4f} seconds")
                     print(f"Insert Separator Time: {insert_separator_time:.4f} seconds")
-
+    
                     self.update_activity_frame(reporting_data, cursor, selected_date)
-
+    
                 self.feed_text.config(state="disabled")
-                conn.close()
             finally:
+                if conn:
+                    conn.close()
                 self.feed_lock.release()
-
+    
         # Run the fetch_and_display_bets function in a separate thread to avoid blocking the main thread
         threading.Thread(target=fetch_and_display_bets, daemon=True).start()
 
@@ -450,8 +457,10 @@ class BetFeed:
             wager_number = bet_dict.get('id', '')  # Retrieve wager number
             customer_reference = bet_dict.get('customer_ref', '')  # Retrieve customer reference
             sms_wager_text = bet_dict.get('text_request', '')  # Retrieve SMS wager text
-            text = f"{customer_reference} - {wager_number} SMS WAGER:\n{sms_wager_text}\n"
-            text_segments.append((text, "sms"))
+            text = f"SMS WAGER:\n{sms_wager_text}\n"
+            tag = f"customer_ref_{self.get_customer_tag(customer_reference)}"
+            text_segments.append((f"{customer_reference} {wager_number}", tag))
+            text_segments.append((f" - {text}", "black"))
             
         elif bet_dict['type'] == 'WAGER KNOCKBACK':
             customer_ref = bet_dict.get('customer_ref', '')  # Retrieve customer reference
@@ -459,7 +468,7 @@ class BetFeed:
             knockback_id = knockback_id.rsplit('-', 1)[0]
             knockback_details = bet_dict.get('selections', {})  # Retrieve knockback details
             time = bet_dict.get('time', '')  # Retrieve time
-
+    
             if isinstance(knockback_details, dict):
                 formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
                 formatted_selections = '\n   '.join([f' - {selection["- Meeting Name"]}, {selection["- Selection Name"]}, {selection["- Bet Price"]}' for selection in knockback_details.get('Selections', [])])
@@ -469,21 +478,16 @@ class BetFeed:
             else:
                 formatted_knockback_details = ''
                 formatted_selections = ''
-
+    
             formatted_knockback_details += '\n   ' + formatted_selections
             error_message = bet_dict.get('error_message', '')  # Retrieve error message
             if 'Maximum stake available' in error_message:
                 error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
             formatted_knockback_details = f"Error Message: {error_message}   {formatted_knockback_details}"
-            if customer_ref in self.vip_clients:
-                tag = "vip"
-            elif customer_ref in self.newreg_clients:
-                tag = "newreg"
-            else:
-                tag = None
             
-            text = f"{time} - {knockback_id} - {customer_ref} - WAGER KNOCKBACK:\n   {formatted_knockback_details}\n"
-            text_segments.append((text, tag))
+            tag = f"customer_ref_{self.get_customer_tag(customer_ref)}"
+            text_segments.append((f"{customer_ref} {time} - {knockback_id}", tag))
+            text_segments.append((f" - WAGER KNOCKBACK:\n   {formatted_knockback_details}\n", "black"))
         else:
             bet_no = bet_dict.get('id', '')  # Retrieve bet number
             details = bet_dict.get('selections', [])  # Retrieve selections
@@ -496,48 +500,55 @@ class BetFeed:
             customer_reference = bet_dict.get('customer_ref', '')  # Retrieve customer reference
             customer_risk_category = bet_dict.get('risk_category', '')  # Retrieve customer risk category
             bet_details = bet_dict.get('bet_details', '')  # Retrieve bet details
-            unit_stake = bet_dict.get('unit_stake', '')  # Retrieve unit stake
+            unit_stake = bet_dict.get('unit_stake', 0.0)  # Retrieve unit stake
             bet_type = bet_dict.get('bet_type', '')  # Retrieve bet type
             
-            if customer_reference in self.vip_clients:
-                tag = "vip"
-                self.norisk_clients.add(customer_reference)
-            elif customer_reference in self.newreg_clients:
-                tag = "newreg"
-                self.norisk_clients.add(customer_reference)
-            elif customer_risk_category and customer_risk_category != '-':
-                tag = "risk"
-                if customer_risk_category == 'M':
-                    self.m_clients.add(customer_reference)
-                elif customer_risk_category == 'W':
-                    self.w_clients.add(customer_reference)
-            else:
-                tag = None
-                self.norisk_clients.add(customer_reference)
-
             selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-
-            text = f"{timestamp} - {bet_no} | {customer_reference} ({customer_risk_category}) | {unit_stake} {bet_details}, {bet_type}:\n{selection}\n"
-            text_segments.append((text, tag))
-
-            if any(' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip() for sel in parsed_selections for om_sel in self.oddsmonkey_selections.items()):
-                text_segments.append(("\n ^ Oddsmonkey Selection Detected ^ \n", "Oddsmonkey"))
-
+        
+            # Format unit_stake as currency with 2 decimal points
+            formatted_unit_stake = f"£{unit_stake:.2f}"
+            
+            text = f"{formatted_unit_stake} {bet_details}, {bet_type}:\n{selection}\n"
+        
+            tag = f"customer_ref_{self.get_customer_tag(customer_reference, customer_risk_category)}"
+            text_segments.append((f"{customer_reference} ({customer_risk_category}) {timestamp} - {bet_no}", tag))
+            text_segments.append((f" - {text}", "black"))
+        
+            for sel in parsed_selections:
+                for om_sel in self.oddsmonkey_selections.items():
+                    if ' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip():
+                        oddsmonkey_text = f"Oddsmonkey Selection - {sel[0]} - {sel[1]}\n"
+                        text_segments.append((oddsmonkey_text, "oddsmonkey"))
+        
         return text_segments
     
+    def get_customer_tag(self, customer_reference, customer_risk_category=None):
+        if customer_reference in self.vip_clients:
+            return "vip"
+        elif customer_reference in self.newreg_clients:
+            return "newreg"
+        elif customer_risk_category and customer_risk_category != '-':
+            return "risk"
+        else:
+            return "default"
+    
     def initialize_text_tags(self):
-        self.feed_text.tag_configure("risk", foreground="#8f0000")
+        self.feed_text.tag_configure("risk", foreground="#ad0202")
         self.feed_text.tag_configure("newreg", foreground="purple")
         self.feed_text.tag_configure("vip", foreground="#009685")
         self.feed_text.tag_configure("sms", foreground="orange")
-        self.feed_text.tag_configure("Oddsmonkey", foreground="#ff00e6")
+        self.feed_text.tag_configure("oddsmonkey", foreground="#ff00e6")
         self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
         self.feed_text.tag_configure('center', justify='center')
         self.feed_text.tag_configure('bold', font=('Helvetica', 11, 'bold'), foreground='#d0cccc')
-        self.activity_text.tag_configure('red', foreground='#8f0000')
+        self.feed_text.tag_configure('customer_ref_vip', font=('Helvetica', 11, 'bold'), foreground='#009685')
+        self.feed_text.tag_configure('customer_ref_newreg', font=('Helvetica', 11, 'bold'), foreground='purple')
+        self.feed_text.tag_configure('customer_ref_risk', font=('Helvetica', 11, 'bold'), foreground='#ad0202')
+        self.feed_text.tag_configure('customer_ref_default', font=('Helvetica', 11, 'bold'), foreground='#000000')
+        self.feed_text.tag_configure('black', foreground='#000000')
+        self.activity_text.tag_configure('red', foreground='#ad0202')
         self.activity_text.tag_configure('green', foreground='#009685')
         self.activity_text.tag_configure('center', justify='center')
-
     def apply_filters(self):
         self.current_filters['username'] = '' if self.username_filter_entry.get() == 'Client' else self.username_filter_entry.get()
         self.current_filters['unit_stake'] = '' if self.unit_stake_filter_entry.get() == '£' else self.unit_stake_filter_entry.get()
@@ -805,11 +816,11 @@ class BetRuns:
                 ## Get Current date in dd/mm/yyyy format to search
                 current_date = datetime.now().strftime('%d/%m/%Y')
                 
-                cursor.execute("SELECT * FROM database WHERE date = ? LIMIT ?", (current_date, num_bets,))
+                cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
                 database_data = cursor.fetchall()
                 
                 if not database_data:
-                    self.update_ui_with_message("No bet data available for the selected date or the database can't be found.")
+                    self.update_ui_with_message("No bets found for the current date or database not found.")
                     return 
                 
                 selection_to_bets = defaultdict(list)
@@ -836,6 +847,7 @@ class BetRuns:
             finally:
                 conn.close()
                 self.bet_runs_lock.release()
+                print("Bet runs update complete.")
     
         # Run the fetch_and_process_bets function in a separate thread to avoid blocking the main thread
         threading.Thread(target=fetch_and_process_bets, daemon=True).start()
@@ -850,7 +862,7 @@ class BetRuns:
         vip_clients, newreg_clients, _, todays_oddsmonkey_selections, reporting_data = access_data()
         enhanced_places = reporting_data.get('enhanced_places', [])
         
-        self.runs_text.tag_configure("risk", foreground="#8f0000")
+        self.runs_text.tag_configure("risk", foreground="#ad0202")
         self.runs_text.tag_configure("vip", foreground="#009685")
         self.runs_text.tag_configure("newreg", foreground="purple")
         self.runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
@@ -3199,7 +3211,7 @@ class BetViewerApp:
         self.bet_runs = BetRuns(root)
         self.race_updation = RaceUpdaton(root)
         self.next3_panel = Next3Panel(root)
-        self.notebook = Notebook(root)
+        self.notebook = Notebook(root) # FACTORING IS DISABLED
         self.settings = Settings(root)
 
     def initialize_gspread(self):
@@ -3219,7 +3231,7 @@ class BetViewerApp:
         screenheight = self.root.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width - 10), 0)
         self.root.geometry(alignstr)
-        self.root.resizable(True, True)
+        self.root.resizable(False, False)
         self.import_logo()
         self.setup_menu_bar()
 
