@@ -315,12 +315,12 @@ class BetFeed:
     
             try:
                 print("Refreshing feed...")
-
+    
                 start_time = time.time()
                 conn, cursor = get_database()
                 database_time = time.time() - start_time
                 print(f"Database Connection Time: {database_time:.4f} seconds")
-
+    
                 if conn is None:
                     self.feed_text.config(state="normal")
                     self.feed_text.delete('1.0', tk.END)
@@ -396,7 +396,7 @@ class BetFeed:
                     display_bet_time = 0
                     insert_separator_time = 0
     
-                    text_to_insert = ""
+                    text_to_insert = []
                     tags_to_apply = []
     
                     for bet in filtered_bets:
@@ -414,21 +414,21 @@ class BetFeed:
                         display_bet_time += time.time() - display_start_time
     
                         for text, tag in text_segments:
-                            start_idx = len(text_to_insert)
-                            text_to_insert += text
-                            end_idx = len(text_to_insert)
+                            start_idx = sum(len(segment) for segment in text_to_insert)
+                            text_to_insert.append(text)
+                            end_idx = start_idx + len(text)
                             if tag:
                                 tags_to_apply.append((tag, start_idx, end_idx))
                         
                         # Add separator with its own tag
-                        sep_start_idx = len(text_to_insert)
-                        text_to_insert += separator
-                        sep_end_idx = len(text_to_insert)
+                        sep_start_idx = sum(len(segment) for segment in text_to_insert)
+                        text_to_insert.append(separator)
+                        sep_end_idx = sep_start_idx + len(separator)
                         tags_to_apply.append(("bold", sep_start_idx, sep_end_idx))
     
                     # Measure time taken to insert all text at once
                     insert_start_time = time.time()
-                    self.feed_text.insert('end', text_to_insert)
+                    self.feed_text.insert('end', ''.join(text_to_insert))
                     insert_separator_time += time.time() - insert_start_time
     
                     # Apply tags
@@ -3213,9 +3213,9 @@ class BetViewerApp:
         user_login()
         self.bet_feed = BetFeed(root)
         self.bet_runs = BetRuns(root)
-        self.race_updation = RaceUpdaton(root)
-        self.next3_panel = Next3Panel(root)
-        self.notebook = Notebook(root) # FACTORING IS DISABLED
+        #self.race_updation = RaceUpdaton(root)
+        #self.next3_panel = Next3Panel(root)
+        #self.notebook = Notebook(root) # FACTORING IS DISABLED
         self.settings = Settings(root)
 
     def initialize_gspread(self):
