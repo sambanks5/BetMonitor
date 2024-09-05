@@ -12,6 +12,7 @@
 import os
 import re
 import json
+import sqlite3
 import schedule
 import fasteners
 import time
@@ -38,7 +39,6 @@ from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 
 
-
 ####################################################################################
 ## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
 ####################################################################################
@@ -57,6 +57,7 @@ with open('src/creds.json') as f:
 pipedrive_api_token = creds['pipedrive_api_key']
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+LOCK_FILE_PATH = 'database.lock'  # Path for the lock file
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
@@ -83,90 +84,23 @@ def set_bet_folder_path():
         path = new_folder_path
 
 
-
 ####################################################################################
 ## SET BET DATABASE OR GENERATE A NEW BET DATABASE FOR THE DAY
 ####################################################################################
-def load_database(app):
+def load_database():
     print("\nLoading database")
-    date = datetime.now().strftime('%Y-%m-%d')
-    filename = f'database/{date}-wager_database.json'
-
-    try:
-        with open(filename, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        app.log_message('No database found. Creating a new one for ' + date)
-        return []
-
-
-
-####################################################################################
-## IDENTIFY BET TYPE AND PARSE TEXT ACCORDINGLY
-####################################################################################
-def identify_sport(selection):
-    print(f"Type of selection: {type(selection)}, Content: {selection}")
-
-    # Adjusted to handle both lists/tuples of selections and single selections within a tuple
-    if isinstance(selection, (list, tuple)):
-        print("Handling list or tuple format")
-        # Check if the first element is a list or tuple, indicating a list of selections
-        if all(isinstance(sel, (list, tuple)) for sel in selection):
-            for sel in selection:
-                if len(sel) > 0:
-                    selection_str = sel[0]  # Extract the selection name from the first element
-                    print(f"Processing selection: {selection_str}")
-                    if 'trap' in selection_str.lower():
-                        return 1  # Greyhound
-                    elif re.search(r'\d{2}:\d{2}', selection_str):
-                        return 0  # Horse
-                    else:
-                        return 2  # Other
-                else:
-                    print("Inner element is empty or not a list/tuple")
-                    return 3  # Default for unrecognized format within list/tuple
-        # New case: Handle single selection within a tuple
-        else:
-            selection_str = selection[0]  # Assuming the first element is the selection name
-            print(f"Processing single selection: {selection_str}")
-            if 'trap' in selection_str.lower():
-                return 1  # Greyhound
-            elif re.search(r'\d{2}:\d{2}', selection_str):
-                return 0  # Horse
-            else:
-                return 2  # Other
-            
-    elif isinstance(selection, dict):
-        print("Handling dictionary format")
-        if selection is None or '- Meeting Name' not in selection or selection['- Meeting Name'] is None:
-            print("Dictionary format not as expected")
-            return 3  # Default identifier for null values
-        if 'trap' in selection['- Selection Name'].lower():
-            return 1  # Greyhound
-        elif re.search(r'\d{2}:\d{2}', selection['- Meeting Name']):
-            return 0  # Horse
-        else:
-            return 2  # Other
-    else:
-        print("Selection format unrecognized")
-        return 3  # Default for unrecognized format
-
-def add_sport_to_selections(selections):
-    sports = set()
-    for selection in selections:
-        # Directly pass the selection to identify_sport without checking its type here
-        sport = identify_sport(selection)
-        sports.add(sport)
-    return list(sports)
+    conn = sqlite3.connect('wager_database.sqlite')
+    conn.execute('PRAGMA journal_mode=WAL;')  # Enable WAL mode
+    return conn
 
 def parse_file(file_path, app):
+    start_time = time.time()
     with open(file_path, 'r') as file:
         bet_text = file.read()
         bet_text_lower = bet_text.lower()
         is_sms = 'sms' in bet_text_lower
         is_bet = 'website' in bet_text_lower
         is_wageralert = 'knockback' in bet_text_lower
-
         if is_wageralert:
             details = parse_wageralert_details(bet_text)
             unique_knockback_id = f"{details['Knockback ID']}-{details['Time']}"
@@ -181,6 +115,7 @@ def parse_file(file_path, app):
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_sms:
@@ -197,6 +132,7 @@ def parse_file(file_path, app):
             }
             print('SMS Processed ' + wager_number)
             app.log_message(f'SMS Processed {wager_number}, {customer_reference}')
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_bet:
@@ -219,343 +155,118 @@ def parse_file(file_path, app):
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
+            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
         
-    print('File not processed ' + file_path + 'IF YOU SEE THIS TELL SAM - CODE 4')
+    print('File not processed ' + file_path + ' IF YOU SEE THIS TELL SAM - CODE 4')
+    print(f"parse_file took {time.time() - start_time} seconds")
     return {}
 
 def process_file(file_path):
-    database = load_database(app)
-
+    conn = load_database()
     bet_data = parse_file(file_path, app)
+    add_bet(conn, bet_data, app)
+    conn.close()
 
-    add_bet(database, bet_data, app)
+def add_bet(conn, bet, app, retries=5, delay=1):
+    print("Adding a bet to the database")
+    
+    # Create a lock file
+    with open(LOCK_FILE_PATH, 'w') as lock_file:
+        lock_file.write('locked')
 
-    save_database(database)
+    cursor = conn.cursor()
+    current_date = date.today().strftime("%d/%m/%Y")
+    
+    for attempt in range(retries):
+        try:
+            if bet['type'] == 'SMS WAGER':
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, text_request, date)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], json.dumps(bet['details']), current_date))
+            elif bet['type'] == 'WAGER KNOCKBACK':
+                details = bet['details']
+                selections = json.dumps(details.get('Selections', []))
+                requested_stake = float(details['Total Stake'].replace('£', '').replace(',', ''))
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date, json.dumps(bet['Sport'])))
+            elif bet['type'] == 'BET':
+                details = bet['details']
+                selections = json.dumps(details['selections'])
+                unit_stake = float(details['unit_stake'].replace('£', '').replace(',', ''))
+                total_stake = float(details['payment'].replace('£', '').replace(',', ''))
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date, json.dumps(bet['Sport'])))
+            conn.commit()
+            break  # Exit the retry loop if the operation is successful
+        except sqlite3.IntegrityError:
+            app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
+            break  # Exit the retry loop if the bet is already in the database
+        except sqlite3.OperationalError as e:
+            if 'database is locked' in str(e):
+                print(f"Database is locked, retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"SQLite error: {e}")
+                app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
+                break  # Exit the retry loop for other operational errors
+        except sqlite3.Error as e:
+            print(f"SQLite error: {e}")
+            app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
+            break  # Exit the retry loop for other errors
+        finally:
+        # Remove the lock file
+            if os.path.exists(LOCK_FILE_PATH):
+                os.remove(LOCK_FILE_PATH)
 
-
-
-####################################################################################
-## LOG NOTIFICATION FOR RG OR STAFF 
-####################################################################################
-def log_notification(message, important=False):
-    # Get the current time
-    time = datetime.now().strftime('%H:%M:%S')
-
-    file_lock = fasteners.InterProcessLock('notifications.lock')
-
-    try:
-        with file_lock:
-            with open('notifications.json', 'r') as f:
-                notifications = json.load(f)
-    except FileNotFoundError:
-        notifications = []
-    except json.JSONDecodeError:
-        notifications = []
-        
-    notifications.insert(0, {'time': time, 'message': message, 'important': important})
-
-    with file_lock:
-        with open('notifications.json', 'w') as f:
-            json.dump(notifications, f, indent=4)
-
-def rg_report_notification():
-    data = load_database(app)
-    user_scores = {}
-    virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
-
-    for bet in data:
-        wager_type = bet.get('type', '').lower()
-        if wager_type == 'bet':
-            details = bet.get('details', {})
-            bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
-            customer_reference = bet.get('customer_ref', '')
-            stake = float(details.get('unit_stake', '£0').replace('£', '').replace(',', ''))
-
-            if customer_reference not in user_scores:
-                user_scores[customer_reference] = {
-                    'bets': [],
-                    'odds': [],
-                    'total_bets': 0,
-                    'score': 0,
-                    'average_stake': 0,
-                    'max_stake': 0,
-                    'min_stake': float('inf'),
-                    'deposits': [],  # New field for storing deposits
-                    'min_deposit': None,  # Initialize to None
-                    'max_deposit': 0,
-                    'total_deposit': 0,
-                    'total_stake': 0,
-                    'virtual_bets': 0,
-                    'early_bets': 0,
-                    'scores': {
-                        'num_bets': 0,
-                        'long_period': 0,
-                        'stake_increase': 0,
-                        'high_total_stake': 0,
-                        'virtual_events': 0,
-                        'chasing_losses': 0,
-                        'early_hours': 0,
-                        'high_deposit_total': 0,
-                        'frequent_deposits': 0,
-                        'increasing_deposits': 0,
-                        'changed_payment_type': 0,
-                }
-            }
-
-            # Add the bet to the user's list of bets
-            user_scores[customer_reference]['bets'].append((bet_time.strftime("%H:%M:%S"), stake))
-
-            # Add the odds to the user's list of odds
-            selections = details.get('selections', [])
-            for selection in selections:
-                odds = selection[1]
-                if isinstance(odds, str):
-                    if odds.lower() == 'evs':
-                        odds = 2.0
-                    elif odds.lower() == 'sp':
-                        continue
+def identify_sport(selection):
+    if isinstance(selection, (list, tuple)):
+        if all(isinstance(sel, (list, tuple)) for sel in selection):
+            for sel in selection:
+                if len(sel) > 0:
+                    selection_str = sel[0]
+                    if 'trap' in selection_str.lower():
+                        return 1
+                    elif re.search(r'\d{2}:\d{2}', selection_str):
+                        return 0
                     else:
-                        try:
-                            odds = float(odds)
-                        except ValueError:
-                            continue
-                user_scores[customer_reference]['odds'].append(odds)
-                if any(event in selection[0] for event in virtual_events):
-                    user_scores[customer_reference]['virtual_bets'] += 1
-                    break
-
-            # Increase the total number of bets
-            user_scores[customer_reference]['total_bets'] += 1
-
-            # Update the total stake
-            user_scores[customer_reference]['total_stake'] += stake
-
-            # Skip this iteration if the user has placed fewer than 6 bets
-            if len(user_scores[customer_reference]['bets']) < 6:
-                continue
-
-            # Update the max and min stakes
-            user_scores[customer_reference]['max_stake'] = max(user_scores[customer_reference]['max_stake'], stake)
-            user_scores[customer_reference]['min_stake'] = min(user_scores[customer_reference]['min_stake'], stake)
-
-            # Calculate the new average stake
-            total_stake = sum(stake for _, stake in user_scores[customer_reference]['bets'])
-            user_scores[customer_reference]['average_stake'] = total_stake / len(user_scores[customer_reference]['bets'])
-
-            # Add a point if the user has placed more than 10 bets
-            if len(user_scores[customer_reference]['bets']) > 10 and user_scores[customer_reference]['scores']['num_bets'] == 0:
-                user_scores[customer_reference]['scores']['num_bets'] = 1
-
-            # Add a point if the user has been gambling for a long period of time
-            first_bet_time = datetime.strptime(user_scores[customer_reference]['bets'][0][0], "%H:%M:%S")
-            if (bet_time - first_bet_time).total_seconds() > 2 * 60 * 60 and user_scores[customer_reference]['scores']['long_period'] == 0:  # 2 hours
-                user_scores[customer_reference]['scores']['long_period'] = 1
-
-            # Add a point if the user has increased their stake over the average
-            half = len(user_scores[customer_reference]['bets']) // 2
-            first_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][:half]]
-            second_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][half:]]
-            if len(first_half_stakes) > 0 and len(second_half_stakes) > 0:
-                first_half_avg = sum(first_half_stakes) / len(first_half_stakes)
-                second_half_avg = sum(second_half_stakes) / len(second_half_stakes)
-                if second_half_avg > first_half_avg and user_scores[customer_reference]['scores']['stake_increase'] == 0:
-                    user_scores[customer_reference]['scores']['stake_increase'] = 1
-
-            # Add a point if the user's total stake is over £1000
-            if user_scores[customer_reference]['total_stake'] > 1000 and user_scores[customer_reference]['scores']['high_total_stake'] == 0:
-                user_scores[customer_reference]['scores']['high_total_stake'] = 1
-
-            # Add a point if the user has placed a bet on a virtual event
-            if user_scores[customer_reference]['virtual_bets'] > 0 and user_scores[customer_reference]['scores']['virtual_events'] == 0:
-                user_scores[customer_reference]['scores']['virtual_events'] = 1
-
-            # Check if the bet is placed during early hours
-            if 0 <= bet_time.hour < 7:
-                user_scores[customer_reference]['early_bets'] += 1
-
-
-    now_local = datetime.now(timezone('Europe/London'))
-    today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
-
-    # Load the existing messages from the JSON file for today's date
-    if os.path.exists(today_filename):
-        with open(today_filename, 'r') as f:
-            deposits = json.load(f)
-        
-    # Create a dictionary to store deposit information for each user
-    deposit_info = defaultdict(lambda: {'total': 0, 'times': [], 'amounts': [], 'types': set()})
-
-    # Iterate over the deposits
-    for deposit in deposits:
-        username = deposit['Username'].upper()
-        amount = float(deposit['Amount'])
-        time = datetime.strptime(deposit['Time'], "%Y-%m-%d %H:%M:%S")
-        type_ = deposit['Type']
-
-        # Check if the user exists in the user_scores dictionary
-        if username not in user_scores:
-            user_scores[username] = {
-                'bets': [],
-                'odds': [],
-                'total_bets': 0,
-                'score': 0,
-                'average_stake': 0,
-                'max_stake': 0,
-                'min_stake': float('inf'),
-                'deposits': [],  # New field for storing deposits
-                'min_deposit': None,  # Initialize to None
-                'max_deposit': 0,
-                'total_deposit': 0,
-                'total_stake': 0,
-                'virtual_bets': 0,
-                'early_bets': 0,
-                'scores': {
-                    'num_bets': 0,
-                    'long_period': 0,
-                    'stake_increase': 0,
-                    'high_total_stake': 0,
-                    'virtual_events': 0,
-                    'chasing_losses': 0,
-                    'early_hours': 0,
-                    'high_deposit_total': 0,
-                    'frequent_deposits': 0,
-                    'increasing_deposits': 0,
-                    'changed_payment_type': 0,
-                }
-            }
-
-        # Update the user's deposit information
-        deposit_info[username]['total'] += amount
-        deposit_info[username]['times'].append(time)
-        deposit_info[username]['amounts'].append(amount)
-        deposit_info[username]['types'].add(type_)
-
-        user_scores[username]['deposits'].append(amount)
-
-        # Check if the user's total deposit amount is over £500
-        if deposit_info[username]['total'] > 500:
-            if username not in user_scores:
-                user_scores[username] = {
-                    'scores': {
-                        'high_deposit_total': 0,
-                        # Initialize other fields as needed
-                    }
-                }
-            user_scores[username]['scores']['high_deposit_total'] = 1
-
-        # Check if the user has deposited more than 4 times in an hour
-        deposit_info[username]['times'].sort()
-        for i in range(4, len(deposit_info[username]['times'])):
-            if (deposit_info[username]['times'][i] - deposit_info[username]['times'][i-4]).total_seconds() <= 3600:
-                if username not in user_scores:
-                    user_scores[username] = {'scores': {'frequent_deposits': 0}}
-                user_scores[username]['scores']['frequent_deposits'] = 1
-                break
-
-        # Check if the user's deposits have increased more than twice
-        increases = 0
-        for i in range(2, len(deposit_info[username]['amounts'])):
-            if deposit_info[username]['amounts'][i] > deposit_info[username]['amounts'][i-1] > deposit_info[username]['amounts'][i-2]:
-                increases += 1
-        if increases >= 2:
-            if username not in user_scores:
-                user_scores[username] = {'scores': {'increasing_deposits': 0}}
-            user_scores[username]['scores']['increasing_deposits'] = 1
-
-        # Check if the user has changed payment type
-        if len(deposit_info[username]['types']) > 1:
-            if username not in user_scores:
-                user_scores[username] = {'scores': {'changed_payment_type': 0}}
-            user_scores[username]['scores']['changed_payment_type'] = 1
-
-    for username, info in user_scores.items():
-        if info['deposits']:  # Check if the list is not empty
-            info['min_deposit'] = min(info['deposits'])
-            info['max_deposit'] = max(info['deposits'])
+                        return 2
+                else:
+                    print("Inner element is empty or not a list/tuple")
+                    return 3
         else:
-            info['min_deposit'] = 0
-            info['max_deposit'] = 0
-        info['total_deposit'] = deposit_info[username]['total']
+            selection_str = selection[0]
+            if 'trap' in selection_str.lower():
+                return 1
+            elif re.search(r'\d{2}:\d{2}', selection_str):
+                return 0
+            else:
+                return 2
+            
+    elif isinstance(selection, dict):
+        if selection is None or '- Meeting Name' not in selection or selection['- Meeting Name'] is None:
+            return 3
+        if 'trap' in selection['- Selection Name'].lower():
+            return 1
+        elif re.search(r'\d{2}:\d{2}', selection['- Meeting Name']):
+            return 0
+        else:
+            return 2
+    else:
+        return 3
 
+def add_sport_to_selections(selections):
+    sports = set()
+    for selection in selections:
+        sport = identify_sport(selection)
+        sports.add(sport)
+    return list(sports)
 
-    # After processing all bets, calculate the early hours score
-    for user, scores in user_scores.items():
-        if scores['early_bets'] > 3:
-            scores['scores']['early_hours'] = 1
-
-    # After processing all bets, calculate the chasing losses score
-    for user, scores in user_scores.items():
-        num_bets = len(scores['bets'])
-        if num_bets >= 5:  # Only calculate if the user has placed at least 5 bets
-            split_index = int(num_bets * 0.7)  # Calculate the index to split at 70%
-            early_odds = scores['odds'][:split_index]
-            late_odds = scores['odds'][split_index:]
-            if early_odds and late_odds:  # Check that both lists are not empty
-                early_avg = sum(early_odds) / len(early_odds)
-                late_avg = sum(late_odds) / len(late_odds)
-                if late_avg - early_avg > 4:  # Set the threshold as needed
-                    scores['scores']['chasing_losses'] = 1
-
-    high_risk_users = []
-
-    for user, scores in user_scores.items():
-        scores['score'] = sum(scores['scores'].values())
-        if scores['score'] >= 6:
-            high_risk_users.append(user)
-
-    if high_risk_users:
-        log_notification(f">5 RG score: {', '.join(high_risk_users)}", True)
-
-def staff_report_notification():
-    global USER_NAMES
-    global notified_users 
-    staff_updates_today = Counter()
-    today = datetime.now().date()
-
-    log_files = os.listdir('logs/updatelogs')
-    log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
-
-    # Read the log file for today
-    for log_file in log_files:
-        file_date = datetime.fromtimestamp(os.path.getmtime('logs/updatelogs/' + log_file)).date()
-        if file_date == today:
-            with open('logs/updatelogs/' + log_file, 'r') as file:
-                lines = file.readlines()
-
-            for line in lines:
-                if line.strip() == '':
-                    continue
-
-                parts = line.strip().split(' - ')
-
-                if len(parts) == 2:
-                    time, staff_initials = parts
-                    staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                    staff_updates_today[staff_name] += 1
-
-    for user, count in staff_updates_today.items():
-        if count >= 50 and user not in notified_users:
-            log_notification(f"{user} has {count} updates!", True)
-            notified_users.add(user)
-
-def activity_report_notification():
-    data = load_database(app)
-    bet_count = len([bet for bet in data if bet['type'] == 'BET'])
-    knockback_count = len([bet for bet in data if bet['type'] == 'WAGER KNOCKBACK'])
-
-    thresholds = {
-        250: {'count': bet_count, 'flag': 'bet_count_250', 'message': 'bets taken'},
-        500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
-        750: {'count': bet_count, 'flag': 'bet_count_750', 'message': 'bets taken'},
-        1000: {'count': bet_count, 'flag': 'bet_count_1000', 'message': 'bets taken'},
-        250: {'count': knockback_count, 'flag': 'knockback_count_250', 'message': 'knockbacks'}
-    }
-
-    for threshold, data in thresholds.items():
-        if data['count'] == threshold and not globals()[data['flag']]:
-            log_notification(f"{data['count']} {data['message']}", True)
-            globals()[data['flag']] = True
 
 
 ####################################################################################
@@ -721,36 +432,88 @@ def parse_sms_details(bet_text):
 
 
 ####################################################################################
-## ADD BET TO DATABASE, SAVE DATABASE, ORDER DATABASE
+## LOG NOTIFICATION FOR RG OR STAFF 
 ####################################################################################
-def add_bet(database, bet, app):
-    print("Adding a bet to the database")
-    if not any(bet['id'] == existing_bet['id'] for existing_bet in database):
-        database.append(bet)
-    else:
-        app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
+def log_notification(message, important=False):
+    # Get the current time
+    time = datetime.now().strftime('%H:%M:%S')
 
-def save_database(database):
-    print("Saving database")
-    date = datetime.now().strftime('%Y-%m-%d')
+    file_lock = fasteners.InterProcessLock('notifications.lock')
 
-    filename = f'database/{date}-wager_database.json'
+    try:
+        with file_lock:
+            with open('notifications.json', 'r') as f:
+                notifications = json.load(f)
+    except FileNotFoundError:
+        notifications = []
+    except json.JSONDecodeError:
+        notifications = []
+        
+    notifications.insert(0, {'time': time, 'message': message, 'important': important})
+
+    with file_lock:
+        with open('notifications.json', 'w') as f:
+            json.dump(notifications, f, indent=4)
+
+
+def staff_report_notification():
+    global USER_NAMES
+    global notified_users 
+    staff_updates_today = Counter()
+    today = datetime.now().date()
+
+    log_files = os.listdir('logs/updatelogs')
+    log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
+
+    # Read the log file for today
+    for log_file in log_files:
+        file_date = datetime.fromtimestamp(os.path.getmtime('logs/updatelogs/' + log_file)).date()
+        if file_date == today:
+            with open('logs/updatelogs/' + log_file, 'r') as file:
+                lines = file.readlines()
+
+            for line in lines:
+                if line.strip() == '':
+                    continue
+
+                parts = line.strip().split(' - ')
+
+                if len(parts) == 2:
+                    time, staff_initials = parts
+                    staff_name = USER_NAMES.get(staff_initials, staff_initials)
+                    staff_updates_today[staff_name] += 1
+
+    for user, count in staff_updates_today.items():
+        if count >= 50 and user not in notified_users:
+            log_notification(f"{user} has {count} updates!", True)
+            notified_users.add(user)
+
+def activity_report_notification():
+    conn = load_database()
+    cursor = conn.cursor()
+    today = date.today().strftime("%d/%m/%Y")
     
-    with open(filename, 'w') as f:
-        json.dump(database, f, indent=4)
+    # Query today's records
+    cursor.execute("SELECT * FROM database WHERE date = ?", (today,))
+    todays_records = cursor.fetchall()
     
-    order_bets(filename)
+    bet_count = len([bet for bet in todays_records if bet[5] == 'BET'])
+    knockback_count = len([bet for bet in todays_records if bet[5] == 'WAGER KNOCKBACK'])
 
-def order_bets(filename):
-    print("Ordering bets")
-    with open(filename, 'r') as f:
-        data = json.load(f)
+    thresholds = {
+        250: {'count': bet_count, 'flag': 'bet_count_250', 'message': 'bets taken'},
+        500: {'count': bet_count, 'flag': 'bet_count_500', 'message': 'bets taken'},
+        750: {'count': bet_count, 'flag': 'bet_count_750', 'message': 'bets taken'},
+        1000: {'count': bet_count, 'flag': 'bet_count_1000', 'message': 'bets taken'},
+        250: {'count': knockback_count, 'flag': 'knockback_count_250', 'message': 'knockbacks'}
+    }
 
-    data_sorted = sorted(data, key=lambda x: x['time'])
+    for threshold, data in thresholds.items():
+        if data['count'] == threshold and not globals().get(data['flag'], False):
+            log_notification(f"{data['count']} {data['message']}", True)
+            globals()[data['flag']] = True
 
-    with open(filename, 'w') as f:
-        json.dump(data_sorted, f, indent=4)
-
+    conn.close()
 
 
 ####################################################################################
@@ -770,7 +533,7 @@ def reprocess_file(app):
 
 def process_existing_bets(directory, app):
     log_notification(f'Reprocessing bets', True)
-    database = load_database(app)
+    database = load_database()
 
     files = os.listdir(directory)
 
@@ -784,9 +547,9 @@ def process_existing_bets(directory, app):
         add_bet(database, bet, app)
         print("Added a bet to JSON")
 
-    save_database(database)
     app.log_message('Bet processing complete. Waiting for new files...\n')
     log_notification(f'Finished reprocessing', True)
+    database.close()
 
 
 
@@ -1633,9 +1396,9 @@ def run_get_deposit_data(app):
     get_deposit_data_thread = threading.Thread(target=get_deposits, args=(app,))
     get_deposit_data_thread.start()
 
-def run_find_rg_issues():
-    find_rg_issues_thread = threading.Thread(target=rg_report_notification)
-    find_rg_issues_thread.start()
+# def run_find_rg_issues():
+#     find_rg_issues_thread = threading.Thread(target=rg_report_notification)
+#     find_rg_issues_thread.start()
 
 def run_staff_report_notification():
     staff_report_thread = threading.Thread(target=staff_report_notification)
@@ -1644,7 +1407,6 @@ def run_staff_report_notification():
 def run_activity_report_notification():
     activity_report_thread = threading.Thread(target=activity_report_notification)
     activity_report_thread.start()
-
 
 def clear_processed():
     global processed_races, processed_closures, bet_count_1000, bet_count_500, knockback_count_250, notified_users
@@ -1717,7 +1479,7 @@ class Application(tk.Tk):
             path = new_folder_path
 
     def reprocess(self):
-        reprocess_file(self)
+        #reprocess_file(self)
         process_thread = threading.Thread(target=process_existing_bets, args=(path, self))
         process_thread.start()
 
@@ -1749,18 +1511,18 @@ class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         global last_processed_time
         if not os.path.isdir(event.src_path):
-            max_retries = 5
+            max_retries = 6  ## In case it takes a while to write the bet text 
             for attempt in range(max_retries):
                 try:
                     process_file(event.src_path)
-                    last_processed_time = datetime.now()  
-                    break 
+                    last_processed_time = datetime.now()
+                    break
                 except Exception as e:
-                    print(f"An error occurred while processing the file {event.src_path}: {e}")
-        else: 
-            print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
-
-
+                    print(f"Attempt {attempt + 1} - An error occurred while processing the file {event.src_path}: {e}")
+            else:
+                print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
+        else:
+            print(f"Directory created: {event.src_path}, skipping processing.")
 
 ####################################################################################
 ## MAIN FUNCTIONS CONTAINING MAIN LOOP
@@ -1773,28 +1535,29 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
-    run_get_data(app)
-    run_get_deposit_data(app)
-    run_update_todays_oddsmonkey_selections()
-    check_closures_and_race_times()
-    fetch_and_print_new_events()
-    find_stale_antepost_events()
+    #run_get_data(app)
+    #run_get_deposit_data(app)
+    #run_update_todays_oddsmonkey_selections()
+    #check_closures_and_race_times()
+    #fetch_and_print_new_events()
+    #find_stale_antepost_events()
+    #run_activity_report_notification()
 
-    schedule.every(2).minutes.do(run_get_data, app)
+    #schedule.every(2).minutes.do(run_get_data, app)
 
-    schedule.every(10).minutes.do(run_get_deposit_data, app)
-    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    #schedule.every(10).minutes.do(run_get_deposit_data, app)
+    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
-    schedule.every(50).seconds.do(check_closures_and_race_times)
-    schedule.every(10).minutes.do(fetch_and_print_new_events)
-    schedule.every(3).hours.do(run_find_rg_issues)
-    schedule.every(1).minute.do(run_staff_report_notification)
-    schedule.every(1).minute.do(run_activity_report_notification)
+    #schedule.every(50).seconds.do(check_closures_and_race_times)
+    #schedule.every(10).minutes.do(fetch_and_print_new_events)
+    #schedule.every(3).hours.do(run_find_rg_issues)
+    #schedule.every(1).minute.do(run_staff_report_notification)
+    #schedule.every(1).minute.do(run_activity_report_notification)
 
-    schedule.every().day.at("23:57").do(run_get_deposit_data, app)
-    schedule.every().day.at("17:00").do(log_deposit_summary)
-    schedule.every().day.at("13:00").do(find_stale_antepost_events)
-    schedule.every().day.at("00:05").do(clear_processed)
+    #schedule.every().day.at("23:57").do(run_get_deposit_data, app)
+    #schedule.every().day.at("17:00").do(log_deposit_summary)
+    #schedule.every().day.at("13:00").do(find_stale_antepost_events)
+    #schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
         # Run pending tasks
