@@ -57,6 +57,7 @@ with open('src/creds.json') as f:
 pipedrive_api_token = creds['pipedrive_api_key']
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+LOCK_FILE_PATH = 'database.lock'  # Path for the lock file
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
@@ -89,6 +90,7 @@ def set_bet_folder_path():
 def load_database():
     print("\nLoading database")
     conn = sqlite3.connect('wager_database.sqlite')
+    conn.execute('PRAGMA journal_mode=WAL;')  # Enable WAL mode
     return conn
 
 def parse_file(file_path, app):
@@ -166,41 +168,61 @@ def process_file(file_path):
     add_bet(conn, bet_data, app)
     conn.close()
 
-def add_bet(conn, bet, app):
+def add_bet(conn, bet, app, retries=5, delay=1):
     print("Adding a bet to the database")
-    cursor = conn.cursor()
     
+    # Create a lock file
+    with open(LOCK_FILE_PATH, 'w') as lock_file:
+        lock_file.write('locked')
+
+    cursor = conn.cursor()
     current_date = date.today().strftime("%d/%m/%Y")
     
-    try:
-        if bet['type'] == 'SMS WAGER':
-            cursor.execute('''
-                INSERT INTO database (id, time, type, customer_ref, text_request, date)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], json.dumps(bet['details']), current_date))
-        elif bet['type'] == 'WAGER KNOCKBACK':
-            details = bet['details']
-            selections = json.dumps(details.get('Selections', []))
-            requested_stake = float(details['Total Stake'].replace('£', '').replace(',', ''))
-            cursor.execute('''
-                INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date, json.dumps(bet['Sport'])))
-        elif bet['type'] == 'BET':
-            details = bet['details']
-            selections = json.dumps(details['selections'])
-            unit_stake = float(details['unit_stake'].replace('£', '').replace(',', ''))
-            total_stake = float(details['payment'].replace('£', '').replace(',', ''))
-            cursor.execute('''
-                INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date, json.dumps(bet['Sport'])))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
-    except sqlite3.Error as e:
-        print(f"SQLite error: {e}")
-        app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
+    for attempt in range(retries):
+        try:
+            if bet['type'] == 'SMS WAGER':
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, text_request, date)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], json.dumps(bet['details']), current_date))
+            elif bet['type'] == 'WAGER KNOCKBACK':
+                details = bet['details']
+                selections = json.dumps(details.get('Selections', []))
+                requested_stake = float(details['Total Stake'].replace('£', '').replace(',', ''))
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date, json.dumps(bet['Sport'])))
+            elif bet['type'] == 'BET':
+                details = bet['details']
+                selections = json.dumps(details['selections'])
+                unit_stake = float(details['unit_stake'].replace('£', '').replace(',', ''))
+                total_stake = float(details['payment'].replace('£', '').replace(',', ''))
+                cursor.execute('''
+                    INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date, json.dumps(bet['Sport'])))
+            conn.commit()
+            break  # Exit the retry loop if the operation is successful
+        except sqlite3.IntegrityError:
+            app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
+            break  # Exit the retry loop if the bet is already in the database
+        except sqlite3.OperationalError as e:
+            if 'database is locked' in str(e):
+                print(f"Database is locked, retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"SQLite error: {e}")
+                app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
+                break  # Exit the retry loop for other operational errors
+        except sqlite3.Error as e:
+            print(f"SQLite error: {e}")
+            app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
+            break  # Exit the retry loop for other errors
+        finally:
+        # Remove the lock file
+            if os.path.exists(LOCK_FILE_PATH):
+                os.remove(LOCK_FILE_PATH)
 
 def identify_sport(selection):
     if isinstance(selection, (list, tuple)):
