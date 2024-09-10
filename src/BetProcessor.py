@@ -58,6 +58,7 @@ pipedrive_api_token = creds['pipedrive_api_key']
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 LOCK_FILE_PATH = 'database.lock'  # Path for the lock file
+
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
@@ -67,7 +68,7 @@ path = 'F:\BWW\Export'
 processed_races = set()
 processed_closures = set()
 previously_seen_events = set()
-notified_users = set()
+notified_users = {}
 bet_count_500 = False
 bet_count_750 = False
 bet_count_1000 = False
@@ -95,6 +96,14 @@ def load_database():
 
 def parse_file(file_path, app):
     start_time = time.time()
+    try:
+        # Get the file creation date
+        creation_time = os.path.getctime(file_path)
+        creation_date_str = datetime.fromtimestamp(creation_time).strftime('%d/%m/%Y')
+    except Exception as e:
+        print(f"Error getting file creation date: {e}")
+        creation_date_str = date.today().strftime('%d/%m/%Y')
+
     with open(file_path, 'r') as file:
         bet_text = file.read()
         bet_text_lower = bet_text.lower()
@@ -112,6 +121,7 @@ def parse_file(file_path, app):
                 'customer_ref': details['Customer Ref'],
                 'details': details,
                 'Sport': sports,
+                'date': creation_date_str
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
@@ -119,7 +129,6 @@ def parse_file(file_path, app):
             return bet_info
 
         elif is_sms:
-            creation_time = os.path.getctime(file_path)
             creation_time_str = datetime.fromtimestamp(creation_time).strftime('%H:%M:%S')
             wager_number, customer_reference, _, sms_wager_text = parse_sms_details(bet_text)
             
@@ -128,7 +137,8 @@ def parse_file(file_path, app):
                 'id': wager_number,
                 'type': 'SMS WAGER',
                 'customer_ref': customer_reference,
-                'details': sms_wager_text
+                'details': sms_wager_text,
+                'date': creation_date_str
             }
             print('SMS Processed ' + wager_number)
             app.log_message(f'SMS Processed {wager_number}, {customer_reference}')
@@ -152,6 +162,7 @@ def parse_file(file_path, app):
                     'bet_type': bet_type
                 },
                 'Sport': sports,
+                'date': creation_date_str
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
@@ -176,7 +187,6 @@ def add_bet(conn, bet, app, retries=5, delay=1):
         lock_file.write('locked')
 
     cursor = conn.cursor()
-    current_date = date.today().strftime("%d/%m/%Y")
     
     for attempt in range(retries):
         try:
@@ -184,7 +194,7 @@ def add_bet(conn, bet, app, retries=5, delay=1):
                 cursor.execute('''
                     INSERT INTO database (id, time, type, customer_ref, text_request, date)
                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], json.dumps(bet['details']), current_date))
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], json.dumps(bet['details']), bet['date']))
             elif bet['type'] == 'WAGER KNOCKBACK':
                 details = bet['details']
                 selections = json.dumps(details.get('Selections', []))
@@ -192,7 +202,7 @@ def add_bet(conn, bet, app, retries=5, delay=1):
                 cursor.execute('''
                     INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, current_date, json.dumps(bet['Sport'])))
+                ''', (bet['id'], bet['time'], bet['type'], details['Customer Ref'], details['Error Message'], details['Wager Name'], requested_stake, selections, bet['date'], json.dumps(bet['Sport'])))
             elif bet['type'] == 'BET':
                 details = bet['details']
                 selections = json.dumps(details['selections'])
@@ -201,7 +211,7 @@ def add_bet(conn, bet, app, retries=5, delay=1):
                 cursor.execute('''
                     INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], current_date, json.dumps(bet['Sport'])))
+                ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], bet['date'], json.dumps(bet['Sport'])))
             conn.commit()
             break  # Exit the retry loop if the operation is successful
         except sqlite3.IntegrityError:
@@ -220,7 +230,7 @@ def add_bet(conn, bet, app, retries=5, delay=1):
             app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
             break  # Exit the retry loop for other errors
         finally:
-        # Remove the lock file
+            # Remove the lock file
             if os.path.exists(LOCK_FILE_PATH):
                 os.remove(LOCK_FILE_PATH)
 
@@ -458,10 +468,14 @@ def log_notification(message, important=False):
 
 def staff_report_notification():
     global USER_NAMES
-    global notified_users 
+    global notified_users
+
+    # Dictionary to track notification status for each user
+    if 'notified_users' not in globals():
+        notified_users = {}
+
     staff_updates_today = Counter()
     today = datetime.now().date()
-
     log_files = os.listdir('logs/updatelogs')
     log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
 
@@ -484,16 +498,21 @@ def staff_report_notification():
                     staff_updates_today[staff_name] += 1
 
     for user, count in staff_updates_today.items():
-        if count >= 50 and user not in notified_users:
+        if user not in notified_users:
+            notified_users[user] = {'50': False, '100': False}
+
+        if count >= 100 and not notified_users[user]['100']:
             log_notification(f"{user} has {count} updates!", True)
-            notified_users.add(user)
+            notified_users[user]['100'] = True
+        elif count >= 50 and not notified_users[user]['50']:
+            log_notification(f"{user} has {count} updates!", True)
+            notified_users[user]['50'] = True
 
 def activity_report_notification():
     conn = load_database()
     cursor = conn.cursor()
     today = date.today().strftime("%d/%m/%Y")
     
-    # Query today's records
     cursor.execute("SELECT * FROM database WHERE date = ?", (today,))
     todays_records = cursor.fetchall()
     
@@ -526,7 +545,7 @@ def reprocess_file(app):
     filename = f'database/{date}-wager_database.json'
 
     if os.path.exists(filename):
-        os.remove(filename)
+        #os.remove(filename)
         app.log_message('Existing database deleted. Will begin to process todays bets....\n\n')
     else:
         app.log_message('No existing database found. Will begin processing todays bets...\n\n')
@@ -732,9 +751,11 @@ def find_stale_antepost_events():
                 stale_events.append(event["eventName"])
 
     if stale_antepost_events:
-        log_notification(f"{stale_antepost_events} may need updating", True)
+        events_str = ', '.join(stale_antepost_events)
+        log_notification(f"{events_str} may need updating", True)
     if stale_events:
-        log_notification(f"{stale_events} may need updating", True)
+        events_str = ', '.join(stale_events)
+        log_notification(f"{events_str} may need updating", True)
 
 
 ####################################################################################
@@ -1396,10 +1417,6 @@ def run_get_deposit_data(app):
     get_deposit_data_thread = threading.Thread(target=get_deposits, args=(app,))
     get_deposit_data_thread.start()
 
-# def run_find_rg_issues():
-#     find_rg_issues_thread = threading.Thread(target=rg_report_notification)
-#     find_rg_issues_thread.start()
-
 def run_staff_report_notification():
     staff_report_thread = threading.Thread(target=staff_report_notification)
     staff_report_thread.start()
@@ -1535,29 +1552,33 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
-    #run_get_data(app)
-    #run_get_deposit_data(app)
-    #run_update_todays_oddsmonkey_selections()
-    #check_closures_and_race_times()
-    #fetch_and_print_new_events()
-    #find_stale_antepost_events()
-    #run_activity_report_notification()
 
-    #schedule.every(2).minutes.do(run_get_data, app)
+    run_get_data(app)
+    schedule.every(2).minutes.do(run_get_data, app)
 
-    #schedule.every(10).minutes.do(run_get_deposit_data, app)
-    #schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    run_get_deposit_data(app)
+    schedule.every(10).minutes.do(run_get_deposit_data, app)
+    schedule.every().day.at("23:57").do(run_get_deposit_data, app)
 
-    #schedule.every(50).seconds.do(check_closures_and_race_times)
-    #schedule.every(10).minutes.do(fetch_and_print_new_events)
-    #schedule.every(3).hours.do(run_find_rg_issues)
-    #schedule.every(1).minute.do(run_staff_report_notification)
-    #schedule.every(1).minute.do(run_activity_report_notification)
+    run_update_todays_oddsmonkey_selections()
+    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
 
-    #schedule.every().day.at("23:57").do(run_get_deposit_data, app)
-    #schedule.every().day.at("17:00").do(log_deposit_summary)
-    #schedule.every().day.at("13:00").do(find_stale_antepost_events)
-    #schedule.every().day.at("00:05").do(clear_processed)
+    check_closures_and_race_times()
+    schedule.every(50).seconds.do(check_closures_and_race_times)
+
+    fetch_and_print_new_events()
+    schedule.every(10).minutes.do(fetch_and_print_new_events)
+
+    find_stale_antepost_events()
+    schedule.every().day.at("13:00").do(find_stale_antepost_events)
+
+    run_activity_report_notification()
+    schedule.every(1).minute.do(run_activity_report_notification)
+
+    schedule.every(1).minute.do(run_staff_report_notification)
+
+    schedule.every().day.at("17:00").do(log_deposit_summary)
+    schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
         # Run pending tasks
@@ -1568,6 +1589,7 @@ def main(app):
             set_bet_folder_path() 
             if not os.path.exists(path):
                 continue  
+
         if not observer_started or datetime.now() - last_processed_time > timedelta(minutes=3):
             if observer_started:
                 observer.stop()

@@ -36,16 +36,20 @@ from tkinter.ttk import *
 from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
-# Global variable for the database path F:\\GB Bet Monitor\\
-DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
+# Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
+DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
+
+
 LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
 LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
-NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
+
+
 CACHE_UPDATE_INTERVAL = 60 * 1  # Update cache every 1 minutes
 
 # FOR TESTING - UNCOMMENT
-#NETWORK_PATH_PREFIX = ''
-#DATABASE_PATH = 'wager_database.sqlite'
+NETWORK_PATH_PREFIX = ''
+DATABASE_PATH = 'wager_database.sqlite'
 
 user = ""
 USER_NAMES = {
@@ -121,8 +125,6 @@ def update_local_cache():
 
 def is_cache_up_to_date():
     try:
-        # Implement logic to check if the cache is up-to-date
-        # For example, compare the modification times of the network and local databases
         if not os.path.exists(LOCAL_DATABASE_PATH):
             return False
         network_mtime = os.path.getmtime(DATABASE_PATH)
@@ -141,7 +143,7 @@ def periodic_cache_update():
             print(f"Error in periodic cache update: {e}")
         time.sleep(CACHE_UPDATE_INTERVAL)
 
-# Start the periodic cache update in a background thread
+## Ugly but works
 threading.Thread(target=periodic_cache_update, daemon=True).start()
 
 def user_login():
@@ -406,7 +408,21 @@ class BetFeed:
             try:
                 print("Refreshing feed...")
                 self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
-                conn, cursor = get_database()
+                
+                retry_attempts = 2
+                for attempt in range(retry_attempts):
+                    conn, cursor = get_database()
+                    if conn is not None:
+                        break
+                    elif attempt < retry_attempts - 1:
+                        print("Error finding bets. Retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        self.feed_text.config(state="normal")
+                        self.feed_text.delete('1.0', tk.END)
+                        self.feed_text.insert('end', "Error finding bets. Please try refreshing.", "center")
+                        self.feed_text.config(state="disabled")
+                        return
     
                 selected_date = self.date_entry.get_date().strftime('%d/%m/%Y')
     
@@ -415,16 +431,7 @@ class BetFeed:
                     self.last_update_time = None
                     self.previous_selected_date = selected_date
     
-                activity_frame_time = time.time()
                 self.update_activity_frame(reporting_data, cursor, selected_date)
-                activity_frame_processing_time = time.time() - activity_frame_time
-    
-                if conn is None:
-                    self.feed_text.config(state="normal")
-                    self.feed_text.delete('1.0', tk.END)
-                    self.feed_text.insert('end', "No bets found for the current date or database not found.", "notices")
-                    self.feed_text.config(state="disabled")
-                    return 
     
                 # Check for new bets since the last update
                 filters_active = any([
@@ -439,7 +446,6 @@ class BetFeed:
                 if not filters_active and self.last_update_time and selected_date == datetime.today().strftime('%d/%m/%Y'):
                     cursor.execute("SELECT MAX(time) FROM database WHERE date = ?", (selected_date,))
                     latest_time = cursor.fetchone()[0]
-                    print(latest_time, self.last_update_time)
                     if latest_time <= self.last_update_time:
                         print("No new bets since the last update. Skipping this update.")
                         return
@@ -505,11 +511,6 @@ class BetFeed:
                     if self.limit_bets_var.get():
                         filtered_bets = filtered_bets[:250]
     
-                    start_time = time.time()
-                    json_conversion_time = 0
-                    display_bet_time = 0
-                    insert_separator_time = 0
-    
                     text_to_insert = []
                     tags_to_apply = []
     
@@ -518,14 +519,10 @@ class BetFeed:
     
                         # Measure time taken to convert JSON strings to dictionaries
                         if bet_dict['type'] != 'SMS WAGER' and bet_dict['selections'] is not None:
-                            json_start_time = time.time()
                             bet_dict['selections'] = json.loads(bet_dict['selections'])  # Convert JSON string to dictionary
-                            json_conversion_time += time.time() - json_start_time
     
                         # Measure time taken to call self.display_bet
-                        display_start_time = time.time()
                         text_segments = self.format_bet_text(bet_dict)
-                        display_bet_time += time.time() - display_start_time
     
                         for text, tag in text_segments:
                             start_idx = sum(len(segment) for segment in text_to_insert)
@@ -541,9 +538,7 @@ class BetFeed:
                         tags_to_apply.append(("bold", sep_start_idx, sep_end_idx))
     
                     # Measure time taken to insert all text at once
-                    insert_start_time = time.time()
                     self.feed_text.insert('end', ''.join(text_to_insert))
-                    insert_separator_time += time.time() - insert_start_time
     
                     # Optimize tag application by combining adjacent ranges with the same tag
                     optimized_tags = []
@@ -557,22 +552,12 @@ class BetFeed:
                                 current_tag, current_start, current_end = tag, start, end
                         optimized_tags.append((current_tag, current_start, current_end))
     
-                    tags_start_time = time.time()
                     # Apply tags
                     for tag, start_idx, end_idx in optimized_tags:
                         start_idx = f"1.0 + {start_idx}c"
                         end_idx = f"1.0 + {end_idx}c"
                         self.feed_text.tag_add(tag, start_idx, end_idx)
-                    tags_processing_time = time.time() - tags_start_time
     
-                    total_processing_time = time.time() - start_time
-    
-                    print(f"Total Data Processing Time: {total_processing_time:.4f} seconds")
-                    print(f"JSON Conversion Time: {json_conversion_time:.4f} seconds")
-                    print(f"Display Bet Time: {display_bet_time:.4f} seconds")
-                    print(f"Insert Separator Time: {insert_separator_time:.4f} seconds")
-                    print(f"Tags Processing Time: {tags_processing_time:.4f} seconds")
-                    print(f"Activity Frame Processing Time: {activity_frame_processing_time:.4f} seconds")
     
                 self.feed_text.config(state="disabled")
     
@@ -599,60 +584,73 @@ class BetFeed:
             today_date_str = datetime.today().strftime('%d/%m/%Y')
             # Determine if the selected date is today
             is_today = selected_date_str == today_date_str
-
-            # Fetch counts for the current and previous day in a single query
-            query = """
-                SELECT 
-                    (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND (? IS NULL OR time <= ?)) AS current_bets,
-                    (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND (? IS NULL OR time <= ?)) AS previous_bets,
-                    (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND (? IS NULL OR time <= ?)) AS current_knockbacks,
-                    (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND (? IS NULL OR time <= ?)) AS previous_knockbacks,
-                    (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (? IS NULL OR time <= ?)) AS current_total_unique_clients,
-                    (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M' AND (? IS NULL OR time <= ?)) AS current_unique_m_clients,
-                    (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W' AND (? IS NULL OR time <= ?)) AS current_unique_w_clients,
-                    (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (? IS NULL OR time <= ?) AND (risk_category = '-' OR risk_category IS NULL)) AS current_unique_norisk_clients
-            """
-            params = [
-                current_date_str, current_time if is_today else None, current_time if is_today else None,
-                previous_date_str, current_time if is_today else None, current_time if is_today else None,
-                current_date_str, current_time if is_today else None, current_time if is_today else None,
-                previous_date_str, current_time if is_today else None, current_time if is_today else None,
-                current_date_str, current_time if is_today else None, current_time if is_today else None,
-                current_date_str, current_time if is_today else None, current_time if is_today else None,
-                current_date_str, current_time if is_today else None, current_time if is_today else None,
-                current_date_str, current_time if is_today else None, current_time if is_today else None
-            ]
-            cursor.execute(query, params)
-            (
-                current_bets, previous_bets, current_knockbacks, previous_knockbacks,
-                current_total_unique_clients, current_unique_m_clients, current_unique_w_clients,
-                current_unique_norisk_clients
-            ) = cursor.fetchone()
-
-            # Fetch the count of bets for each sport for the current day up to the current time or full day
-            cursor.execute(
-                "SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' " + ("AND time <= ? GROUP BY sports" if is_today else "GROUP BY sports"),
-                (current_date_str, current_time) if is_today else (current_date_str,)
-            )
-            current_sport_counts = cursor.fetchall()
-
+    
+            retry_attempts = 2
+            for attempt in range(retry_attempts):
+                try:
+                    # Fetch counts for the current and previous day in a single query
+                    query = """
+                        SELECT 
+                            (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND (? IS NULL OR time <= ?)) AS current_bets,
+                            (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND (? IS NULL OR time <= ?)) AS previous_bets,
+                            (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND (? IS NULL OR time <= ?)) AS current_knockbacks,
+                            (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND (? IS NULL OR time <= ?)) AS previous_knockbacks,
+                            (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (? IS NULL OR time <= ?)) AS current_total_unique_clients,
+                            (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M' AND (? IS NULL OR time <= ?)) AS current_unique_m_clients,
+                            (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W' AND (? IS NULL OR time <= ?)) AS current_unique_w_clients,
+                            (SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (? IS NULL OR time <= ?) AND (risk_category = '-' OR risk_category IS NULL)) AS current_unique_norisk_clients
+                    """
+                    params = [
+                        current_date_str, current_time if is_today else None, current_time if is_today else None,
+                        previous_date_str, current_time if is_today else None, current_time if is_today else None,
+                        current_date_str, current_time if is_today else None, current_time if is_today else None,
+                        previous_date_str, current_time if is_today else None, current_time if is_today else None,
+                        current_date_str, current_time if is_today else None, current_time if is_today else None,
+                        current_date_str, current_time if is_today else None, current_time if is_today else None,
+                        current_date_str, current_time if is_today else None, current_time if is_today else None,
+                        current_date_str, current_time if is_today else None, current_time if is_today else None
+                    ]
+                    cursor.execute(query, params)
+                    (
+                        current_bets, previous_bets, current_knockbacks, previous_knockbacks,
+                        current_total_unique_clients, current_unique_m_clients, current_unique_w_clients,
+                        current_unique_norisk_clients
+                    ) = cursor.fetchone()
+    
+                    # Fetch the count of bets for each sport for the current day up to the current time or full day
+                    cursor.execute(
+                        "SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' " + ("AND time <= ? GROUP BY sports" if is_today else "GROUP BY sports"),
+                        (current_date_str, current_time) if is_today else (current_date_str,)
+                    )
+                    current_sport_counts = cursor.fetchall()
+    
+                    break
+    
+                except sqlite3.DatabaseError as e:
+                    if attempt < retry_attempts - 1:
+                        print(f"Database error: {e}. Retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        print(f"Database error: {e}. No more retries.")
+                        raise
+    
             # Calculate the percentage change in bets
             if previous_bets > 0:
                 percentage_change_bets = ((current_bets - previous_bets) / previous_bets) * 100
             else:
                 percentage_change_bets = 0
-
+    
             # Calculate the percentage change in knockbacks
             if previous_knockbacks > 0:
                 percentage_change_knockbacks = ((current_knockbacks - previous_knockbacks) / previous_knockbacks) * 100
             else:
                 percentage_change_knockbacks = 0
-
+    
             # Initialize sport counts
             horse_bets = 0
             dog_bets = 0
             other_bets = 0
-
+    
             # Map the sport counts
             sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
             for sport, count in current_sport_counts:
@@ -663,30 +661,32 @@ class BetFeed:
                     dog_bets += count
                 if sport_mapping['Other'] in sport_list:
                     other_bets += count
-
+    
             knockback_percentage = (current_knockbacks / current_bets * 100) if current_bets > 0 else 0
+            previous_knockback_percentage = (previous_knockbacks / previous_bets * 100) if previous_bets > 0 else 0
+    
             daily_turnover = reporting_data.get('daily_turnover', 'N/A')
             daily_profit = reporting_data.get('daily_profit', 'N/A')
             daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
             full_name = USER_NAMES.get(user, user)
-
+    
             # Determine the change indicators for bets and knockbacks
             bet_change_indicator = "↑" if current_bets > previous_bets else "↓" if current_bets < previous_bets else "→"
             knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
-
+    
             # Conditionally include the turnover, profit, and profit percentage line
             turnover_profit_line = (
                 f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
                 if is_today else ''
             )
-
+    
             # Get the day names
             current_day_name = current_date.strftime('%A')
             previous_day_name = previous_date.strftime('%a')
-
+    
             self.activity_text.config(state='normal')
             self.activity_text.delete('1.0', tk.END)
-
+    
             # Insert the text with tags
             self.activity_text.insert(tk.END, f"{current_day_name} {selected_date_str} {'  |  ' + full_name if user else ''}\n", 'bold')
             self.activity_text.insert(tk.END, f"Bets: {current_bets:,} ")
@@ -695,16 +695,17 @@ class BetFeed:
             self.activity_text.insert(tk.END, f"Knockbacks: {current_knockbacks:,} ")
             self.activity_text.insert(tk.END, f" {knockback_change_indicator}{percentage_change_knockbacks:.2f}% ", 'red' if percentage_change_knockbacks > 0 else 'green')
             self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_knockbacks:,})\n")
-            self.activity_text.insert(tk.END, f"Knockback Percentage: ({knockback_percentage:.2f}%)\n")
+            self.activity_text.insert(tk.END, f"Knockback %: {knockback_percentage:.2f}%")
+            self.activity_text.insert(tk.END, f" ({previous_day_name}: {previous_knockback_percentage:.2f}%)\n")
             self.activity_text.insert(tk.END, f"{turnover_profit_line}")
             self.activity_text.insert(tk.END, f"Clients: {current_total_unique_clients:,} | M: {current_unique_m_clients:,} | W: {current_unique_w_clients:,} | --: {current_unique_norisk_clients:,}\n")
             self.activity_text.insert(tk.END, f"Horses: {horse_bets:,} | Dogs: {dog_bets:,} | Other: {other_bets:,}")
-
+    
             # Apply the center tag to all text
             self.activity_text.tag_add('center', '1.0', 'end')
-
+    
             self.activity_text.config(state='disabled')
-
+    
         except sqlite3.DatabaseError as e:
             print(f"Database error: {e}")
             self.activity_text.config(state='normal')
@@ -725,10 +726,10 @@ class BetFeed:
             wager_number = bet_dict.get('id', '')  # Retrieve wager number
             customer_reference = bet_dict.get('customer_ref', '')  # Retrieve customer reference
             sms_wager_text = bet_dict.get('text_request', '')  # Retrieve SMS wager text
-            text = f"SMS WAGER:\n{sms_wager_text}\n"
             tag = f"customer_ref_{self.get_customer_tag(customer_reference)}"
             text_segments.append((f"{customer_reference} {wager_number}", tag))
-            text_segments.append((f" - {text}", "black"))
+            text_segments.append((f" - SMS WAGER:", "sms"))
+            text_segments.append((f"\n{sms_wager_text}\n", "black"))
             
         elif bet_dict['type'] == 'WAGER KNOCKBACK':
             customer_ref = bet_dict.get('customer_ref', '')  # Retrieve customer reference
@@ -755,7 +756,8 @@ class BetFeed:
             
             tag = f"customer_ref_{self.get_customer_tag(customer_ref)}"
             text_segments.append((f"{customer_ref} {timestamp} - {knockback_id}", tag))
-            text_segments.append((f" - WAGER KNOCKBACK:\n   {formatted_knockback_details}\n", "black"))
+            text_segments.append((f" - WAGER KNOCKBACK:\n", "knockback"))
+            text_segments.append((f"{formatted_knockback_details}\n", "black"))
         else:
             bet_no = bet_dict.get('id', '')  # Retrieve bet number
             details = bet_dict.get('selections', [])  # Retrieve selections
@@ -785,7 +787,7 @@ class BetFeed:
                 for om_sel in self.oddsmonkey_selections.items():
                     if ' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip():
                         oddsmonkey_text = f"Oddsmonkey Selection - {sel[0]} @ {om_sel[1][1]}\n"
-                        text_segments.append((oddsmonkey_text, "oddsmonkey"))
+                        text_segments.append((oddsmonkey_text, "newreg"))
         
         return text_segments
     
@@ -806,9 +808,8 @@ class BetFeed:
         self.feed_text.tag_configure("watchlist", foreground="#e35f00")
         self.feed_text.tag_configure("newreg", foreground="purple")
         self.feed_text.tag_configure("vip", foreground="#009685")
-        self.feed_text.tag_configure("sms", foreground="orange")
-        self.feed_text.tag_configure("oddsmonkey", foreground="#ff00e6")
-        self.feed_text.tag_configure("notices", font=("Helvetica", 11, "normal"))
+        self.feed_text.tag_configure("sms", foreground="#6CCFF6")
+        self.feed_text.tag_configure("knockback", foreground="#FF006E")
         self.feed_text.tag_configure('center', justify='center')
         self.feed_text.tag_configure('bold', font=('Helvetica', 11, 'bold'), foreground='#d0cccc')
         self.feed_text.tag_configure('customer_ref_vip', font=('Helvetica', 11, 'bold'), foreground='#009685')
@@ -942,22 +943,29 @@ class BetRuns:
                 return
     
             try:
-                conn, cursor = get_database()
-                if conn is None or cursor is None:
-                    self.update_ui_with_message("Failed to connect to the database.")
-                    return
+                retry_attempts = 2
+                for attempt in range(retry_attempts):
+                    conn, cursor = get_database()
+                    if conn is not None and cursor is not None:
+                        break
+                    elif attempt < retry_attempts - 1:
+                        print("Failed to connect to the database. Retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        self.update_ui_with_message("Failed to connect to the database after multiple attempts.")
+                        return
     
                 # Get Current date in dd/mm/yyyy format to search
                 current_date = datetime.now().strftime('%d/%m/%Y')
                 cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
                 database_data = cursor.fetchall()
-                
+    
                 if not database_data:
                     self.update_ui_with_message("No bets found for the current date or database not found.")
-                    return 
-                
+                    return
+    
                 selection_to_bets = defaultdict(list)
-                
+    
                 for bet in database_data:
                     bet_id = bet[0]  # Assuming 'id' is the first column
                     if ':' in bet_id:
@@ -971,9 +979,9 @@ class BetRuns:
                         for selection in selections:
                             selection_name = selection[0]
                             selection_to_bets[selection_name].append(bet_id)
-                
+    
                 sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
-                
+    
                 self.update_ui_with_selections(sorted_selections, num_run_bets, cursor)
             except Exception as e:
                 self.update_ui_with_message(f"An error occurred: {e}")
@@ -2667,7 +2675,7 @@ class Notebook:
                 'Staff': user
             }
             progress.set(80)
-            with open(f'logs/factoringlogs/factoring.json', 'a') as file:
+            with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', 'factoring.json'), 'a') as file:
                 file.write(json.dumps(data) + '\n')
 
             log_notification(f"{user} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
@@ -3033,7 +3041,7 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v11", font=("Helvetica", 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v11.2", font=("Helvetica", 10))
         self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
@@ -3167,10 +3175,31 @@ class Settings:
         # Clear existing tree items
         for item in tree.get_children():
             tree.delete(item)
-
+    
         sorted_data = self.sort_events(data)
-
-        for event in sorted_data:
+    
+        # Separate antepost and non-antepost events
+        antepost_events = [event for event in sorted_data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in sorted_data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+    
+        # Insert antepost events
+        for event in antepost_events:
+            event_name = event["eventName"]
+            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
+            num_children = len(event["meetings"])
+            last_update = event.get("lastUpdate", "-")
+            user = event.get("user", "-")
+            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
+            for meeting in event["meetings"]:
+                meeting_name = meeting["meetinName"]
+                event_date = meeting["eventDate"]
+                tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
+    
+        # Insert a blank row
+        tree.insert("", "end", text="", values=("", "", "", "", ""))
+    
+        # Insert non-antepost events
+        for event in non_antepost_events:
             event_name = event["eventName"]
             event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
             num_children = len(event["meetings"])
@@ -3184,6 +3213,7 @@ class Settings:
 
     def sort_events(self, data):
         antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
+        print(len(antepost_events))
         non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
         return antepost_events + non_antepost_events
 
@@ -3191,27 +3221,32 @@ class Settings:
         # Extract just the time in HH:MM format
         log_time = datetime.strptime(full_time, '%d-%m-%Y %H:%M:%S').strftime('%H:%M')
 
+        course.replace("-", "")
+
+        print(course)
+    
         now = datetime.now()
         date_string = now.strftime('%d-%m-%Y')
-        log_file = f'logs/updatelogs/update_log_{date_string}.txt'
-
+            
+        log_file = os.path.join(NETWORK_PATH_PREFIX, f'logs/updatelogs/update_log_{date_string}.txt')
+    
         # Ensure the directory exists
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
-
+    
         if os.path.exists(log_file):
             with open(log_file, 'r') as f:
                 data = f.readlines()
         else:
             data = []
-
+    
         update = f"{log_time} - {user}\n"
-
+    
         course_index = None
         for i, line in enumerate(data):
             if line.strip() == course + ":":
                 course_index = i
                 break
-
+    
         if course_index is not None:
             data.insert(course_index + 1, update)
         else:
@@ -3219,7 +3254,7 @@ class Settings:
                 data.append('\n')
             data.append(f"{course}:\n")
             data.append(update)
-
+    
         with open(log_file, 'w') as f:
             f.writelines(data)
 
@@ -3388,16 +3423,18 @@ class BetViewerApp:
 
     def setup_menu_bar(self):
         menu_bar = tk.Menu(self.root)
-        # Options Menu
         options_menu = tk.Menu(menu_bar, tearoff=0)
         options_menu.add_command(label="Set User Initials", command=self.user_login, foreground="#000000", background="#ffffff")
         options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
         options_menu.add_separator(background="#ffffff")
         options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Options", menu=options_menu)
-        
-        # Additional Features Menu
-        menu_bar.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
+
+        report_menu = tk.Menu(menu_bar, tearoff=0)
+        report_menu.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
+        report_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
+        menu_bar.add_cascade(label="Report", menu=report_menu)
+
         menu_bar.add_command(label="Send RG Popup", command=self.display_rg_popup, foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
@@ -3405,6 +3442,36 @@ class BetViewerApp:
 
     def user_login(self):
         user_login()
+
+    def report_monitor_issue(self):
+        global user
+
+        def submit_issue():
+            issue = issue_textbox.get("1.0", tk.END).strip()
+            if issue:
+                issues_file_path = os.path.join(NETWORK_PATH_PREFIX, 'issues.txt')
+                try:
+                    with open(issues_file_path, 'a') as f:
+                        f.write(f"{user} - {issue}\n\n")
+                    messagebox.showinfo("Submitted", "Your issue/suggestion has been submitted.")
+                    issue_window.destroy()
+                except FileNotFoundError:
+                    messagebox.showerror("File Not Found", f"Could not find the file: {issues_file_path}")
+            else:
+                messagebox.showwarning("Empty Issue", "Please describe the issue or suggestion before submitting.")
+
+        issue_window = tk.Toplevel(self.root)
+        issue_window.title("Report Monitor Issue")
+        issue_window.geometry("400x300")
+
+        issue_label = ttk.Label(issue_window, text="Describe issue/suggestion:")
+        issue_label.pack(pady=10)
+
+        issue_textbox = tk.Text(issue_window, wrap='word', height=10)
+        issue_textbox.pack(padx=10, pady=10, fill='both', expand=True)
+
+        submit_button = ttk.Button(issue_window, text="Submit", command=submit_issue)
+        submit_button.pack(pady=10)
 
     def report_freebet(self):
         current_month = datetime.now().strftime('%B')
@@ -3625,7 +3692,7 @@ class BetViewerApp:
         user_notification()
 
     def about(self):
-        messagebox.showinfo("About", "Geoff Banks Bet Monitoring v11")
+        messagebox.showinfo("About", "Geoff Banks Bet Monitoring\n     Sam Banks 2024")
 
 if __name__ == "__main__":
     root = tk.Tk()
