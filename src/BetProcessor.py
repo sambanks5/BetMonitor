@@ -22,7 +22,7 @@ import requests
 import base64
 import datetime
 import tkinter as tk
-from tkinter import ttk, filedialog, Label
+from tkinter import ttk, filedialog, Label, Toplevel
 from PIL import ImageTk, Image
 from datetime import datetime, timedelta, date
 from watchdog.observers import Observer
@@ -97,12 +97,11 @@ def load_database():
 def parse_file(file_path, app):
     start_time = time.time()
     try:
-        # Get the file creation date
         creation_time = os.path.getctime(file_path)
         creation_date_str = datetime.fromtimestamp(creation_time).strftime('%d/%m/%Y')
     except Exception as e:
         print(f"Error getting file creation date: {e}")
-        creation_date_str = date.today().strftime('%d/%m/%Y')
+        creation_date_str = datetime.today().strftime('%d/%m/%Y')
 
     with open(file_path, 'r') as file:
         bet_text = file.read()
@@ -172,6 +171,53 @@ def parse_file(file_path, app):
     print('File not processed ' + file_path + ' IF YOU SEE THIS TELL SAM - CODE 4')
     print(f"parse_file took {time.time() - start_time} seconds")
     return {}
+
+def calculate_date_range(months_back):
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=months_back * 30)  # Approximate 30 days per month
+    return start_date, end_date
+
+def remove_existing_records(database, start_date, end_date):
+    cursor = database.cursor()
+    cursor.execute("DELETE FROM database WHERE date BETWEEN ? AND ?", (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    database.commit()
+
+def reprocess_bets(months_back, bet_path, app):
+    start_date, end_date = calculate_date_range(months_back)
+    database = load_database()
+
+    # Remove existing records
+    remove_existing_records(database, start_date, end_date)
+
+    # Reprocess files
+    archive_directory = os.path.join(bet_path, 'archive')
+    if not os.path.exists(archive_directory):
+        app.log_message(f"Archive directory not found: {archive_directory}")
+        return
+
+    print(archive_directory)
+    for folder in os.listdir(archive_directory):
+        folder_path = os.path.join(archive_directory, folder)
+        print(folder_path)
+        if os.path.isdir(folder_path):
+            folder_date = datetime.strptime(folder, '%Y-%m')
+            folder_start_date = folder_date
+            folder_end_date = (folder_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            print(folder_start_date, folder_end_date, start_date, end_date)
+            if start_date <= folder_end_date and end_date >= folder_start_date:
+                print("hi")
+                for bet_file in os.listdir(folder_path):
+                    if bet_file.endswith('.bww'):
+                        print("Bye")
+                        print(bet_file)
+                        bet = parse_file(os.path.join(folder_path, bet_file), app)
+                        add_bet(database, bet, app)
+
+    app.log_message('Bet reprocessing complete.')
+    database.close()
+
+
+
 
 def process_file(file_path):
     conn = load_database()
@@ -535,40 +581,7 @@ def activity_report_notification():
     conn.close()
 
 
-####################################################################################
-## REPROCESS ALL RAW BET TEXTS IN FOLDER
-####################################################################################
-def reprocess_file(app):
-    print("Reprocessing file")
-    date = datetime.now().strftime('%Y-%m-%d')
 
-    filename = f'database/{date}-wager_database.json'
-
-    if os.path.exists(filename):
-        #os.remove(filename)
-        app.log_message('Existing database deleted. Will begin to process todays bets....\n\n')
-    else:
-        app.log_message('No existing database found. Will begin processing todays bets...\n\n')
-
-def process_existing_bets(directory, app):
-    log_notification(f'Reprocessing bets', True)
-    database = load_database()
-
-    files = os.listdir(directory)
-
-    bet_files = [f for f in files if f.endswith('.bww')]
-    app.log_message(f'Found {len(bet_files)} files. Beginning process, please wait...\n')
-    time.sleep(3)
-    
-    for bet_file in bet_files:
-        bet = parse_file(os.path.join(directory, bet_file), app)
-        print("Parsed a file")
-        add_bet(database, bet, app)
-        print("Added a bet to JSON")
-
-    app.log_message('Bet processing complete. Waiting for new files...\n')
-    log_notification(f'Finished reprocessing', True)
-    database.close()
 
 
 
@@ -1478,7 +1491,7 @@ class Application(tk.Tk):
         self.logo_label = Label(self, image=self.logo)
         self.logo_label.grid(row=0, column=1) 
 
-        self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.reprocess, style='TButton', width=20)
+        self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
         
         self.reprocess_deposits_button = ttk.Button(self, text="Reprocess Deposits", command=self.reprocess_deposits, style='TButton', width=15)
@@ -1495,9 +1508,20 @@ class Application(tk.Tk):
         if new_folder_path:
             path = new_folder_path
 
-    def reprocess(self):
-        #reprocess_file(self)
-        process_thread = threading.Thread(target=process_existing_bets, args=(path, self))
+    def open_reprocess_window(self):
+        top = Toplevel(self)
+        top.title("Reprocess Bets")
+        top.geometry("300x150")
+
+        ttk.Label(top, text="Months to go back:").grid(column=0, row=0, padx=10, pady=10)
+        months_spinbox = ttk.Spinbox(top, from_=1, to=12, width=5)
+        months_spinbox.grid(column=1, row=0, padx=10, pady=10)
+
+        reprocess_button = ttk.Button(top, text="Reprocess", command=lambda: self.start_reprocess(int(months_spinbox.get())))
+        reprocess_button.grid(column=0, row=1, columnspan=2, padx=10, pady=10)
+
+    def start_reprocess(self, months_back):
+        process_thread = threading.Thread(target=reprocess_bets, args=(months_back, path, self))
         process_thread.start()
 
     def reprocess_deposits(self):
