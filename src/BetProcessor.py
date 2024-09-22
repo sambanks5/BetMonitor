@@ -124,7 +124,6 @@ def parse_file(file_path, app):
             }
             print('Knockback Processed ' + unique_knockback_id)
             app.log_message(f"Knockback Processed {unique_knockback_id}, {details['Customer Ref']}, {details['Time']}")
-            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_sms:
@@ -141,11 +140,11 @@ def parse_file(file_path, app):
             }
             print('SMS Processed ' + wager_number)
             app.log_message(f'SMS Processed {wager_number}, {customer_reference}')
-            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
 
         elif is_bet:
             bet_no, parsed_selections, timestamp, customer_reference, customer_risk_category, bet_details, unit_stake, payment, bet_type = parse_bet_details(bet_text)
+            print(bet_no, customer_reference)
             sports = add_sport_to_selections(parsed_selections)
             bet_info = {
                 'time': timestamp,
@@ -165,59 +164,99 @@ def parse_file(file_path, app):
             }
             print('Bet Processed ' + bet_no)
             app.log_message(f'Bet Processed {bet_no}, {customer_reference}, {timestamp}')
-            print(f"parse_file took {time.time() - start_time} seconds")
             return bet_info
         
     print('File not processed ' + file_path + ' IF YOU SEE THIS TELL SAM - CODE 4')
-    print(f"parse_file took {time.time() - start_time} seconds")
+    # print(f"parse_file took {time.time() - start_time} seconds")
     return {}
 
-def calculate_date_range(months_back):
+def calculate_date_range(days_back):
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=months_back * 30)  # Approximate 30 days per month
+    start_date = end_date - timedelta(days=days_back)
     return start_date, end_date
 
 def remove_existing_records(database, start_date, end_date):
     cursor = database.cursor()
-    cursor.execute("DELETE FROM database WHERE date BETWEEN ? AND ?", (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    # Convert date strings to dd/mm/yyyy format for the SQL query
+    start_date_str = start_date.strftime('%d/%m/%Y')
+    end_date_str = end_date.strftime('%d/%m/%Y')
+    
+    print(f"Deleting records between {start_date_str} and {end_date_str}")
+    
+    
+    cursor.execute("""
+        DELETE FROM database 
+        WHERE strftime('%Y-%m-%d', substr(date, 7, 4) || '-' || substr(date, 4, 2) || '-' || substr(date, 1, 2))
+        BETWEEN ? AND ?
+    """, (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    
     database.commit()
+    print(f"Deleted {cursor.rowcount} records")
 
-def reprocess_bets(months_back, bet_path, app):
-    start_date, end_date = calculate_date_range(months_back)
+def reprocess_bets(days_back, bet_path, app):
+    start_date, end_date = calculate_date_range(days_back)
+    print(start_date, end_date)
     database = load_database()
 
     # Remove existing records
     remove_existing_records(database, start_date, end_date)
 
-    # Reprocess files
-    archive_directory = os.path.join(bet_path, 'archive')
-    if not os.path.exists(archive_directory):
-        app.log_message(f"Archive directory not found: {archive_directory}")
-        return
+    # Reprocess files in the bet_path directory (current day files)
+    failed_files = []
+    for bet_file in os.listdir(bet_path):
+        if bet_file.endswith('.bww'):
+            file_path = os.path.join(bet_path, bet_file)
+            try:
+                # Check the creation date of the file
+                creation_time = os.path.getctime(file_path)
+                creation_date = datetime.fromtimestamp(creation_time)
+                if start_date <= creation_date <= end_date:
+                    bet = parse_file(file_path, app)
+                    add_bet(database, bet, app)
+                else:
+                    print(f"Skipping file {file_path} as it is outside the date range.")
+            except Exception as e:
+                print(f"Failed to process file {file_path}: {e}")
+                failed_files.append(file_path)
 
-    print(archive_directory)
-    for folder in os.listdir(archive_directory):
-        folder_path = os.path.join(archive_directory, folder)
-        print(folder_path)
-        if os.path.isdir(folder_path):
-            folder_date = datetime.strptime(folder, '%Y-%m')
-            folder_start_date = folder_date
-            folder_end_date = (folder_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-            print(folder_start_date, folder_end_date, start_date, end_date)
-            if start_date <= folder_end_date and end_date >= folder_start_date:
-                print("hi")
+    # Only check the archive directory if the date range is more than 1 day
+    if days_back > 1:
+        archive_directory = os.path.join(bet_path, 'archive')
+        if not os.path.exists(archive_directory):
+            app.log_message(f"Archive directory not found: {archive_directory}")
+            return
+
+        # Get the list of folders and sort them by date (newest to oldest)
+        folders = sorted(os.listdir(archive_directory), reverse=True)
+
+        # Only check the latest two folders
+        folders_to_check = folders[:2]
+
+        for folder in folders_to_check:
+            folder_path = os.path.join(archive_directory, folder)
+            if os.path.isdir(folder_path):
                 for bet_file in os.listdir(folder_path):
                     if bet_file.endswith('.bww'):
-                        print("Bye")
-                        print(bet_file)
-                        bet = parse_file(os.path.join(folder_path, bet_file), app)
-                        add_bet(database, bet, app)
+                        file_path = os.path.join(folder_path, bet_file)
+                        try:
+                            # Check the creation date of the file
+                            creation_time = os.path.getctime(file_path)
+                            creation_date = datetime.fromtimestamp(creation_time)
+                            if start_date <= creation_date <= end_date:
+                                bet = parse_file(file_path, app)
+                                add_bet(database, bet, app)
+                            else:
+                                print(f"Skipping file {file_path} as it is outside the date range.")
+                                app.log_message(f"Skipping file {file_path} as it is outside the date range.")
+                        except Exception as e:
+                            print(f"Failed to process file {file_path}: {e}")
+                            failed_files.append(file_path)
+
+    if failed_files:
+        app.log_message(f"Failed to process the following files: {', '.join(failed_files)}")
 
     app.log_message('Bet reprocessing complete.')
     database.close()
-
-
-
 
 def process_file(file_path):
     conn = load_database()
@@ -1493,9 +1532,6 @@ class Application(tk.Tk):
 
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
-        
-        self.reprocess_deposits_button = ttk.Button(self, text="Reprocess Deposits", command=self.reprocess_deposits, style='TButton', width=15)
-        self.reprocess_deposits_button.grid(row=3, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
 
         self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
         self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
@@ -1511,23 +1547,22 @@ class Application(tk.Tk):
     def open_reprocess_window(self):
         top = Toplevel(self)
         top.title("Reprocess Bets")
-        top.geometry("300x150")
+        top.geometry("365x150")
 
-        ttk.Label(top, text="Months to go back:").grid(column=0, row=0, padx=10, pady=10)
-        months_spinbox = ttk.Spinbox(top, from_=1, to=12, width=5)
-        months_spinbox.grid(column=1, row=0, padx=10, pady=10)
+        ttk.Label(top, text="Days to go back:").grid(column=0, row=0, padx=10, pady=10)
+        days_spinbox = ttk.Spinbox(top, from_=1, to=12, width=5)
+        days_spinbox.grid(column=1, row=0, padx=10, pady=10)
 
-        reprocess_button = ttk.Button(top, text="Reprocess", command=lambda: self.start_reprocess(int(months_spinbox.get())))
-        reprocess_button.grid(column=0, row=1, columnspan=2, padx=10, pady=10)
+        ttk.Label(top, text="Anything over a day can take up to 10 minutes to complete.").grid(column=0, row=1, columnspan=2, padx=10, pady=10)
 
-    def start_reprocess(self, months_back):
-        process_thread = threading.Thread(target=reprocess_bets, args=(months_back, path, self))
+        reprocess_button = ttk.Button(top, text="Reprocess", command=lambda: self.start_reprocess(int(days_spinbox.get()), top))
+        reprocess_button.grid(column=0, row=2, columnspan=2, padx=10, pady=10)
+
+    def start_reprocess(self, days_back, window):
+        process_thread = threading.Thread(target=reprocess_bets, args=(days_back, path, self))
         process_thread.start()
-
-    def reprocess_deposits(self):
-        reprocess_deposits(self)
-        process_deposits_thread = threading.Thread(target=reprocess_deposits, args=(path, self))
-        process_deposits_thread.start()
+        window.destroy()
+        
 
     def log_message(self, message):
         current_time = datetime.now().strftime('%H:%M:%S')  # Get the current time
@@ -1551,20 +1586,28 @@ class Application(tk.Tk):
 class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         global last_processed_time
-        if not os.path.isdir(event.src_path):
-            max_retries = 6  ## In case it takes a while to write the bet text 
+        # Normalize the file path
+        file_path = os.path.normpath(event.src_path)
+        
+        if not os.path.isdir(file_path):
+            max_retries = 6  # In case it takes a while to write the bet text
             for attempt in range(max_retries):
                 try:
-                    process_file(event.src_path)
-                    last_processed_time = datetime.now()
-                    break
+                    print("Loading database")
+                    # Check if the file is accessible
+                    if os.access(file_path, os.R_OK):
+                        process_file(file_path)
+                        last_processed_time = datetime.now()
+                        break
+                    else:
+                        raise PermissionError(f"Permission denied: '{file_path}'")
                 except Exception as e:
-                    print(f"Attempt {attempt + 1} - An error occurred while processing the file {event.src_path}: {e}")
+                    print(f"Attempt {attempt + 1} - An error occurred while processing the file {file_path}: {e}")
+                    time.sleep(2)  # Add a delay before retrying
             else:
-                print(f"Failed to process the file {event.src_path} after {max_retries} attempts.")
+                print(f"Failed to process the file {file_path} after {max_retries} attempts.")
         else:
-            print(f"Directory created: {event.src_path}, skipping processing.")
-
+            print(f"Directory created: {file_path}, skipping processing.")
 ####################################################################################
 ## MAIN FUNCTIONS CONTAINING MAIN LOOP
 ####################################################################################
@@ -1593,7 +1636,7 @@ def main(app):
     fetch_and_print_new_events()
     schedule.every(10).minutes.do(fetch_and_print_new_events)
 
-    find_stale_antepost_events()
+    #find_stale_antepost_events()
     schedule.every().day.at("13:00").do(find_stale_antepost_events)
 
     run_activity_report_notification()

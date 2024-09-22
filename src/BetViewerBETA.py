@@ -37,8 +37,8 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
-NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
+DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
 
 LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
@@ -48,8 +48,8 @@ LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 CACHE_UPDATE_INTERVAL = 60 * 1  # Update cache every 1 minutes
 
 # FOR TESTING - UNCOMMENT
-NETWORK_PATH_PREFIX = ''
-DATABASE_PATH = 'wager_database.sqlite'
+#NETWORK_PATH_PREFIX = ''
+#DATABASE_PATH = 'wager_database.sqlite'
 
 user = ""
 USER_NAMES = {
@@ -941,7 +941,7 @@ class BetRuns:
             if not self.bet_runs_lock.acquire(blocking=False):
                 print("Bet runs update already in progress. Skipping this update.")
                 return
-    
+
             try:
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
@@ -954,23 +954,23 @@ class BetRuns:
                     else:
                         self.update_ui_with_message("Failed to connect to the database after multiple attempts.")
                         return
-    
+
                 # Get Current date in dd/mm/yyyy format to search
                 current_date = datetime.now().strftime('%d/%m/%Y')
                 cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
                 database_data = cursor.fetchall()
-    
+
                 if not database_data:
                     self.update_ui_with_message("No bets found for the current date or database not found.")
                     return
-    
+
                 selection_to_bets = defaultdict(list)
-    
+
                 for bet in database_data:
-                    bet_id = bet[0]  # Assuming 'id' is the first column
+                    bet_id = bet[0] 
                     if ':' in bet_id:
-                        continue  # Ignore IDs that contain a time
-                    selections = bet[10]  # Assuming 'selection' is the eleventh column
+                        continue 
+                    selections = bet[10] 
                     if selections:
                         try:
                             selections = json.loads(selections)  # Convert JSON string to dictionary
@@ -979,9 +979,9 @@ class BetRuns:
                         for selection in selections:
                             selection_name = selection[0]
                             selection_to_bets[selection_name].append(bet_id)
-    
+
                 sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
-    
+
                 self.update_ui_with_selections(sorted_selections, num_run_bets, cursor)
             except Exception as e:
                 self.update_ui_with_message(f"An error occurred: {e}")
@@ -989,7 +989,7 @@ class BetRuns:
                 if conn:
                     conn.close()
                 self.bet_runs_lock.release()
-    
+
         # Run the fetch_and_process_bets function in a separate thread to avoid blocking the main thread
         threading.Thread(target=fetch_and_process_bets, daemon=True).start()
     
@@ -3178,9 +3178,16 @@ class Settings:
     
         sorted_data = self.sort_events(data)
     
+        # Define tags for outdated events and separators
+        tree.tag_configure('outdated', background='lightcoral')
+        tree.tag_configure('separator', background='lightblue')
+    
         # Separate antepost and non-antepost events
         antepost_events = [event for event in sorted_data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
         non_antepost_events = [event for event in sorted_data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+    
+        # Insert separator for antepost events
+        tree.insert("", "end", text="-- Antepost --", values=("", "", "", "", ""), tags=('separator',))
     
         # Insert antepost events
         for event in antepost_events:
@@ -3189,14 +3196,21 @@ class Settings:
             num_children = len(event["meetings"])
             last_update = event.get("lastUpdate", "-")
             user = event.get("user", "-")
-            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
+    
+            # Check if the last update is more than two days old for antepost events
+            if last_update != "-" and (datetime.now() - datetime.strptime(last_update, '%d-%m-%Y %H:%M:%S')).days > 2:
+                tag = 'outdated'
+            else:
+                tag = ''
+    
+            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user), tags=(tag,))
             for meeting in event["meetings"]:
                 meeting_name = meeting["meetinName"]
                 event_date = meeting["eventDate"]
                 tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
     
-        # Insert a blank row
-        tree.insert("", "end", text="", values=("", "", "", "", ""))
+        # Insert separator for non-antepost events
+        tree.insert("", "end", text="-- Non-Antepost --", values=("", "", "", "", ""), tags=('separator',))
     
         # Insert non-antepost events
         for event in non_antepost_events:
@@ -3205,7 +3219,14 @@ class Settings:
             num_children = len(event["meetings"])
             last_update = event.get("lastUpdate", "-")
             user = event.get("user", "-")
-            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user))
+    
+            # Check if the last update is more than one day old for non-antepost events
+            if last_update != "-" and (datetime.now() - datetime.strptime(last_update, '%d-%m-%Y %H:%M:%S')).days > 1:
+                tag = 'outdated'
+            else:
+                tag = ''
+    
+            parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user), tags=(tag,))
             for meeting in event["meetings"]:
                 meeting_name = meeting["meetinName"]
                 event_date = meeting["eventDate"]
