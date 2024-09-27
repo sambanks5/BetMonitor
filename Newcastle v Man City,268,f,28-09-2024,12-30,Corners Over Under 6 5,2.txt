@@ -1,0 +1,225 @@
+Team To Have 9 Or More Shots On Target,2
+Home Team Total Cards 0 5,2
+Goalkeeper To Make 4 Or More Saves,2
+To Score Or Assist,40
+Team To Have 3 Or More Shots On Target,2
+Team To Commit 8 Or More Fouls,2
+Home Team Total Cards 3 5,2
+Away Total Corners 9 5,2
+Goalkeeper To Make 3 Or More Saves,2
+Away Team Total Cards 4 5,2
+Team To Have 25 Or More Shots,1
+Team To Have 10 Or More Shots On Target,2
+Away Total Corners 12 5,2
+Team To Receive The Most Cards,3
+Team To Have 6 Or More Shots,1
+Both Teams To Score In Both Halves,2
+Corner Match Bet,3
+Team To Have 15 Or More Shots,2
+Team To Have 13 Or More Shots,2
+Team To Have 14 Or More Shots,2
+Away Total Corners 5 5,2
+Team To Commit 10 Or More Fouls,2
+Team To Have 11 Or More Shots,2
+Half Time Score,21
+Home Team First Half Over Under 1 5,2
+Team To Have 22 Or More Shots,2
+Both Teams To Score First Half,2
+Match Odds And Over Under 1 5,6
+Away Team Total Cards 6 5,1
+Team To Have 20 Or More Shots,2
+Goal Scored In Both Halves,2
+Match Odds And Over Under 3 5 Goals,6
+Away Total Corners 7 5,2
+Home Team 1 5 Goals,2
+Away Team First Half Over Under 0 5,2
+Team To Have 12 Or More Shots On Target,2
+Goalkeeper To Make 1 Or More Saves,2
+Home Total Corners 6 5,2
+Away Total Corners 8 5,2
+Match Shots On Target,16
+Away Team Total Cards 1 5,2
+Combined Shots On Target,18
+Alternate First Half Corners,24
+Winning Margin,10
+Team To Have 5 Or More Shots,1
+Away Team Total Cards 0 5,2
+Away Team Total Cards 5 5,1
+Team To Have 17 Or More Shots,2
+Away Total Corners 10 5,2
+Away Total Corners 3 5,2
+Home Team Total Cards 2 5,2
+Away Team Total Cards 3 5,2
+Team To Have 9 Or More Shots,1
+To Score A Header,19
+Home Team First Half Over Under 2 5,2
+Team To Have 5 Or More Shots On Target,2
+Home Team Total Cards 1 5,2
+Away Total Corners 6 5,2
+Home Total Corners 4 5,2
+Home Total Corners 3 5,2
+Double Chance And O U 2 5 Goals,6
+Team To Have 6 Or More Shots On Target,2
+Away Team First Half Over Under 3 5,2
+Match Shots,19
+Home Total Corners 7 5,2
+Team To Score First Goal First Half,3
+Home Team 2 5 Goals,2
+Team To Have 14 Or More Shots On Target,2
+Match Odds 90,3
+Handicap First Half,3
+To Win To Nil,2
+Both Teams To Score Two Or More Goals,2
+Both Teams To Score And No Draw,2
+Team To Commit 9 Or More Fouls,2
+Match Odds And Over Under 4 5,6
+Goalscorer Assist Double Combos,10
+Team To Commit 15 Or More Fouls,2
+Correct Score Combinations,10
+Team To Commit 12 Or More Fouls,2
+Team To Commit 14 Or More Fouls,2
+Away Total Corners 11 5,2
+Home Team First Half Over Under 4 5,2
+Team To Have 18 Or More Shots,2
+Team To Have 10 Or More Shots,2
+Home Team Total Cards 4 5,2
+Away Team First Half Over Under 4 5,2
+Team To Commit 13 Or More Fouls,2
+Team To Have 7 Or More Shots On Target,2
+Team To Have 23 Or More Shots,2
+Team To Commit 16 Or More Fouls,1
+Away Team 3 5 Goals,2
+Team To Have 19 Or More Shots,2
+Home Total Corners 11 5,2
+Team To Have 12 Or More Shots,2
+Home Total Corners 10 5,2
+Team To Have 4 Or More Shots On Target,2
+Home Total Corners 12 5,2
+Goalkeeper To Make 2 Or More Saves,2
+Penalty Taken,1
+Home Total Corners 5 5,2
+Away Team 4 5 Goals,2
+Home Team Total Cards 6 5,1
+Home Team Total Cards 5 5,2
+Lead At 10 20 30 60 Minutes,12
+Team To Have 8 Or More Shots,1
+Away Total Corners 4 5,2
+Away Team Total Cards 2 5,2
+To Lead At Half Time Or Full Time,2
+Player Headed Shots,40
+Player To Have 2 Or More Shots In 1st Half,40
+Home Total Corners 8 5,2
+Player To Have 1 Or More Shots In 1st Half,40
+To Win Either Half,2
+To Score From Outside The Box,24
+Opta Player Of The Match,22
+Away Team 2 5 Goals,2
+Team To Have 15 Or More Shots On Target,2
+Team To Have 21 Or More Shots,2
+Player To Attempt 50 Or More Passes,34
+Team To Have 7 Or More Shots,1
+Win Both Halves,2
+Number Of Corners,3
+Team To Have 13 Or More Shots On Target,2
+Away Team First Half Over Under 1 5,2
+Team To Have 16 Or More Shots,2
+Home Total Corners 2 5,2
+Player To Attempt 70 Or More Passes,25
+To Score Or To Be Shown A Card,40
+Team To Have 24 Or More Shots,2
+Away Team First Half Over Under 2 5,2
+Player To Have 1 Or More Shots On Target In Each Half,40
+Team To Have 11 Or More Shots On Target,2
+To Score In Both Halves,2
+Player To Be Fouled 3 Or More Times,38
+Home Team First Half Over Under 3 5,2
+Corner Handicap,3
+Home Total Corners 9 5,2
+Away Total Corners 2 5,2
+Red Card Markets,6
+Team To Have 8 Or More Shots On Target,2
+Half With Most Goals,3
+Home Team First Half Over Under 0 5,2
+Team To Commit 11 Or More Fouls,2
+Player To Have 2 Or More Shots,40
+Goalscorer Assist Double,24 
+
+
+
+Match Odds,3
+Double Chance,3
+
+Over Under 0 5 Goals,2 ## COMBINE ALL INTO ONE MARKET - 'Goals Over Under'
+Over Under 1 5 Goals,2
+Over Under 2 5 Goals,2
+Over Under 3 5 Goals,2
+Over Under 4 5 Goals,2
+Over Under 5 5 Goals,2
+Over Under 6 5 Goals,2
+Over Under 7 5 Goals,2
+Over Under 8 5 Goals,2
+
+Both Teams To Score,2
+Match Odds And Both Teams To Score,3
+Correct Score,78
+Half Time Full Time,9
+Draw No Bet,2
+Match Odds And Over Under 2 5 Goals,6
+First Goal,3
+
+Home Team Over Under 0 5 Goals,2 ## COMBINE ALL INTO ONE MARKET - 'Team Total Goals'
+Home Team Over Under 1 5 Goals,2
+Home Team Over Under 2 5 Goals,2
+Home Team Over Under 3 5 Goals,2
+Home Team Over Under 4 5 Goals,2
+Home Team Over Under 5 5 Goals,2
+Away Team Over Under 0 5 Goals,2
+Away Team Over Under 1 5 Goals,2
+Away Team Over Under 2 5 Goals,2
+Away Team Over Under 3 5 Goals,2
+Away Team Over Under 4 5 Goals,2
+Away Team Over Under 5 5 Goals,2
+
+First Half Goals 0 5,2 ## COMBINE ALL INTO ONE MARKET - 'First Half Goals'
+First Half Goals 1 5,2
+First Half Goals 2 5,2
+Over Under First Half 3 5,2
+Over Under First Half 4 5,2
+Over Under First Half 5 5,2
+
+Half Time,3
+Half Time Score,21
+First Half Corners,3
+
+Handicap Match Result,3
+Alternative Handicaps,3  ## COMBINE ALL INTO ONE MARKET - 'Alternative Handicaps'
+Alternative Handicaps,3
+Alternative Handicaps,3
+
+Cards Over Under 0 5,1 ## COMBINE ALL INTO ONE MARKET - 'Cards Over Under'
+Cards Over Under 1 5,2
+Cards Over Under 2 5,2
+Cards Over Under 3 5,2
+Cards Over Under 4 5,2
+Cards Over Under 5 5,2
+Cards Over Under 6 5,2
+Cards Over Under 7 5,2
+Cards Over Under 8 5,2
+
+Corners Over Under 4 5,2 ##COMBINE ALL INTO ONE MARKET - 'Corners Over Under'
+Corners Over Under 5 5,2
+Corners Over Under 6 5,2
+Corners Over Under 7 5,2
+Corners Over Under 8 5,2
+Corners Over Under 9 5,2
+Corners Over Under 10 5,2
+Corners Over Under 11 5,2
+Corners Over Under 12 5,2
+Corners Over Under 13 5,2
+Corners Over Under 14 5,2
+Corners Over Under 15 5,2
+
+Player To Score,40
+Anytime Assist,40
+Player First Goalscorer,41
+Player Shown A Card,40

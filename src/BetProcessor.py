@@ -172,7 +172,11 @@ def parse_file(file_path, app):
 
 def calculate_date_range(days_back):
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=days_back)
+    if days_back == 1:
+        start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start_date = end_date - timedelta(days=days_back - 1)  # Adjust to include the current day
+    
     return start_date, end_date
 
 def remove_existing_records(database, start_date, end_date):
@@ -182,7 +186,6 @@ def remove_existing_records(database, start_date, end_date):
     end_date_str = end_date.strftime('%d/%m/%Y')
     
     print(f"Deleting records between {start_date_str} and {end_date_str}")
-    
     
     cursor.execute("""
         DELETE FROM database 
@@ -195,7 +198,7 @@ def remove_existing_records(database, start_date, end_date):
 
 def reprocess_bets(days_back, bet_path, app):
     start_date, end_date = calculate_date_range(days_back)
-    print(start_date, end_date)
+    print(f"Processing bets from {start_date} to {end_date}")
     database = load_database()
 
     # Remove existing records

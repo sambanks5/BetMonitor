@@ -1,0 +1,270 @@
+Newcastle v Man City,270,f,28/09/2024,12:30,Both Teams To Score Two Or More Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Double Chance,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Score,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Goal Scored In Both Halves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 6 5,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 23 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 24 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 6 5,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Star Player Specials Alexander Isak,20
+Newcastle v Man City,270,f,28/09/2024,12:30,Penalty Taken,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 15 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 9 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team First Half Over Under 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Lead At Half Time Or Full Time,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team First Half Over Under 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 0 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 0 5,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 6 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 18 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 8 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 7 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 3 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 11 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 7 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 7 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 13 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Correct Score,78
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds And Over Under 4 5,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 4 Or More Shots On Target,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Number Of Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Shots On Target From Outside The Box,44
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 4 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Both Teams To Score In Both Halves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 6 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 7 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 5 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalkeeper To Make 1 Or More Saves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 12 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That 80 1,29
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 10 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Alternative Handicaps,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 1 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots On Target,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 4 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 9 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,First Half Goals 0 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds And Both Teams To Score,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots In 1st Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 0 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 11 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 6 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Draw No Bet,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 7 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Shown A Card,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Attempt 30 Or More Passes,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds And Over Under 1 5,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Foul Involvements,41
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Be Fouled 1 Or More Times,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team First Half Over Under 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 6 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Headed Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 12 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 6 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots On Target In 1st Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,First Goal,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 4 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That 25 1 To 79 1,30
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 8 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 6 Or More Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Star Player Erling Haaland,22
+Newcastle v Man City,270,f,28/09/2024,12:30,First Half Goals 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Foul Matchup Multis,10
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 13 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 12 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team 3 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 21 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Correct Score Combinations,10
+Newcastle v Man City,270,f,28/09/2024,12:30,Both Teams To Score,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots,39
+Newcastle v Man City,270,f,28/09/2024,12:30,Both Teams To Score And No Draw,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Half With Most Goals,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 5 Or More Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Be Fouled 3 Or More Times,38
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalscorer Assist Double,24
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 5 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 12 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 11 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Commit 1 Or More Fouls In Each Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 3 Or More Shots In 1st Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Shots From Outside The Box,46
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds And Over Under 3 5 Goals,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 25 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 10 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 8 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Score Or Assist,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 1 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 10 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Combined Shots On Target,18
+Newcastle v Man City,270,f,28/09/2024,12:30,Alternate First Half Corners,24
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 14 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 15 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 6 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 12 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 3 Or More Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Commit 2 Or More Fouls,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Commit 1 Or More Fouls In First Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 9 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Double Chance And O U 2 5 Goals,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 8 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Handicap Match Result,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 6 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 9 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 8 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 10 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Score First Goal First Half,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 14 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Winning Margin,10
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 16 Or More Fouls,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Opta Player Of The Match,22
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 8 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under First Half 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalkeeper To Make 4 Or More Saves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Attempt 50 Or More Passes,34
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots In Each Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 4 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Half Time,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Foul Matchups,49
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 4 Or More Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds And Over Under 2 5 Goals,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That Featured,20
+Newcastle v Man City,270,f,28/09/2024,12:30,Lead At 10 20 30 60 Minutes,12
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Attempt 70 Or More Passes,25
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Shots On Target,16
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team First Half Over Under 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team First Half Over Under 0 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Commit 11 Or More Fouls,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That Requests,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 8 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 5 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Half Time Full Time,9
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 2 Or More Shots On Target In 1st Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team First Half Over Under 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 13 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Both Teams To Score First Half,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalkeeper To Make 3 Or More Saves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 5 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 7 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corner Handicap,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Alternative Handicaps,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 6 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 5 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 9 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 5 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 13 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player First Goalscorer,41
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 0 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 3 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 10 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalkeeper To Make 2 Or More Saves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corner Match Bet,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Goalscorer Assist Double Combos,10
+Newcastle v Man City,270,f,28/09/2024,12:30,Player Headed Shots On Target,31
+Newcastle v Man City,270,f,28/09/2024,12:30,To Score Or To Be Shown A Card,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Red Card Markets,6
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Attempt 90 Or More Passes,10
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 20 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 11 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Score A Header,19
+Newcastle v Man City,270,f,28/09/2024,12:30,Anytime Assist,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 11 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 9 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Score In Both Halves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team 4 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 16 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Total Cards 5 5,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 2 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 0 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 8 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 5 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Score From Outside The Box,24
+Newcastle v Man City,270,f,28/09/2024,12:30,First Half Goals 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Half Time Score,21
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 19 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team First Half Over Under 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under First Half 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 3 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 8 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 15 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Odds 90,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 2 Or More Assists,22
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 4 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 2 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 3 Or More Shots On Target,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Win Both Halves,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That Up To 9 1,78
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Score 2 Goals Or More,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Total Cards 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 3 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 9 Or More Shots,1
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Commit 3 Or More Fouls,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team Over Under 3 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Total Corners 7 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 0 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Commit 1 Or More Fouls,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under First Half 3 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Odds On That 10 1 To 24 1,45
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team 1 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Race To 10 Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 12 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Assist One Or More Goals In Each Half,21
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 4 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 7 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Score A Hat Trick,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Match Shots,19
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 0 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team First Half Over Under 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 22 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 15 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Total Corners 8 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 14 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team First Half Over Under 2 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Win To Nil,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 2 Or More Shots In 1st Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Be Fouled 2 Or More Times,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 4 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,To Win Either Half,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Handicap First Half,3
+Newcastle v Man City,270,f,28/09/2024,12:30,First Half Corners,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Home Team First Half Over Under 0 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Cards Over Under 1 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 10 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 5 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 1 Or More Shots On Target In Each Half,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 2 Or More Shots On Target,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 1 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Player To Have 2 Or More Shots,40
+Newcastle v Man City,270,f,28/09/2024,12:30,Alternative Handicaps,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 6 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Receive The Most Cards,3
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 17 Or More Shots,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Over Under 7 5 Goals,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Corners Over Under 14 5,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Team To Have 3 Or More Shots On Target,2
+Newcastle v Man City,270,f,28/09/2024,12:30,Away Team Over Under 1 5 Goals,2

@@ -48,8 +48,8 @@ LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 CACHE_UPDATE_INTERVAL = 60 * 1  # Update cache every 1 minutes
 
 # FOR TESTING - UNCOMMENT
-#NETWORK_PATH_PREFIX = ''
-#DATABASE_PATH = 'wager_database.sqlite'
+NETWORK_PATH_PREFIX = ''
+DATABASE_PATH = 'wager_database.sqlite'
 
 user = ""
 USER_NAMES = {
@@ -74,6 +74,11 @@ def get_database():
 
         if not os.path.exists(LOCAL_DATABASE_PATH) or not is_cache_up_to_date():
             update_local_cache()
+
+        # Ensure the directory for the lock file exists
+        lock_file_dir = os.path.dirname(LOCK_FILE_PATH)
+        if not os.path.exists(lock_file_dir):
+            os.makedirs(lock_file_dir)
 
         # Create a lock file
         with open(LOCK_FILE_PATH, 'w') as lock_file:
@@ -1354,6 +1359,7 @@ class RaceUpdaton:
             f.writelines(data)
 
 class Notebook:
+    ##Stupid class
     def __init__(self, root):
         self.root = root
         self.last_notification = None
@@ -1364,23 +1370,15 @@ class Notebook:
         self.send_confirmation_email_bool.set(True) 
         self.archive_email_bool = tk.BooleanVar()
         self.archive_email_bool.set(False)
-
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        
+    
         _, _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
 
-        self.pipedrive_api_token = data['pipedrive_api_key']
-        self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
-        self.gc = gspread.authorize(credentials)
-
         self.initialize_ui()
+        self.initialize_text_tags()
         self.update_notifications()
         self.display_closure_requests()
-        self.run_factoring_sheet_thread()
+        #self.run_factoring_sheet_thread()
 
     def initialize_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -1425,8 +1423,7 @@ class Notebook:
         tab_2.grid_columnconfigure(1, weight=0) 
         tab_2.grid_columnconfigure(2, weight=1)
         self.report_ticket = tk.Text(tab_2, font=("Helvetica", 10), wrap='word', bd=0, padx=10, pady=10, fg="#000000", bg="#ffffff")
-        self.report_ticket.tag_configure("center", justify='center')
-        self.report_ticket.insert('1.0', "Daily Report\nGenerate a report for the days' betting activity.\n\nMonthly Report\nGenerate a report on the months' betting activity.\n\nStaff Report\nGenerate a report on staff activity.\n\nTraders Screener\nScan for potential 'risk' users.\n\nRG Screener\nScan for indicators of irresponsible gambling.", "center")    
+        self.report_ticket.insert('1.0', "Daily Report\nGenerate a report for the days' betting activity.\n\nMonthly Report\nGenerate a report on the months' betting activity.\n\nStaff Report\nGenerate a report on staff activity.\n\nTraders Screener\nScan for potential 'risk' users.\n\nRG Screener\nScan for indicators of irresponsible gambling.", "c")    
         self.report_ticket.config(state='disabled')
         self.report_ticket.grid(row=0, column=0, sticky="nsew") 
         separator_tab_2 = ttk.Separator(tab_2, orient='vertical')
@@ -1438,10 +1435,7 @@ class Notebook:
         self.report_button = ttk.Button(self.report_buttons_frame, text="Generate", command=self.generate_report, cursor="hand2", width=30)
         self.report_button.pack(side="top", pady=(5, 10), padx=(5, 0))
 
-        # self.progress = ttk.Progressbar(self.report_buttons_frame, orient='horizontal', length=200, mode='determinate')
-        # self.progress.pack(side="top", pady=(20, 10), padx=(5, 0))
-
-        self.progress_label = ttk.Label(self.report_buttons_frame, text="---")
+        self.progress_label = ttk.Label(self.report_buttons_frame, text="---", wraplength=150)
         self.progress_label.pack(side="top", pady=(20, 10), padx=(5, 0))
 
         tab_3 = ttk.Frame(self.notebook)
@@ -1470,7 +1464,7 @@ class Notebook:
         factoring_buttons_frame = ttk.Frame(tab_3)
         factoring_buttons_frame.grid(row=0, column=1, sticky='ns', padx=(10, 0))
 
-        add_restriction_button = ttk.Button(factoring_buttons_frame, text="Add", command=self.open_factoring_wizard, cursor="hand2")
+        add_restriction_button = ttk.Button(factoring_buttons_frame, text="Add", cursor="hand2")
         add_restriction_button.pack(side="top", pady=(10, 5))
         refresh_factoring_button = ttk.Button(factoring_buttons_frame, text="Refresh", command=self.run_factoring_sheet_thread, cursor="hand2")
         refresh_factoring_button.pack(side="top", pady=(10, 5))
@@ -1482,6 +1476,14 @@ class Notebook:
 
         self.requests_frame = ttk.Frame(self.tab_4)
         self.requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+
+    def initialize_text_tags(self):
+        self.report_ticket.tag_configure("risk", foreground="#ad0202")
+        self.report_ticket.tag_configure("watchlist", foreground="#e35f00")
+        self.report_ticket.tag_configure("newreg", foreground="purple")
+        self.report_ticket.tag_configure('center', justify='center', font=('Helvetica', 10, 'bold'))
+        self.report_ticket.tag_configure('c', justify='center')
+        self.report_ticket.tag_configure('bold', font=('Helvetica', 10, 'bold'))
 
     def update_notifications(self):
         self.staff_feed.tag_configure("important", font=("TkDefaultFont", 10, "bold"))
@@ -1531,14 +1533,13 @@ class Notebook:
         elif report_type == "Staff Report":
             self.report_thread = threading.Thread(target=self.create_staff_report)
         elif report_type == "Traders Screener":
-            self.report_ticket.config(state="normal")
-            self.report_ticket.delete('1.0', tk.END)
-            self.report_ticket.insert('1.0', "Traders Screener not currently available")
-            self.report_ticket.tag_configure("center", justify='center')
-            self.report_ticket.tag_add("center", "1.0", "end")
-            self.report_ticket.config(state="disabled")
-            #self.report_thread = threading.Thread(target=self.update_traders_report)
-            return
+            # self.report_ticket.config(state="normal")
+            # self.report_ticket.delete('1.0', tk.END)
+            # self.report_ticket.insert('1.0', "Traders Screener not currently available")
+            # self.report_ticket.tag_configure("center", justify='center')
+            # self.report_ticket.tag_add("center", "1.0", "end")
+            # self.report_ticket.config(state="disabled")
+            self.report_thread = threading.Thread(target=self.update_traders_report)
         elif report_type == "RG Screener":
             self.report_ticket.config(state="normal")
             self.report_ticket.delete('1.0', tk.END)
@@ -1553,453 +1554,318 @@ class Notebook:
         self.report_thread.start()
 
     def create_daily_report(self):
-        conn, cursor = get_database()
-        report_output = ""
-        _, _, _, _, reporting_data = access_data()
+        try:
+            conn, cursor = get_database()
+            _, _, _, _, reporting_data = access_data()
 
+            time = datetime.now()
+            current_date_str = time.strftime("%d/%m/%Y")
+            formatted_time = time.strftime("%H:%M:%S")
 
-        time = datetime.now()
-        current_date_str = time.strftime("%d/%m/%Y")
-        formatted_time = time.strftime("%H:%M:%S")
+            # Convert current_date_str to yyyy-mm-dd format
+            current_date_obj = datetime.strptime(current_date_str, "%d/%m/%Y")
+            current_date_iso = current_date_obj.strftime("%Y-%m-%d")
+            # Calculate the start of the current week (Monday)
+            start_of_current_week = current_date_obj - timedelta(days=current_date_obj.weekday())
+            start_of_current_week_iso = start_of_current_week.strftime("%Y-%m-%d")
+            # Calculate the start of the previous week (Monday)
+            start_of_previous_week = start_of_current_week - timedelta(days=7)
+            start_of_previous_week_iso = start_of_previous_week.strftime("%Y-%m-%d")
+            total_deposits = reporting_data.get('total_deposits', 'N/A')
+            total_sum_deposits = reporting_data.get('total_sum', 'N/A')
 
-        # Convert current_date_str to yyyy-mm-dd format
-        current_date_obj = datetime.strptime(current_date_str, "%d/%m/%Y")
-        current_date_iso = current_date_obj.strftime("%Y-%m-%d")
-        # Calculate the start of the current week (Monday)
-        start_of_current_week = current_date_obj - timedelta(days=current_date_obj.weekday())
-        start_of_current_week_iso = start_of_current_week.strftime("%Y-%m-%d")
-        # Calculate the start of the previous week (Monday)
-        start_of_previous_week = start_of_current_week - timedelta(days=7)
-        start_of_previous_week_iso = start_of_previous_week.strftime("%Y-%m-%d")
+            self.progress_label.config(text=f"Finding clients data")
 
-        total_deposits = reporting_data.get('total_deposits', 'N/A')
-        total_sum_deposits = reporting_data.get('total_sum', 'N/A')
-
-        self.progress_label.config(text=f"Finding clients data")
-
-        # Fetch the count of unique clients for the current day
-        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ?", (current_date_str,))
-        total_unique_clients = cursor.fetchone()[0]
-    
-        # Fetch the count of M clients for the current day
-        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M'", (current_date_str,))
-        unique_m_clients = cursor.fetchone()[0]
-    
-        # Fetch the count of W clients for the current day
-        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W'", (current_date_str,))
-        unique_w_clients = cursor.fetchone()[0]
-    
-        # Fetch the count of no risk clients for the current day
-        cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (risk_category = '-' OR risk_category IS NULL)", (current_date_str,))
-        unique_norisk_clients = cursor.fetchone()[0]
-    
-        # Fetch the average count of unique clients for the current week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_unique_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_unique_clients_current_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of unique clients for the previous week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_unique_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_unique_clients_previous_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of M clients for the current week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_m_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND risk_category = 'M'
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_m_clients_current_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of M clients for the previous week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_m_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND risk_category = 'M'
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_m_clients_previous_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of W clients for the current week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_w_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND risk_category = 'W'
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_w_clients_current_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of W clients for the previous week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_w_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND risk_category = 'W'
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_w_clients_previous_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of no-risk clients for the current week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_norisk_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND (risk_category = '-' OR risk_category IS NULL)
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_norisk_clients_current_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average count of no-risk clients for the previous week
-        cursor.execute("""
-            SELECT AVG(daily_count) as avg_norisk_clients
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    COUNT(DISTINCT customer_ref) as daily_count
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND (risk_category = '-' OR risk_category IS NULL)
-                GROUP BY day
-            ) as daily_counts
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_norisk_clients_previous_week = cursor.fetchone()[0] or 0.0
-
-        self.progress_label.config(text=f"Finding bets data")
-
-        # Fetch the count of bets for the current day
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
-        total_bets = cursor.fetchone()[0]
-    
-        # Fetch the count of knockbacks for the current day
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK'", (current_date_str,))
-        total_wageralerts = cursor.fetchone()[0]
-    
-        # Fetch the count of SMS for the current day
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'SMS WAGER'", (current_date_str,))
-        total_sms = cursor.fetchone()[0]
-    
-        # Fetch the count of bets for each sport for the current day
-        cursor.execute("SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY sports", (current_date_str,))
-        sport_counts = cursor.fetchall()
-    
-        self.progress_label.config(text=f"Finding knockback data")
-
-        # Fetch the count of different types of wager alerts
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Has Changed%'", (current_date_str,))
-        price_change = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Liability Exceeded: True%'", (current_date_str,))
-        liability_exceeded = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Event Has Ended%'", (current_date_str,))
-        event_ended = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%'", (current_date_str,))
-        price_type_disallowed = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Sport Disallowed%'", (current_date_str,))
-        sport_disallowed = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
-        max_stake_exceeded = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message NOT LIKE '%Price Has Changed%' AND error_message NOT LIKE '%Liability Exceeded: True%' AND error_message NOT LIKE '%Event Has Ended%' AND error_message NOT LIKE '%Price Type Disallowed%' AND error_message NOT LIKE '%Sport Disallowed%' AND error_message NOT LIKE '%User Max Stake Exceeded%'", (current_date_str,))
-        other_alert = cursor.fetchone()[0]
-    
-        cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%' OR error_message LIKE '%Sport Disallowed%' OR error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
-        user_restriction = cursor.fetchone()[0]
-    
-        self.progress_label.config(text=f"Calculating stakes")
-
-        # Fetch the total stakes for the current day
-        cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
-        total_stakes = cursor.fetchone()[0] or 0.0
-    
-        # Fetch the top 5 highest stakes
-        cursor.execute("SELECT customer_ref, SUM(total_stake) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
-        top_spenders = cursor.fetchall()
-    
-        # Fetch the top 5 clients with most bets
-        cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
-        top_client_bets = cursor.fetchall()
-    
-        # Fetch the top 3 clients with most knockbacks
-        cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' GROUP BY customer_ref ORDER BY total DESC LIMIT 3", (current_date_str,))
-        top_wageralert_clients = cursor.fetchall()
-    
-        # Fetch the count of bets per hour for the current day
-        cursor.execute("SELECT strftime('%H:00', time) as hour, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY hour", (current_date_str,))
-        bets_per_hour = cursor.fetchall()
-        
-        self.progress_label.config(text=f"Calculating averages")
-
-        # Fetch the average number of daily bets, knockbacks, and SMS text bets for the current week
-        cursor.execute("""
-            SELECT 
-                AVG(bets) as avg_bets, 
-                AVG(knockbacks) as avg_knockbacks, 
-                AVG(sms_bets) as avg_sms_bets
-            FROM (
-                SELECT 
-                    date,
-                    COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
-                    COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
-                    COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                      BETWEEN DATE(?) AND DATE(?)
-                GROUP BY date
-            ) as daily_counts
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_day_bets, avg_day_knockbacks, avg_day_sms_bets = cursor.fetchone()
-        
-        # Handle None values
-        avg_day_bets = avg_day_bets if avg_day_bets is not None else 0
-        avg_day_knockbacks = avg_day_knockbacks if avg_day_knockbacks is not None else 0
-        avg_day_sms_bets = avg_day_sms_bets if avg_day_sms_bets is not None else 0
-        
-        # Fetch the average number of daily bets, knockbacks, and SMS text bets for the previous week
-        cursor.execute("""
-            SELECT 
-                AVG(bets) as avg_bets, 
-                AVG(knockbacks) as avg_knockbacks, 
-                AVG(sms_bets) as avg_sms_bets
-            FROM (
-                SELECT 
-                    date,
-                    COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
-                    COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
-                    COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                      BETWEEN DATE(?) AND DATE(?)
-                GROUP BY date
-            ) as daily_counts
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_bets, avg_knockbacks, avg_sms_bets = cursor.fetchone()
-        
-        # Handle None values
-        avg_bets = avg_bets if avg_bets is not None else 0
-        avg_knockbacks = avg_knockbacks if avg_knockbacks is not None else 0
-        avg_sms_bets = avg_sms_bets if avg_sms_bets is not None else 0
-    
-        # Fetch the average total stakes for the current week
-        cursor.execute("""
-            SELECT AVG(daily_total) as avg_total_stake
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    SUM(total_stake) as daily_total
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND type = 'BET'
-                GROUP BY day
-            ) as daily_totals
-        """, (start_of_current_week_iso, current_date_iso))
-        avg_total_stake_current_week = cursor.fetchone()[0] or 0.0
-
-        # Fetch the average total stakes for the previous week
-        cursor.execute("""
-            SELECT AVG(daily_total) as avg_total_stake
-            FROM (
-                SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
-                    SUM(total_stake) as daily_total
-                FROM database
-                WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
-                    BETWEEN DATE(?) AND DATE(?)
-                    AND type = 'BET'
-                GROUP BY day
-            ) as daily_totals
-        """, (start_of_previous_week_iso, start_of_current_week_iso))
-        avg_total_stake_previous_week = cursor.fetchone()[0] or 0.0
-
-        conn.close()
-
-        # Initialize sport counts
-        horse_bets = 0
-        dog_bets = 0
-        other_bets = 0
-        
-        # Map the sport counts
-        sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
-        for sport, count in sport_counts:
-            sport_list = eval(sport)
-            if sport_mapping['Horses'] in sport_list:
-                horse_bets += count
-            if sport_mapping['Dogs'] in sport_list:
-                dog_bets += count
-            if sport_mapping['Other'] in sport_list:
-                other_bets += count
-        
-
-        total_sport_bets = horse_bets + dog_bets + other_bets
-        percentage_horse_racing = (horse_bets / total_sport_bets) * 100
-        percentage_greyhound = (dog_bets / total_sport_bets) * 100
-        percentage_other = (other_bets / total_sport_bets) * 100
-    
-        separator = "-" * 69
-
-        report_output += f"DAILY REPORT TICKET\n Generated at {formatted_time}\n"
-        report_output += f"{separator}"
-        report_output += f" - Bets  |  Knockbacks  |  Knockback % - \n"
-        report_output += f"{total_bets:,}      |      {total_wageralerts:,}      |      {total_wageralerts / total_bets * 100:.2f}%\n"
-        report_output += f"This week daily average:\n"
-        report_output += f"{int(avg_day_bets):,}      |      {int(avg_day_knockbacks):,}      |      {(avg_day_knockbacks / avg_day_bets * 100):.2f}%\n"
-        report_output += f"Last week daily average:\n"
-        report_output += f"{int(avg_bets):,}      |      {int(avg_knockbacks):,}      |      {(avg_knockbacks / avg_bets * 100):.2f}%\n"
-
-        report_output += f"\n\n - Stakes   |   Average Stake - \n"
-        report_output += f"£{total_stakes:,.2f}     |     ~£{total_stakes / total_bets:,.2f}\n"
-        report_output += f"This week daily average:\n"
-        report_output += f"£{avg_total_stake_current_week:,.2f}      |      ~£{avg_total_stake_current_week / avg_day_bets:,.2f}\n"
-        report_output += f"Last week daily average:\n"
-        report_output += f"£{avg_total_stake_previous_week:,.2f}      |      ~£{avg_total_stake_previous_week / avg_bets:,.2f}\n"
-
-        report_output += f"\n\nClients: {total_unique_clients:,} | --: {unique_norisk_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,}\n"
-        report_output += f"This week daily average:\n"
-        report_output += f"Clients: {int(avg_unique_clients_current_week):,} | --: {int(avg_norisk_clients_current_week):,} | M: {int(avg_m_clients_current_week):,} | W: {int(avg_w_clients_current_week):,}\n"
-        report_output += f"Last week daily average:\n"
-        report_output += f"Clients: {int(avg_unique_clients_previous_week):,} | --: {int(avg_norisk_clients_previous_week):,} | M: {int(avg_m_clients_previous_week):,} | W: {int(avg_w_clients_previous_week):,}\n"
-
-        report_output += f"\n\nDeposits: {total_deposits} | Total: £{total_sum_deposits:,.2f}\n"
-
-        report_output += f"\n\nHorses: {horse_bets} ({percentage_horse_racing:.2f}%) | Dogs: {dog_bets} ({percentage_greyhound:.2f}%) | Other: {other_bets} ({percentage_other:.2f}%)\n"
-        report_output += "\nHighest Stakes:\n"
-        for rank, (customer, spend) in enumerate(top_spenders, start=1):
-            report_output += f"\t{rank}. {customer} - Stakes: £{spend:,.2f}\n"
-        report_output += "\nMost Bets:\n"
-        for rank, (client, count) in enumerate(top_client_bets, start=1):
-            report_output += f"\t{rank}. {client} - Bets: {count:,}\n"
-        report_output += f"\nMost Knockbacks:\n"
-        for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
-            report_output += f"\t{rank}. {client} - Knockbacks: {count:,}\n"
-        report_output += f"\nKnockbacks by Type:"
-        report_output += f"\nLiability: {liability_exceeded}  |  "
-        report_output += f"Price Change: {price_change}  |  "
-        report_output += f"Event Ended: {event_ended}"
-        report_output += f"\n\nUser Restrictions: {user_restriction}\n"
-        report_output += f"Price Type: {price_type_disallowed}  |  "
-        report_output += f"Sport: {sport_disallowed}  |  "
-        report_output += f"Max Stake: {max_stake_exceeded}"
-        report_output += f"\n\nTextbets: {total_sms}"
-        report_output += f"\nBets Per Hour:\n"
-        for hour, count in bets_per_hour:
-            report_output += f"\t{hour} - Bets: {count}\n"
-
-        report_output += f"\nAll active clients by risk\n\n"
-
-        self.progress_label.config(text=f"---")
-
-        self.report_ticket.config(state="normal")
-        self.report_ticket.delete('1.0', tk.END)
-        self.report_ticket.insert('1.0', report_output)
-        self.report_ticket.tag_configure("center", justify='center')
-        self.report_ticket.tag_add("center", "1.0", "end")
-        self.report_ticket.config(state="disabled")
-    
-    def create_monthly_report(self):
-        conn, cursor = get_database()
-        report_output = ""
-    
-        # Get today's date
-        today = datetime.now()
-        formatted_time = today.strftime("%d/%m/%Y %H:%M:%S")
-    
-        # Calculate the date 30 days ago
-        start_date = today - timedelta(days=30)
-        separator = "-" * 69
-    
-        # Header for the monthly report
-        report_output += f"MONTHLY REPORT TICKET\n Generated at {formatted_time}\n"
-        report_output += f"{separator}\n"
-    
-        # Loop through each day in the last 30 days, starting from today
-        for i in range(30):
-            current_date = today - timedelta(days=i)
-            current_date_str = current_date.strftime("%d/%m/%Y")
-
-            self.progress_label.config(text=f"Generating {current_date_str}")
-    
-            # Fetch the count of bets for the current day
-            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
-            total_bets = cursor.fetchone()[0]
-    
-            # Fetch the count of knockbacks for the current day
-            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK'", (current_date_str,))
-            total_knockbacks = cursor.fetchone()[0]
-    
             # Fetch the count of unique clients for the current day
             cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ?", (current_date_str,))
             total_unique_clients = cursor.fetchone()[0]
-    
+        
             # Fetch the count of M clients for the current day
             cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M'", (current_date_str,))
             unique_m_clients = cursor.fetchone()[0]
-    
+        
             # Fetch the count of W clients for the current day
             cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W'", (current_date_str,))
             unique_w_clients = cursor.fetchone()[0]
-    
+        
             # Fetch the count of no risk clients for the current day
             cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (risk_category = '-' OR risk_category IS NULL)", (current_date_str,))
             unique_norisk_clients = cursor.fetchone()[0]
-    
+        
+            # Fetch the average count of unique clients for the current week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_unique_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_unique_clients_current_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of unique clients for the previous week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_unique_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_unique_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of M clients for the current week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_m_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND risk_category = 'M'
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_m_clients_current_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of M clients for the previous week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_m_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND risk_category = 'M'
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_m_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of W clients for the current week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_w_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND risk_category = 'W'
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_w_clients_current_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of W clients for the previous week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_w_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND risk_category = 'W'
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_w_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of no-risk clients for the current week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_norisk_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND (risk_category = '-' OR risk_category IS NULL)
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_norisk_clients_current_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average count of no-risk clients for the previous week
+            cursor.execute("""
+                SELECT AVG(daily_count) as avg_norisk_clients
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        COUNT(DISTINCT customer_ref) as daily_count
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND (risk_category = '-' OR risk_category IS NULL)
+                    GROUP BY day
+                ) as daily_counts
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_norisk_clients_previous_week = cursor.fetchone()[0] or 0.0
+
+            self.progress_label.config(text=f"Finding bets data")
+
+            # Fetch the count of bets for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+            total_bets = cursor.fetchone()[0]
+        
+            # Fetch the count of knockbacks for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK'", (current_date_str,))
+            total_wageralerts = cursor.fetchone()[0]
+        
+            # Fetch the count of SMS for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'SMS WAGER'", (current_date_str,))
+            total_sms = cursor.fetchone()[0]
+        
             # Fetch the count of bets for each sport for the current day
             cursor.execute("SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY sports", (current_date_str,))
             sport_counts = cursor.fetchall()
-    
+        
+            self.progress_label.config(text=f"Finding knockback data")
+
+            # Fetch the count of different types of wager alerts
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Has Changed%'", (current_date_str,))
+            price_change = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Liability Exceeded: True%'", (current_date_str,))
+            liability_exceeded = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Event Has Ended%'", (current_date_str,))
+            event_ended = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%'", (current_date_str,))
+            price_type_disallowed = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Sport Disallowed%'", (current_date_str,))
+            sport_disallowed = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+            max_stake_exceeded = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message NOT LIKE '%Price Has Changed%' AND error_message NOT LIKE '%Liability Exceeded: True%' AND error_message NOT LIKE '%Event Has Ended%' AND error_message NOT LIKE '%Price Type Disallowed%' AND error_message NOT LIKE '%Sport Disallowed%' AND error_message NOT LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+            other_alert = cursor.fetchone()[0]
+        
+            cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%' OR error_message LIKE '%Sport Disallowed%' OR error_message LIKE '%User Max Stake Exceeded%'", (current_date_str,))
+            user_restriction = cursor.fetchone()[0]
+        
+            self.progress_label.config(text=f"Calculating stakes")
+
+            # Fetch the total stakes for the current day
+            cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+            total_stakes = cursor.fetchone()[0] or 0.0
+        
+            # Fetch the top 5 highest stakes
+            cursor.execute("SELECT customer_ref, SUM(total_stake) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
+            top_spenders = cursor.fetchall()
+        
+            # Fetch the top 5 clients with most bets
+            cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'BET' GROUP BY customer_ref ORDER BY total DESC LIMIT 5", (current_date_str,))
+            top_client_bets = cursor.fetchall()
+        
+            # Fetch the top 3 clients with most knockbacks
+            cursor.execute("SELECT customer_ref, COUNT(*) as total FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK' GROUP BY customer_ref ORDER BY total DESC LIMIT 3", (current_date_str,))
+            top_wageralert_clients = cursor.fetchall()
+        
+            # Fetch the count of bets per hour for the current day
+            cursor.execute("SELECT strftime('%H:00', time) as hour, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY hour", (current_date_str,))
+            bets_per_hour = cursor.fetchall()
+            
+            self.progress_label.config(text=f"Calculating averages")
+
+            # Fetch the average number of daily bets, knockbacks, and SMS text bets for the current week
+            cursor.execute("""
+                SELECT 
+                    AVG(bets) as avg_bets, 
+                    AVG(knockbacks) as avg_knockbacks, 
+                    AVG(sms_bets) as avg_sms_bets
+                FROM (
+                    SELECT 
+                        date,
+                        COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
+                        COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
+                        COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                    GROUP BY date
+                ) as daily_counts
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_day_bets, avg_day_knockbacks, avg_day_sms_bets = cursor.fetchone()
+            
+            # Handle None values
+            avg_day_bets = avg_day_bets if avg_day_bets is not None else 0
+            avg_day_knockbacks = avg_day_knockbacks if avg_day_knockbacks is not None else 0
+            avg_day_sms_bets = avg_day_sms_bets if avg_day_sms_bets is not None else 0
+            
+            # Fetch the average number of daily bets, knockbacks, and SMS text bets for the previous week
+            cursor.execute("""
+                SELECT 
+                    AVG(bets) as avg_bets, 
+                    AVG(knockbacks) as avg_knockbacks, 
+                    AVG(sms_bets) as avg_sms_bets
+                FROM (
+                    SELECT 
+                        date,
+                        COUNT(CASE WHEN type = 'BET' THEN 1 END) as bets,
+                        COUNT(CASE WHEN type = 'WAGER KNOCKBACK' THEN 1 END) as knockbacks,
+                        COUNT(CASE WHEN type = 'SMS WAGER' THEN 1 END) as sms_bets
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                    GROUP BY date
+                ) as daily_counts
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_bets, avg_knockbacks, avg_sms_bets = cursor.fetchone()
+            
+            # Handle None values
+            avg_bets = avg_bets if avg_bets is not None else 0
+            avg_knockbacks = avg_knockbacks if avg_knockbacks is not None else 0
+            avg_sms_bets = avg_sms_bets if avg_sms_bets is not None else 0
+        
+            # Fetch the average total stakes for the current week
+            cursor.execute("""
+                SELECT AVG(daily_total) as avg_total_stake
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        SUM(total_stake) as daily_total
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND type = 'BET'
+                    GROUP BY day
+                ) as daily_totals
+            """, (start_of_current_week_iso, current_date_iso))
+            avg_total_stake_current_week = cursor.fetchone()[0] or 0.0
+
+            # Fetch the average total stakes for the previous week
+            cursor.execute("""
+                SELECT AVG(daily_total) as avg_total_stake
+                FROM (
+                    SELECT DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) as day,
+                        SUM(total_stake) as daily_total
+                    FROM database
+                    WHERE DATE(strftime('%Y-%m-%d', SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2))) 
+                        BETWEEN DATE(?) AND DATE(?)
+                        AND type = 'BET'
+                    GROUP BY day
+                ) as daily_totals
+            """, (start_of_previous_week_iso, start_of_current_week_iso))
+            avg_total_stake_previous_week = cursor.fetchone()[0] or 0.0
+
+            conn.close()
+
             # Initialize sport counts
             horse_bets = 0
             dog_bets = 0
             other_bets = 0
-    
+            
             # Map the sport counts
             sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
             for sport, count in sport_counts:
@@ -2010,46 +1876,213 @@ class Notebook:
                     dog_bets += count
                 if sport_mapping['Other'] in sport_list:
                     other_bets += count
-    
-            # Fetch the total stakes for the current day
-            cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
-            total_stakes = cursor.fetchone()[0] or 0.0
-    
-            # Append the data for the current day to the report output
-            report_output += f"Date: {current_date_str}\n"
-            report_output += "----------------------------------------\n"
-            report_output += f" - Bets  |  Knockbacks  |  Knockback % - \n"
-            report_output += f"{total_bets:,}      |      {total_knockbacks:,}      |      {total_knockbacks / total_bets * 100:.2f}%\n"
-            report_output += f"\n - Stakes   |   Average Stake - \n"
-            report_output += f"£{total_stakes:,.2f}     |     ~£{total_stakes / total_bets:,.2f}\n"
-            report_output += f"\nClients: {total_unique_clients:,} | --: {unique_norisk_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,}\n"
-            report_output += f"\nHorses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n\n"
+            
 
-        self.progress_label.config(text=f"---")
+            total_sport_bets = horse_bets + dog_bets + other_bets
+            percentage_horse_racing = (horse_bets / total_sport_bets) * 100
+            percentage_greyhound = (dog_bets / total_sport_bets) * 100
+            percentage_other = (other_bets / total_sport_bets) * 100
+
+        except Exception as e:
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+            self.report_ticket.insert('1.0', "An error occurred while generating the report.\nPlease try again.")
+            self.progress_label.config(text="Error with Daily Report")
+            self.report_ticket.tag_configure("center", justify='center')
+            self.report_ticket.tag_add("center", "1.0", "end")
+            self.report_ticket.config(state="disabled")
+            return
+        finally:
+            if conn:
+                conn.close()
+
+        separator = "-" * 69
 
         self.report_ticket.config(state="normal")
         self.report_ticket.delete('1.0', tk.END)
-        self.report_ticket.insert('1.0', report_output)
-        self.report_ticket.tag_configure("center", justify='center')
-        self.report_ticket.tag_add("center", "1.0", "end")
+
+        self.report_ticket.insert(tk.END, f"DAILY REPORT\nGenerated at {formatted_time}\n", 'center')
+        self.report_ticket.insert(tk.END, f"{separator}\n")
+
+        self.report_ticket.insert(tk.END, f"Today's Activity:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Bets {total_bets:,} | KB {total_wageralerts:,} | KB % {total_wageralerts / total_bets * 100:.2f}%\n", 'c')
+        self.report_ticket.insert(tk.END, f"This week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Bets {int(avg_day_bets):,} | KB {int(avg_day_knockbacks):,} | KB % {(avg_day_knockbacks / avg_day_bets * 100):.2f}%\n", 'c')
+        self.report_ticket.insert(tk.END, f"Last week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Bets {int(avg_bets):,} | KB {int(avg_knockbacks):,} | KB % {(avg_knockbacks / avg_bets * 100):.2f}%\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"\nToday's Stakes:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Stakes £{total_stakes:,.2f} | Average Stake ~£{total_stakes / total_bets:,.2f}\n", 'c')
+        self.report_ticket.insert(tk.END, f"This week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Stakes £{avg_total_stake_current_week:,.2f}  | Average Stake ~£{avg_total_stake_current_week / avg_day_bets:,.2f}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Last week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Stakes £{avg_total_stake_previous_week:,.2f}  | Average Stake ~£{avg_total_stake_previous_week / avg_bets:,.2f}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"\nToday's Clients:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Total: {total_unique_clients:,} | --: {unique_norisk_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,}\n", 'c')
+        self.report_ticket.insert(tk.END, f"This week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Total: {int(avg_unique_clients_current_week):,} | --: {int(avg_norisk_clients_current_week):,} | M: {int(avg_m_clients_current_week):,} | W: {int(avg_w_clients_current_week):,}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Last week daily average:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Total: {int(avg_unique_clients_previous_week):,} | --: {int(avg_norisk_clients_previous_week):,} | M: {int(avg_m_clients_previous_week):,} | W: {int(avg_w_clients_previous_week):,}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"\nToday's Deposits:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Total: {total_deposits} | Total: £{total_sum_deposits:,.2f}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"\nToday's Sports:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Horses: {horse_bets} ({percentage_horse_racing:.2f}%) | Dogs: {dog_bets} ({percentage_greyhound:.2f}%) | Other: {other_bets} ({percentage_other:.2f}%)\n", 'c')
+        
+        self.report_ticket.insert(tk.END, "\nHighest Stakes:\n", 'center')
+        for rank, (customer, spend) in enumerate(top_spenders, start=1):
+            self.report_ticket.insert(tk.END, f"\t{rank}. {customer} - Stakes: £{spend:,.2f}\n", 'c')
+
+        self.report_ticket.insert(tk.END, "\nMost Bets:\n", 'center')
+        for rank, (client, count) in enumerate(top_client_bets, start=1):
+            self.report_ticket.insert(tk.END, f"\t{rank}. {client} - Bets: {count:,}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"\nMost Knockbacks:\n", 'center')
+        for rank, (client, count) in enumerate(top_wageralert_clients, start=1):
+            self.report_ticket.insert(tk.END, f"\t{rank}. {client} - Knockbacks: {count:,}\n", 'c')
+
+
+        self.report_ticket.insert(tk.END, f"\nKnockbacks by Type:", 'center')
+        self.report_ticket.insert(tk.END, f"\nLiability: {liability_exceeded}  |  ", 'c')
+        self.report_ticket.insert(tk.END, f"Price Change: {price_change}  |  ", 'c')
+        self.report_ticket.insert(tk.END, f"Event Ended: {event_ended}  |  ", 'c')
+        self.report_ticket.insert(tk.END, f"Price Type: {price_type_disallowed}  |  ", 'c')
+        self.report_ticket.insert(tk.END, f"Sport: {sport_disallowed}  |  ", 'c')
+        self.report_ticket.insert(tk.END, f"Max Stake: {max_stake_exceeded}", 'c')
+
+        self.report_ticket.insert(tk.END, f"\n\nBets Per Hour:\n", 'center')
+        for hour, count in bets_per_hour:
+            self.report_ticket.insert(tk.END, f"\t{hour} - Bets: {count}\n", 'c')
+
+        self.progress_label.config(text=f"---")
+
         self.report_ticket.config(state="disabled")
     
-        # Close the database connection
-        conn.close()
+    def create_monthly_report(self):
+        try:
+            conn, cursor = get_database()
+            report_output = ""
+        
+            # Get today's date
+            today = datetime.now()
+            formatted_time = today.strftime("%d/%m/%Y %H:%M:%S")
+        
+            # Calculate the date 30 days ago
+            start_date = today - timedelta(days=30)
+            separator = "-" * 69
+        
+            # Header for the monthly report
+            report_output += f"MONTHLY REPORT TICKET\n Generated at {formatted_time}\n"
+            report_output += f"{separator}\n"
+        
+            # Loop through each day in the last 30 days, starting from today
+            for i in range(30):
+                current_date = today - timedelta(days=i)
+                current_date_str = current_date.strftime("%d/%m/%Y")
 
+                self.progress_label.config(text=f"Generating {current_date_str}")
+        
+                # Fetch the count of bets for the current day
+                cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+                total_bets = cursor.fetchone()[0]
+        
+                # Fetch the count of knockbacks for the current day
+                cursor.execute("SELECT COUNT(*) FROM database WHERE date = ? AND type = 'WAGER KNOCKBACK'", (current_date_str,))
+                total_knockbacks = cursor.fetchone()[0]
+        
+                # Fetch the count of unique clients for the current day
+                cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ?", (current_date_str,))
+                total_unique_clients = cursor.fetchone()[0]
+        
+                # Fetch the count of M clients for the current day
+                cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'M'", (current_date_str,))
+                unique_m_clients = cursor.fetchone()[0]
+        
+                # Fetch the count of W clients for the current day
+                cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND risk_category = 'W'", (current_date_str,))
+                unique_w_clients = cursor.fetchone()[0]
+        
+                # Fetch the count of no risk clients for the current day
+                cursor.execute("SELECT COUNT(DISTINCT customer_ref) FROM database WHERE date = ? AND (risk_category = '-' OR risk_category IS NULL)", (current_date_str,))
+                unique_norisk_clients = cursor.fetchone()[0]
+        
+                # Fetch the count of bets for each sport for the current day
+                cursor.execute("SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' GROUP BY sports", (current_date_str,))
+                sport_counts = cursor.fetchall()
+        
+                # Initialize sport counts
+                horse_bets = 0
+                dog_bets = 0
+                other_bets = 0
+        
+                # Map the sport counts
+                sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
+                for sport, count in sport_counts:
+                    sport_list = eval(sport)
+                    if sport_mapping['Horses'] in sport_list:
+                        horse_bets += count
+                    if sport_mapping['Dogs'] in sport_list:
+                        dog_bets += count
+                    if sport_mapping['Other'] in sport_list:
+                        other_bets += count
+        
+                # Fetch the total stakes for the current day
+                cursor.execute("SELECT SUM(total_stake) FROM database WHERE date = ? AND type = 'BET'", (current_date_str,))
+                total_stakes = cursor.fetchone()[0] or 0.0
+
+
+                # Append the data for the current day to the report output
+                report_output += f"Date: {current_date_str}\n"
+                report_output += "----------------------------------------\n"
+                report_output += f" - Bets  |  Knockbacks  |  Knockback % - \n"
+                report_output += f"{total_bets:,}      |      {total_knockbacks:,}      |      {total_knockbacks / total_bets * 100:.2f}%\n"
+                report_output += f"\n - Stakes   |   Average Stake - \n"
+                report_output += f"£{total_stakes:,.2f}     |     ~£{total_stakes / total_bets:,.2f}\n"
+                report_output += f"\nClients: {total_unique_clients:,} | --: {unique_norisk_clients:,} | M: {unique_m_clients:,} | W: {unique_w_clients:,}\n"
+                report_output += f"\nHorses: {horse_bets} | Dogs: {dog_bets} | Other: {other_bets}\n\n"
+            
+            conn.close()
+
+            self.progress_label.config(text=f"---")
+
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+            self.report_ticket.insert('1.0', report_output)
+            self.report_ticket.tag_configure("center", justify='center')
+            self.report_ticket.tag_add("center", "1.0", "end")
+            self.report_ticket.config(state="disabled")
+
+        except Exception as e:
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+            self.report_ticket.insert('1.0', "An error occurred while generating the report.\nPlease try again.")
+            self.progress_label.config(text="Error with Monthly Report")
+            self.report_ticket.tag_configure("center", justify='center')
+            self.report_ticket.tag_add("center", "1.0", "end")
+            self.report_ticket.config(state="disabled")
+            return
+        
+        finally:
+            if conn:
+                conn.close()
+    
+    
     def create_staff_report(self):
         global USER_NAMES
-
-        report_output = ""
+    
         course_updates = Counter()
         staff_updates = Counter()
         staff_updates_today = Counter()
         factoring_updates = Counter()
         offenders = Counter()
+        daily_updates = Counter()
         today = datetime.now().date()
         current_date = datetime.now().date()
         month_ago = current_date.replace(day=1)
-
+        days_in_month = (current_date - month_ago).days + 1
+    
         log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs'))
         log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', file)))
         # Read all the log files from the past month
@@ -2058,25 +2091,26 @@ class Notebook:
             if month_ago <= file_date <= current_date:
                 with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', log_file), 'r') as file:
                     lines = file.readlines()
-
+    
                 update_counts = {}
-
+    
                 for line in lines:
                     if line.strip() == '':
                         continue
-
+    
                     parts = line.strip().split(' - ')
-
+    
                     if len(parts) == 1 and parts[0].endswith(':'):
                         course = parts[0].replace(':', '')
                         continue
-
+    
                     if len(parts) == 2:
                         time, staff_initials = parts
                         staff_name = USER_NAMES.get(staff_initials, staff_initials)
                         course_updates[course] += 1
                         staff_updates[staff_name] += 1
-
+                        daily_updates[(staff_name, file_date)] += 1
+    
                         if file_date == today:
                             current_time = datetime.strptime(time, '%H:%M')
                             if course not in update_counts:
@@ -2084,63 +2118,84 @@ class Notebook:
                             if staff_name not in update_counts[course]:
                                 update_counts[course][staff_name] = Counter()
                             update_counts[course][staff_name][current_time] += 1
-
+    
                             if update_counts[course][staff_name][current_time] > 1:
                                 offenders[staff_name] += 1
-
+    
                             staff_updates_today[staff_name] += 1
-
+    
+        # Filter out non-staff members from staff_updates_today and staff_updates
+        staff_updates_today = Counter({staff: count for staff, count in staff_updates_today.items() if staff in USER_NAMES.values()})
+        staff_updates = Counter({staff: count for staff, count in staff_updates.items() if staff in USER_NAMES.values()})
+    
+        # Calculate average updates per day for each staff member
+        average_updates_per_day = Counter()
+        for (staff, date), count in daily_updates.items():
+            if staff in USER_NAMES.values():
+                average_updates_per_day[staff] += count
+    
+        for staff in average_updates_per_day:
+            average_updates_per_day[staff] /= days_in_month
+    
         factoring_log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs'))
         factoring_log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', file)))
-
+    
         for log_file in factoring_log_files:
             with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', log_file), 'r') as file:
                 lines = file.readlines()
-
+    
             for line in lines:
                 if line.strip() == '':
                     continue
-
+    
                 data = json.loads(line)
                 staff_initials = data['Staff']
                 staff_name = USER_NAMES.get(staff_initials, staff_initials)
                 factoring_updates[staff_name] += 1
-
+    
         separator = "-" * 69
-        report_output += f"STAFF REPORT\n"
-        report_output += f"{separator}"
-        employee_of_the_month, _ = staff_updates.most_common(1)[0]
-        report_output += f"\nEmployee Of The Month: {employee_of_the_month}"
-
-        factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
-        report_output += f"\nAll Time Factoring Leader: {factoring_employee_of_the_month}\n"
-
-        report_output += "\nToday's Staff Updates:\n"
-        for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
-            report_output += f"\t{staff}  |  {count}\n"
-
-        report_output += "\nTotal Staff Updates Since " + month_ago.strftime('%d-%m') + ":\n"
-        for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
-            report_output += f"\t{staff}  |  {count}\n"
-
-        report_output += "\nAll Time Staff Factoring:\n"
-        for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
-            report_output += f"\t{staff}  |  {count}\n"
-
-        report_output += "\nCourse Updates:\n"
-        for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
-            report_output += f"\t{course}  |  {count}\n"
-
-        report_output += "\nUpdation Offenders Today:\n"
-        for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
-            report_output += f"\t{staff}  |  {count}\n"
-
+    
         self.report_ticket.config(state="normal")
         self.report_ticket.delete('1.0', tk.END)
-        self.report_ticket.insert('1.0', report_output)
-        self.report_ticket.tag_configure("center", justify='center')
-        self.report_ticket.tag_add("center", "1.0", "end")
+    
+        self.report_ticket.insert(tk.END, "STAFF REPORT\n", 'center')
+        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+    
+        employee_of_the_month, _ = staff_updates.most_common(1)[0]
+        self.report_ticket.insert(tk.END, f"\nEmployee Of The Month:\n", 'center')
+        self.report_ticket.insert(tk.END, f"{employee_of_the_month}\n", 'c')
+
+        factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
+        self.report_ticket.insert(tk.END, f"\nAll Time Factoring Leader:\n", 'center')
+        self.report_ticket.insert(tk.END, f"{factoring_employee_of_the_month}\n", 'c')
+
+        self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
+        for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, f"\nTotal Staff Updates Since {month_ago.strftime('%d-%m')}:\n", 'center')
+        for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nAverage Updates Per Day:\n", 'center')
+        for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nAll Time Staff Factoring:\n", 'center')
+        for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nCourse/Event Updates:\n", 'center')
+        for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
+            self.report_ticket.insert(tk.END, f"\t{course}  |  {count}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
+        for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+    
+        self.progress_label.config(text=f"---")
         self.report_ticket.config(state="disabled")
+
 
     def create_rg_report(self):
 
@@ -2395,85 +2450,7 @@ class Notebook:
         user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
 
         return user_scores
-
-    def create_traders_report(self):
-        # Load today's Oddsmonkey selections
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'data.json'), 'r') as file:
-            data = json.load(file)
-        todays_oddsmonkey_selections = data['todays_oddsmonkey_selections']
-
-        data = get_database()
-        results = []
-        selection_to_users = {}
-        selection_to_odds = {}
-        users_without_risk_category = set()
-        enhanced_bets_counter = {}
-
-        self.progress["maximum"] = len(data)
-        self.progress["value"] = 0
-
-        for bet in data:
-            self.progress["value"] += 1
-            wager_type = bet.get('type', '').lower()
-            if wager_type == 'bet':
-                details = bet.get('details', {})
-                bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
-                customer_reference = bet.get('customer_ref', '')
-                customer_risk_category = details.get('risk_category', '')
-
-                for selection in details['selections']:
-                    selection_name = selection[0]
-                    odds = selection[1]
-
-                    # Check if the selection is in the enhanced_places list
-                    race_meeting = selection_name.split(' - ')[0]
-                    if race_meeting in self.enhanced_places:
-                        if customer_reference not in enhanced_bets_counter:
-                            enhanced_bets_counter[customer_reference] = 0
-                        enhanced_bets_counter[customer_reference] += 1
-
-
-                    if isinstance(odds, str):
-                        if odds == 'SP':
-                            continue  
-                        elif odds.lower() == 'evs':
-                            odds = 2.0  
-                        else:
-                            odds = float(odds)  
-
-                    selection_tuple = (selection_name,)
-                    if selection_tuple not in selection_to_users:
-                        selection_to_users[selection_tuple] = set()
-                        selection_to_odds[selection_tuple] = []
-                    selection_to_users[selection_tuple].add((customer_reference, customer_risk_category))
-                    selection_to_odds[selection_tuple].append((customer_reference, odds))
-
-                    actual_selection = selection_name.split(' - ')[-1] if ' - ' in selection_name else selection_name.split(', ')[-1]
-
-                    selection_names = [selection[0] for selection in todays_oddsmonkey_selections.values()]
-
-                    if actual_selection in selection_names:
-                        for event, selection in todays_oddsmonkey_selections.items():
-                            if selection[0] == actual_selection:
-                                if odds > float(selection[1]):
-                                    results.append({
-                                        'username': customer_reference,
-                                        'selection_name': actual_selection,
-                                        'user_odds': odds,
-                                        'oddsmonkey_odds': float(selection[1])
-                                    })
-
-        for selection, users in selection_to_users.items():
-            users_with_risk_category = {user for user in users if user[1] and user[1] != '-'}
-            users_without_risk_category_for_selection = {user for user in users if not user[1] or user[1] == '-'}
-
-            if len(users_with_risk_category) / len(users) > 0.5:
-                users_without_risk_category.update(users_without_risk_category_for_selection)
-        
-        users_without_risk_category = {user for user in users_without_risk_category}
-
-        return users_without_risk_category, results, enhanced_bets_counter
-
+    
     def update_rg_report(self):
         print("Updating RG Report")
         user_scores = self.create_rg_report()
@@ -2519,38 +2496,225 @@ class Notebook:
         self.report_ticket.insert(tk.END, report_output)
         self.report_ticket.config(state='disabled')
 
+
+
+
+    def create_traders_report(self):
+        self.progress_label.config(text="Retrieving database")
+        vip_clients, _, _, _, _ = access_data()
+        conn = None
+        cursor = None
+        try:
+            retry_attempts = 2
+            for attempt in range(retry_attempts):
+                conn, cursor = get_database()
+                if conn is not None:
+                    break
+                elif attempt < retry_attempts - 1:
+                    print("Error finding bets. Retrying in 2 seconds...")
+                    time.sleep(2)
+                else:
+                    self.feed_text.config(state="normal")
+                    self.feed_text.delete('1.0', tk.END)
+                    self.feed_text.insert('end', "Error finding bets. Please try refreshing.", "center")
+                    self.feed_text.config(state="disabled")
+                    return
+            
+            self.progress_label.config(text=f"Finding users beating the SP...")
+    
+            current_date = datetime.now().strftime('%d/%m/%Y')
+            cursor.execute("SELECT DISTINCT customer_ref FROM database WHERE date = ?", (current_date,))
+            customer_refs = [row[0] for row in cursor.fetchall()]
+    
+            client_wagers = self.get_client_wagers(conn, customer_refs)
+            data = self.get_results_json()
+            results = self.compare_odds(client_wagers, data)
+    
+            # Initialize new lists
+            selection_to_users = defaultdict(list)
+            users_without_risk_category = set()
+            
+            self.progress_label.config(text=f"Finding potential W users...")
+    
+            cursor.execute("SELECT * FROM database WHERE date = ?", (current_date,))
+            database_data = cursor.fetchall()
+            for bet in database_data:
+                try:
+                    wager_type = bet[5]
+                    if wager_type == 'BET':
+                        # Parse the selections from the JSON string stored in the database
+                        details = json.loads(bet[10])
+                        customer_reference = bet[3]
+                        customer_risk_category = bet[4]
+                    
+                        for selection in details:
+                            selection_name = selection[0]
+                            odds = selection[1]
+                    
+                            if isinstance(odds, str):
+                                if odds == 'SP':
+                                    continue  
+                                elif odds.lower() == 'evs':
+                                    odds = 2.0  
+                                else:
+                                    odds = float(odds)  
+                    
+                            selection_to_users[selection_name].append((customer_reference, customer_risk_category))
+                except Exception as e:
+                    print(f"Error processing bet: {bet}, Error: {e}")
+                            
+            for selection, users in selection_to_users.items():
+                users_with_risk_category = [user for user in users if user[1] and user[1] != '-']
+                users_without_risk_category_for_selection = [user for user in users if not user[1] or user[1] == '-']
+            
+                if len(users_with_risk_category) / len(users) > 0.6:
+                    users_without_risk_category.update(users_without_risk_category_for_selection)
+            
+            # Exclude VIP clients from users_without_risk_category
+            users_without_risk_category = {user for user in users_without_risk_category if user[0] not in vip_clients}
+            
+            self.progress_label.config(text=f"---")
+    
+            return results, users_without_risk_category
+                    
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return [], set()
+        finally:
+            if conn:
+                conn.close()
+    
     def update_traders_report(self):
-        users_without_risk_category, oddsmonkey_traders, enhanced_bets_counter = self.create_traders_report()
-
-        username_counts = Counter(trader['username'] for trader in oddsmonkey_traders)
-        top_users = username_counts.most_common(6)
-        top_enhanced_users = {user for user, count in enhanced_bets_counter.items() if count > 3}
-
-
-        users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
-
+        results, users_without_risk_category = self.create_traders_report()
+        self.initialize_text_tags()
+    
+        separator = "-" * 69
+    
         self.report_ticket.config(state='normal')
         self.report_ticket.delete('1.0', tk.END)
-        self.report_ticket.insert(tk.END, "\tTRADERS SCREENER\n\n")
-
+        self.report_ticket.insert(tk.END, "TRADERS SCREENER\n", 'center')
+        self.report_ticket.insert(tk.END, f"{separator}\n")
         self.report_ticket.insert(tk.END, "Please do your own research before taking any action.\n\n")
-
-        self.report_ticket.insert(tk.END, "Clients backing selections shown on OddsMonkey above the lay price:\n")
-        for user, count in top_users:
-            self.report_ticket.insert(tk.END, f"\t{user}, Count: {count}\n")
-
-        self.report_ticket.insert(tk.END, "\nClients wagering frequently on Extra Place Races:\n\n")
-        for user in sorted(top_enhanced_users, key=enhanced_bets_counter.get, reverse=True):  # Sort by count
-            self.report_ticket.insert(tk.END, f"\t{user}, Count: {enhanced_bets_counter[user]}\n")
-
-        self.report_ticket.insert(tk.END, "\nClients wagering on selections containing multiple risk users:\n\n")
+    
+        self.report_ticket.insert(tk.END, "- Users beating the SP -\n", 'center')
+        self.report_ticket.insert(tk.END, "Users who have placed > 5 bets and > 50% of their selections beat the SP - Horses & Dogs.\n")
+        self.report_ticket.insert(tk.END, f"For best results, run this function at the end of the day when all results are in.\n\n")
+        if results:
+            # Sort results by percentage_beaten in descending order
+            sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
+            for customer_ref, percentage_beaten, total_bets in sorted_results:
+                self.report_ticket.insert(tk.END, f"{customer_ref}: ", 'bold')
+                self.report_ticket.insert(tk.END, f"{total_bets} slns, {percentage_beaten:.2f}% beat the SP.\n")
+        else:
+            self.report_ticket.insert(tk.END, "No users currently significantly beating the SP. This could be because\n- Results not yet available\n- Users not meeting criteria (over 5 bets, over 50% selections beat SP)\n\n")            
+    
+        self.report_ticket.insert(tk.END, f"\n{separator}\n")
+        self.report_ticket.insert(tk.END, "- Clients wagering on selections containing multiple risk users -\n", 'center')
+        self.report_ticket.insert(tk.END, "Clients who have wagered on selections where > 60% of other bets are from risk users.\nThis excludes any user from our 'VIP' list.\n\n")
+    
+        users_without_risk_category_str = '  |  '.join(user[0] for user in users_without_risk_category)
         self.report_ticket.insert(tk.END, users_without_risk_category_str)
-
-        #traders_report_ticket.insert(tk.END, "\n\nList of users taking higher odds than Oddsmonkey:\n")
-        #for trader in oddsmonkey_traders:
-        #    traders_report_ticket.insert(tk.END, f"{trader['username']}, Selection: {trader['selection_name']}\nOdds Taken: {trader['user_odds']}, Lay Odds: {trader['oddsmonkey_odds']}\n\n")
-
+    
         self.report_ticket.config(state='disabled')
+
+    def compare_odds(self, client_wagers, race_results):
+        results = []
+        for customer_ref, wagers in client_wagers.items():
+            total_bets = 0
+            bets_beaten = 0 
+
+            for betID, selections in wagers:
+                for selection in selections:
+                    if len(selection) >= 2:
+                        race_name = selection[0]
+                        placed_odds = selection[1]
+                        
+                        if " - " not in race_name:
+                            continue
+                        
+                        total_bets += 1
+                        
+                        race_name_parts = race_name.split(" - ")
+                        race_time = race_name_parts[0].split(", ")[1]
+                        selection_name = race_name_parts[1]
+                        
+                        for event in race_results:
+                            for meeting in event['meetings']:
+                                for race in meeting['events']:
+                                    if race['status'] == 'Result':
+                                        race_start_time = race['startDateTime'].split('T')[1][:5]
+                                        race_full_name = f"{meeting['meetinName']}, {race_start_time}"
+                                        
+                                        if race_full_name.lower() == race_name_parts[0].lower():
+                                            for race_selection in race['selections']:
+                                                if meeting['sportCode'] == 'g':
+                                                    trap_number = 'Trap ' + race_selection['runnerNumber']
+                                                    
+                                                    if trap_number.lower() == selection_name.lower():
+                                                        last_price_fractional = race_selection['lastPrice']
+                                                        last_price_decimal = self.fractional_to_decimal(last_price_fractional)
+                                                        
+                                                        if placed_odds == 'SP':
+                                                            placed_odds = last_price_decimal
+                                                        if placed_odds == 'evs':
+                                                            placed_odds = 2.0
+                                                        
+                                                        if placed_odds > last_price_decimal:
+                                                            bets_beaten += 1
+                                                else:
+                                                    if race_selection['name'].lower() == selection_name.lower():
+                                                        last_price_fractional = race_selection['lastPrice']
+                                                        last_price_decimal = self.fractional_to_decimal(last_price_fractional)
+                                                        
+                                                        if placed_odds == 'SP':
+                                                            placed_odds = last_price_decimal
+                                                        if placed_odds == 'evs':
+                                                            placed_odds = 2.0
+                                                        
+                                                        if placed_odds > last_price_decimal:
+                                                            bets_beaten += 1
+            
+            if total_bets > 5:
+                percentage_beaten = (bets_beaten / total_bets) * 100
+                if percentage_beaten >= 50.0:
+                    results.append((customer_ref, percentage_beaten, total_bets))
+        
+        return results
+    
+    def get_results_json(self):
+        url = "https://globalapi.geoffbanks.bet/api/geoff/GetCachedRaceResults?sportcode=H,h,g,o"
+        response = requests.get(url)
+        data = response.json()
+        return data
+
+    def get_client_wagers(self, conn, customer_refs):
+        time = datetime.now()
+        current_date_str = time.strftime("%d/%m/%Y")
+        cursor = conn.cursor()
+        
+        client_wagers = {}
+        for customer_ref in customer_refs:
+            cursor.execute("SELECT * FROM database WHERE customer_ref = ? AND date = ?", (customer_ref, current_date_str,))
+            wagers = cursor.fetchall()
+            
+            user_wagers = []
+            for bet in wagers:
+                if bet[5] == 'BET':
+                    betID = bet[0]
+                    selections = json.loads(bet[10])
+                    user_wagers.append((betID, selections))
+            
+            client_wagers[customer_ref] = user_wagers
+        
+        return client_wagers
+
+    def fractional_to_decimal(self, fractional_odds):
+        if fractional_odds.lower() == 'evens':
+            return 2.0
+        numerator, denominator = map(int, fractional_odds.split('-'))
+        return (numerator / denominator) + 1
+
+
 
     def run_factoring_sheet_thread(self):
         self.factoring_thread = threading.Thread(target=self.factoring_sheet)
@@ -2559,167 +2723,13 @@ class Notebook:
     def factoring_sheet(self):
         self.tree.delete(*self.tree.get_children())
         spreadsheet = self.gc.open('Factoring Diary')
-        print("Getting Factoring Sheet")
         worksheet = spreadsheet.get_worksheet(4)
         data = worksheet.get_all_values()
-        print("Retrieving factoring data")
         self.last_refresh_label.config(text=f"Last Refresh:\n{datetime.now().strftime('%H:%M:%S')}")
         for row in data[2:]:
             self.tree.insert("", "end", values=[row[5], row[0], row[1], row[2], row[3], row[4]])
 
-    def open_factoring_wizard(self):
-        global user
-        if not user:
-            user_login()
 
-        progress = IntVar()
-        progress.set(0)
-
-        def handle_submit():
-            current_time = datetime.now().strftime("%H:%M:%S")
-            current_date = datetime.now().strftime("%d/%m/%Y")
-
-            if not entry1.get() or not entry3.get():
-                messagebox.showerror("Error", "Please make sure all fields are completed.")
-                return
-            
-            try:
-                float(entry3.get())
-            except ValueError:
-                messagebox.showerror("Error", "Assessment rating should be a number.")
-                return
-            
-            params = {
-                'term': entry1.get(),
-                'item_types': 'person',
-                'fields': 'custom_fields',
-                'exact_match': 'true',
-            }
-
-            progress.set(10)
-
-            copy_string = ""
-            if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]:
-                copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {user}"
-
-            pyperclip.copy(copy_string)
-
-            factoring_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
-            response = requests.get(self.pipedrive_api_url, params=params)
-            progress.set(20)
-            if response.status_code == 200:
-                persons = response.json()['data']['items']
-                if not persons:
-                    messagebox.showerror("Error", f"No persons found for username: {entry1.get()}. Please make sure the username is correct, or enter the risk category in pipedrive manually.")
-                    return
-
-                for person in persons:
-                    person_id = person['item']['id']
-
-                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
-                    update_data = {
-                        'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()
-                    }
-                    update_response = requests.put(update_url, json=update_data)
-
-                    if update_response.status_code == 200:
-                        print(f'Successfully updated person {person_id}')
-                    else:
-                        print(f'Error updating person {person_id}: {update_response.status_code}')
-            else:
-                print(f'Error: {response.status_code}')
-            
-            progress.set(30)
-
-            factoring_note.config(text="Factoring Applied on Pipedrive.\nReporting on Factoring Log...\n", anchor='center', justify='center')
-
-            spreadsheet = self.gc.open('Factoring Diary')
-            worksheet = spreadsheet.get_worksheet(4)
-            
-            factoring_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
-
-            next_row = len(worksheet.col_values(1)) + 1
-            progress.set(40)
-            entry2_value = entry2.get().split(' - ')[0]
-            worksheet.update_cell(next_row, 1, current_time)
-            worksheet.update_cell(next_row, 2, entry1.get().upper())
-            worksheet.update_cell(next_row, 3, entry2_value)
-            worksheet.update_cell(next_row, 4, entry3.get())
-            worksheet.update_cell(next_row, 5, user) 
-            worksheet.update_cell(next_row, 6, current_date)
-
-            worksheet3 = spreadsheet.get_worksheet(3)
-            username = entry1.get().upper()
-            factoring_note.config(text="Trying to find user in Factoring Diary...\n\n", anchor='center', justify='center')
-            matching_cells = worksheet3.findall(username, in_column=2)
-            progress.set(50)
-
-            if not matching_cells:
-                messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. This may be due to them being a recent registration. Factoring reported to log, but not to diary.")
-            else:
-                factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
-                cell = matching_cells[0]
-                row = cell.row
-                worksheet3.update_cell(row, 9, entry2_value)  # Column I
-                worksheet3.update_cell(row, 10, entry3.get())  # Column J
-                worksheet3.update_cell(row, 12, current_date)  # Column L
-            progress.set(60)
-            factoring_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
-            self.tree.insert("", "end", values=[current_date, current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
-            progress.set(70)
-            data = {
-                'Time': current_time,
-                'Username': entry1.get().upper(),
-                'Risk Category': entry2_value,
-                'Assessment Rating': entry3.get(),
-                'Staff': user
-            }
-            progress.set(80)
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', 'factoring.json'), 'a') as file:
-                file.write(json.dumps(data) + '\n')
-
-            log_notification(f"{user} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
-            progress.set(100)
-            time.sleep(.5)
-            wizard_window.destroy()
-
-        wizard_window = tk.Toplevel(root)
-        wizard_window.geometry("270x370")
-        wizard_window.title("Add Factoring")
-        wizard_window.iconbitmap('src/splash.ico')
-
-        screen_width = wizard_window.winfo_screenwidth()
-        wizard_window.geometry(f"+{screen_width - 350}+50")
-
-        wizard_window_frame = ttk.Frame(wizard_window, style='Card')
-        wizard_window_frame.place(x=5, y=5, width=260, height=360)
-
-        username = ttk.Label(wizard_window_frame, text="Client Username")
-        username.pack(padx=5, pady=5)
-        entry1 = ttk.Entry(wizard_window_frame)
-        entry1.pack(padx=5, pady=5)
-
-        riskcat = ttk.Label(wizard_window_frame, text="Risk Category")
-        riskcat.pack(padx=5, pady=5)
-
-        options = ["", "W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
-        entry2 = ttk.Combobox(wizard_window_frame, values=options, state="readonly")
-        entry2.pack(padx=5, pady=5)
-        entry2.set(options[0])
-        
-        ass_rating = ttk.Label(wizard_window_frame, text="Assessment Rating")
-        ass_rating.pack(padx=5, pady=5)
-        entry3 = ttk.Entry(wizard_window_frame)
-        entry3.pack(padx=5, pady=5)
-
-        factoring_note = ttk.Label(wizard_window_frame, text="Risk Category will be updated in Pipedrive.\n\n", anchor='center', justify='center')
-        factoring_note.pack(padx=5, pady=5)
-
-        submit_button = ttk.Button(wizard_window_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
-        submit_button.pack(padx=5, pady=5)
-
-        progress_bar = ttk.Progressbar(wizard_window_frame, length=200, mode='determinate', variable=progress)
-        progress_bar.pack(padx=5, pady=5)
 
     def display_closure_requests(self):
         for widget in self.requests_frame.winfo_children():
@@ -3011,6 +3021,8 @@ class Notebook:
         else:
             print("Error: Invalid restriction")
 
+
+
     def generate_random_string(self):
         random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
         
@@ -3041,7 +3053,7 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v11.2", font=("Helvetica", 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v11.2.1", font=("Helvetica", 10))
         self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
@@ -3397,13 +3409,438 @@ class Next3Panel:
             self.root.after(0, self.process_data, greyhound_data, 'greyhound')
         else:
             print("Error: The response from the API is not OK.")
-                 
+
+class ClientWizard:
+    def __init__(self, root, default_tab="Factoring"):
+        self.root = root
+        self.default_tab = default_tab
+        self.toplevel = tk.Toplevel(self.root)
+        self.toplevel.title("Client Reporting and Modifications")
+        self.toplevel.geometry("600x300")
+        screen_width = self.toplevel.winfo_screenwidth()
+        self.toplevel.geometry(f"+{screen_width - 750}+50")
+        
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
+            data = json.load(f)
+        self.pipedrive_api_token = data['pipedrive_api_key']
+        self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+        self.gc = gspread.authorize(credentials)
+
+        self.initialize_ui()
+
+    def initialize_ui(self):
+        self.wizard_frame = ttk.Frame(self.toplevel, style='Card')
+        self.wizard_frame.place(x=5, y=5, width=590, height=290)
+
+        self.wizard_notebook = ttk.Notebook(self.wizard_frame)
+        self.wizard_notebook.pack(fill='both', expand=True)
+
+        self.factoring_tab = self.create_client_tab()
+        self.report_freebet_tab = self.create_freebet_tab()
+        self.rg_popup_tab = self.display_rg_popup()
+        self.closure_requests_tab = self.view_closure_requests_tab()
+        self.add_factoring_tab = self.create_factoring_tab()
+
+        self.wizard_notebook.add(self.report_freebet_tab, text="Report Freebet")
+        self.wizard_notebook.add(self.rg_popup_tab, text="RG Popup")
+        self.wizard_notebook.add(self.closure_requests_tab, text="Closure Requests")
+        self.wizard_notebook.add(self.add_factoring_tab, text="Factoring")
+
+        # Select the default tab
+        self.select_default_tab()
+
+    def select_default_tab(self):
+        tab_mapping = {
+            "Report Freebet": 0,
+            "RG Popup": 1,
+            "Closure Requests": 2,
+            "Factoring": 3
+        }
+        
+        tab_index = tab_mapping.get(self.default_tab, 4)
+        self.wizard_notebook.select(tab_index)
+
+    def display_rg_popup(self):
+        # Load credentials and Pipedrive API token
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
+            data = json.load(f)
+        pipedrive_api_token = data['pipedrive_api_key']
+    
+        custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'  # Your custom field ID
+    
+        def handle_submit():
+            # Disable the submit button while processing
+            submit_button.config(state=tk.DISABLED)
+    
+            if not entry1.get():
+                messagebox.showerror("Error", "Please make sure you enter a username.")
+                submit_button.config(state=tk.NORMAL)
+                return 
+            
+            # Get the provided username
+            username = entry1.get().strip()
+            
+            # Search for the person using the provided username
+            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={pipedrive_api_token}'
+            params = {
+                'term': username,
+                'item_types': 'person',
+                'fields': 'custom_fields',
+                'exact_match': 'true'
+            }
+    
+            response = requests.get(search_url, params=params)
+            if response.status_code == 200:
+                persons = response.json().get('data', {}).get('items', [])
+    
+                if not persons:
+                    messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or enter the risk category in Pipedrive manually.")
+                    submit_button.config(state=tk.NORMAL)
+                    return
+    
+                for person in persons:
+                    person_id = person['item']['id']
+                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
+                    update_data = {
+                        custom_field_id: date.today().strftime('%m/%d/%Y')
+                    }
+                    update_response = requests.put(update_url, json=update_data)
+                    if update_response.status_code == 200:
+                        log_notification(f"{user} applied RG Popup to {username.upper()}", True)
+                        self.report_rg_notification(username.upper())
+                    else:
+                        messagebox.showerror("Error", f"Error updating person {person_id}: {update_response.status_code}")
+            else:
+                print(f'Error: {response.status_code}')
+    
+            # Re-enable the submit button
+            submit_button.config(state=tk.NORMAL)
+    
+        def fetch_usernames_and_compliance_dates():
+            filter_id = 65  # Your filter ID
+            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
+            response = requests.get(filter_url)
+            if response.status_code == 200:
+                persons = response.json().get('data', [])
+                user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
+                
+                # Sort the data by 'Compliance Popup' date in descending order
+                user_data.sort(key=lambda x: x[1], reverse=True)
+                
+                return user_data
+            else:
+                messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
+                return []
+    
+        frame = ttk.Frame(self.wizard_notebook)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+    
+        # Left section
+        left_frame = ttk.Frame(frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    
+        username_label = ttk.Label(left_frame, text="Username")
+        username_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        entry1 = ttk.Entry(left_frame)
+        entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+    
+        popup_note = ttk.Label(left_frame, text="Enter a username above to apply popup on next login.", wraplength=200, anchor='center', justify='center')
+        popup_note.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
+        submit_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        # Right section
+        right_frame = ttk.Frame(frame)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+    
+        tree_title = ttk.Label(right_frame, text="RG Popup", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
+        tree_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        tree_description = ttk.Label(right_frame, text="Apply a Responsible Gambling Questionnaire on users next login.", wraplength=200, anchor='center', justify='center')
+        tree_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        # user_data = fetch_usernames_and_compliance_dates()
+        # tree = ttk.Treeview(right_frame, columns=('Username', 'Compliance Popup'), show='headings')
+        # tree.heading('Username', text='Username')
+        # tree.heading('Compliance Popup', text='Popup Date')
+        # tree.column('Username', width=100)  # Adjusted width
+        # tree.column('Compliance Popup', width=100)  # Adjusted width
+    
+        # for username, compliance_date in user_data:
+        #     tree.insert('', tk.END, values=(username, compliance_date))
+        # tree.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+    
+        # Add the new tab to the notebook
+        self.wizard_notebook.add(frame, text="RG Popup")
+    
+        return frame
+
+    def create_client_tab(self):
+        frame = ttk.Frame(self.wizard_notebook)
+        # Add your client creation UI components here
+        return frame
+
+    def create_factoring_tab(self):
+        frame = ttk.Frame(self.wizard_notebook)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+
+        # Left section
+        left_frame = ttk.Frame(frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        username_label = ttk.Label(left_frame, text="Client Username")
+        username_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        entry1 = ttk.Entry(left_frame)
+        entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+        riskcat_label = ttk.Label(left_frame, text="Risk Category")
+        riskcat_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        options = ["", "W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
+        entry2 = ttk.Combobox(left_frame, values=options, state="readonly")
+        entry2.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        entry2.set(options[0])
+
+        ass_rating_label = ttk.Label(left_frame, text="Assessment Rating")
+        ass_rating_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        entry3 = ttk.Entry(left_frame)
+        entry3.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+
+        factoring_note = ttk.Label(left_frame, text="Risk Category will be updated in Pipedrive.\n\n", anchor='center', justify='center')
+        factoring_note.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
+        submit_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        # Right section
+        right_frame = ttk.Frame(frame)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+    
+        report_freebet_title = ttk.Label(right_frame, text="Modify Client Terms", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
+        report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        tree_description = ttk.Label(right_frame, text="Apply Factoring and report new assessment ratings for clients.", wraplength=200, anchor='center', justify='center')
+        tree_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        def handle_submit():
+            global user
+            if not user:
+                user_login()
+
+            current_time = datetime.now().strftime("%H:%M:%S")
+            current_date = datetime.now().strftime("%d/%m/%Y")
+
+            if not entry1.get() or not entry3.get():
+                messagebox.showerror("Error", "Please make sure all fields are completed.")
+                return
+            
+            try:
+                float(entry3.get())
+            except ValueError:
+                messagebox.showerror("Error", "Assessment rating should be a number.")
+                return
+            
+            params = {
+                'term': entry1.get(),
+                'item_types': 'person',
+                'fields': 'custom_fields',
+                'exact_match': 'true',
+            }
+
+
+            copy_string = ""
+            if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]:
+                copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {user}"
+
+            pyperclip.copy(copy_string)
+
+            factoring_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
+            response = requests.get(self.pipedrive_api_url, params=params)
+            if response.status_code == 200:
+                persons = response.json()['data']['items']
+                if not persons:
+                    messagebox.showerror("Error", f"No persons found for username: {entry1.get()}. Please make sure the username is correct, or enter the risk category in pipedrive manually.")
+                    return
+
+                for person in persons:
+                    person_id = person['item']['id']
+
+                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
+                    update_data = {
+                        'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()
+                    }
+                    update_response = requests.put(update_url, json=update_data)
+
+                    if update_response.status_code == 200:
+                        print(f'Successfully updated person {person_id}')
+                    else:
+                        print(f'Error updating person {person_id}: {update_response.status_code}')
+            else:
+                print(f'Error: {response.status_code}')
+            
+
+            factoring_note.config(text="Factoring Applied on Pipedrive.\nReporting on Factoring Log...\n", anchor='center', justify='center')
+
+            spreadsheet = self.gc.open('Factoring Diary')
+            worksheet = spreadsheet.get_worksheet(4)
+            
+            factoring_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
+
+            next_row = len(worksheet.col_values(1)) + 1
+            entry2_value = entry2.get().split(' - ')[0]
+            worksheet.update_cell(next_row, 1, current_time)
+            worksheet.update_cell(next_row, 2, entry1.get().upper())
+            worksheet.update_cell(next_row, 3, entry2_value)
+            worksheet.update_cell(next_row, 4, entry3.get())
+            worksheet.update_cell(next_row, 5, user) 
+            worksheet.update_cell(next_row, 6, current_date)
+
+            worksheet3 = spreadsheet.get_worksheet(3)
+            username = entry1.get().upper()
+            factoring_note.config(text="Trying to find user in Factoring Diary...\n\n", anchor='center', justify='center')
+            matching_cells = worksheet3.findall(username, in_column=2)
+
+            if not matching_cells:
+                messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. This may be due to them being a recent registration. Factoring reported to log, but not to diary.")
+            else:
+                factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
+                cell = matching_cells[0]
+                row = cell.row
+                worksheet3.update_cell(row, 9, entry2_value)  # Column I
+                worksheet3.update_cell(row, 10, entry3.get())  # Column J
+                worksheet3.update_cell(row, 12, current_date)  # Column L
+            factoring_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
+            self.tree.insert("", "end", values=[current_date, current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
+            data = {
+                'Time': current_time,
+                'Username': entry1.get().upper(),
+                'Risk Category': entry2_value,
+                'Assessment Rating': entry3.get(),
+                'Staff': user
+            }
+            with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', 'factoring.json'), 'a') as file:
+                file.write(json.dumps(data) + '\n')
+
+            log_notification(f"{user} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
+            time.sleep(.5)
+
+        return frame
+
+    def view_closure_requests_tab(self):
+        frame = ttk.Frame(self.wizard_notebook)
+        # Add your bet creation UI components here
+        return frame
+    
+    def create_freebet_tab(self):
+        current_month = datetime.now().strftime('%B')
+        global user
+        if not user:
+            user_login()
+    
+        def handle_submit():
+            # Disable the submit button while processing
+            submit_button.config(state=tk.DISABLED)
+    
+            if not entry1.get() or not entry2.get() or not entry3.get():
+                messagebox.showerror("Error", "Please make sure all fields are completed.")
+                submit_button.config(state=tk.NORMAL)
+                return 
+            
+            try:
+                float(entry3.get())
+            except ValueError:
+                messagebox.showerror("Error", "Freebet amount should be a number.")
+                submit_button.config(state=tk.NORMAL)
+                return
+    
+            progress_note.config(text="Finding Reporting Sheet", anchor='center', justify='center')
+    
+            spreadsheet_name = 'Reporting ' + current_month
+            try:
+                spreadsheet = self.gc.open(spreadsheet_name)
+            except gspread.SpreadsheetNotFound:
+                messagebox.showerror("Error", f"Spreadsheet '{spreadsheet_name}' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
+                progress_note.config(text="---", anchor='center', justify='center')
+                submit_button.config(state=tk.NORMAL)
+                return
+    
+            progress_note.config(text=f"Found {spreadsheet_name}.\nFree bet for {entry1.get().upper()} being added.\n", anchor='center', justify='center')
+    
+            worksheet = spreadsheet.get_worksheet(5)
+            next_row = len(worksheet.col_values(2)) + 1
+    
+            current_date = datetime.now().strftime("%d/%m/%Y")  
+            worksheet.update_cell(next_row, 2, current_date)
+            worksheet.update_cell(next_row, 5, entry1.get().upper())
+            worksheet.update_cell(next_row, 3, entry2.get().upper())
+            worksheet.update_cell(next_row, 6, entry3.get())
+    
+            progress_note.config(text=f"Free bet for {entry1.get().upper()} added successfully to reporting {current_month}\n", anchor='center', justify='center')
+            log_notification(f"{user} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
+    
+            # Clear the fields after successful submission
+            entry1.delete(0, tk.END)
+            entry2.set(options[0])
+            entry3.delete(0, tk.END)
+    
+            # Re-enable the submit button
+            submit_button.config(state=tk.NORMAL)
+    
+        frame = ttk.Frame(self.wizard_notebook)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+    
+        # Left section
+        left_frame = ttk.Frame(frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    
+        username = ttk.Label(left_frame, text="Client Username")
+        username.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        entry1 = ttk.Entry(left_frame)
+        entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+    
+        type = ttk.Label(left_frame, text="Free bet Type")
+        type.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        options = ["", "FREE BET", "DEPOSIT BONUS", "10MIN BLAST", "OTHER"]
+        entry2 = ttk.Combobox(left_frame, values=options, state="readonly")
+        entry2.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        entry2.set(options[0])
+    
+        amount = ttk.Label(left_frame, text="Amount")
+        amount.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        entry3 = ttk.Entry(left_frame)
+        entry3.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+    
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")    
+        submit_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        # Right section
+        right_frame = ttk.Frame(frame)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+    
+        report_freebet_title = ttk.Label(right_frame, text="Report a Free Bet", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
+        report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        report_freebet_description = ttk.Label(right_frame, text="Enter the client username, free bet type, and amount to report a free bet.", wraplength=200, anchor='center', justify='center')
+        report_freebet_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        progress_note = ttk.Label(right_frame, text="---", wraplength=200, anchor='center', justify='center')
+        progress_note.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        return frame
+
+
+
+
 class BetViewerApp:
     def __init__(self, root):
         self.root = root
 
         # Initialize Google Sheets API client
-        self.initialize_gspread()
 
         threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
@@ -3414,13 +3851,6 @@ class BetViewerApp:
         self.notebook = Notebook(root) # FACTORING IS DISABLED
         self.bet_runs = BetRuns(root)
         self.settings = Settings(root)
-
-    def initialize_gspread(self):
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
-        self.gc = gspread.authorize(credentials)
 
     def initialize_ui(self):
         self.root.title("Bet Viewer")
@@ -3448,18 +3878,24 @@ class BetViewerApp:
         options_menu.add_command(label="Set User Initials", command=self.user_login, foreground="#000000", background="#ffffff")
         options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
         options_menu.add_separator(background="#ffffff")
-        options_menu.add_command(label="Exit", command=root.quit, foreground="#000000", background="#ffffff")
+        options_menu.add_command(label="Exit", command=self.root.quit, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Options", menu=options_menu)
 
         report_menu = tk.Menu(menu_bar, tearoff=0)
-        report_menu.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
+        # report_menu.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
         report_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Report", menu=report_menu)
 
-        menu_bar.add_command(label="Send RG Popup", command=self.display_rg_popup, foreground="#000000", background="#ffffff")
+        # menu_bar.add_command(label="Send RG Popup", command=self.display_rg_popup, foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
+        # Add Client Wizard menu item
+        menu_bar.add_command(label="Client Wizard", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
+
         self.root.config(menu=menu_bar)
+
+    def open_client_wizard(self, default_tab="Factoring"):
+        ClientWizard(self.root, default_tab)
 
     def user_login(self):
         user_login()
@@ -3493,210 +3929,6 @@ class BetViewerApp:
 
         submit_button = ttk.Button(issue_window, text="Submit", command=submit_issue)
         submit_button.pack(pady=10)
-
-    def report_freebet(self):
-        current_month = datetime.now().strftime('%B')
-        global user
-        if not user:
-            user_login()
-
-        progress = IntVar()
-        progress.set(0)
-
-        def handle_submit():
-            if not entry1.get() or not entry2.get() or not entry3.get():
-                messagebox.showerror("Error", "Please make sure all fields are completed.")
-                return 
-            
-            try:
-                float(entry3.get())
-            except ValueError:
-                messagebox.showerror("Error", "Freebet amount should be a number.")
-                return
-
-            spreadsheet_name = 'Reporting ' + current_month
-            try:
-                spreadsheet = self.gc.open(spreadsheet_name)
-            except gspread.SpreadsheetNotFound:
-                messagebox.showerror("Error", f"Spreadsheet '{spreadsheet_name}' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
-                return
-
-            progress.set(20)
-
-            freebet_note.config(text=f"Found {spreadsheet_name}.\nFree bet for {entry1.get().upper()} being added.\n", anchor='center', justify='center')
-
-            worksheet = spreadsheet.get_worksheet(5)
-            next_row = len(worksheet.col_values(2)) + 1
-
-            progress.set(50)
-
-            current_date = datetime.now().strftime("%d/%m/%Y")  
-            worksheet.update_cell(next_row, 2, current_date)
-            progress.set(60)
-            worksheet.update_cell(next_row, 5, entry1.get().upper())
-            progress.set(70)
-            worksheet.update_cell(next_row, 3, entry2.get().upper())
-            progress.set(80)
-            worksheet.update_cell(next_row, 6, entry3.get())
-            progress.set(100)
-
-            freebet_note.config(text=f"Free bet for {entry1.get().upper()} added successfully.\n\n", anchor='center', justify='center')
-            log_notification(f"{user} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
-            time.sleep(.5)
-            report_freebet_window.destroy()
-
-        report_freebet_window = tk.Toplevel(root)
-        report_freebet_window.geometry("270x370")
-        report_freebet_window.title("Report a Free Bet")
-        report_freebet_window.iconbitmap('src/splash.ico')
-        screen_width = report_freebet_window.winfo_screenwidth()
-        report_freebet_window.geometry(f"+{screen_width - 350}+50")
-        
-        report_freebet_frame = ttk.Frame(report_freebet_window, style='Card')
-        report_freebet_frame.place(x=5, y=5, width=260, height=360)
-
-        username = ttk.Label(report_freebet_frame, text="Client Username")
-        username.pack(padx=5, pady=5)
-        entry1 = ttk.Entry(report_freebet_frame)
-        entry1.pack(padx=5, pady=5)
-
-        type = ttk.Label(report_freebet_frame, text="Free bet Type")
-        type.pack(padx=5, pady=5)
-        options = ["", "FREE BET", "DEPOSIT BONUS", "10MIN BLAST", "OTHER"]
-        entry2 = ttk.Combobox(report_freebet_frame, values=options, state="readonly")
-        entry2.pack(padx=5, pady=5)
-        entry2.set(options[0])
-
-        amount = ttk.Label(report_freebet_frame, text="Amount")
-        amount.pack(padx=5, pady=5)
-        entry3 = ttk.Entry(report_freebet_frame)
-        entry3.pack(padx=5, pady=5)
-
-        freebet_note = ttk.Label(report_freebet_frame, text=f"Free bet will be added to reporting {current_month}.\n\n", anchor='center', justify='center')
-        freebet_note.pack(padx=5, pady=5)
-
-        submit_button = ttk.Button(report_freebet_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")    
-        submit_button.pack(padx=5, pady=5)
-
-        progress_bar = ttk.Progressbar(report_freebet_frame, length=200, mode='determinate', variable=progress)
-        progress_bar.pack(padx=5, pady=5)
-
-    def display_rg_popup(self):
-        # Load credentials and Pipedrive API token
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        pipedrive_api_token = data['pipedrive_api_key']
-
-        custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'  # Your custom field ID
-
-        def handle_submit():
-            today = date.today()
-
-            if not entry1.get():
-                messagebox.showerror("Error", "Please make sure you enter a username.")
-                return 
-            
-            # Get the provided username
-            username = entry1.get().strip()
-            
-            # Search for the person using the provided username
-            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={pipedrive_api_token}'
-            params = {
-                'term': username,
-                'item_types': 'person',
-                'fields': 'custom_fields',
-                'exact_match': 'true'
-            }
-
-            response = requests.get(search_url, params=params)
-            if response.status_code == 200:
-                persons = response.json().get('data', {}).get('items', [])
-
-                if not persons:
-                    messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or enter the risk category in Pipedrive manually.")
-                    return
-
-                for person in persons:
-                    person_id = person['item']['id']
-                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
-                    update_data = {
-                        custom_field_id: today.strftime('%m/%d/%Y')
-                    }
-                    update_response = requests.put(update_url, json=update_data)
-                    if update_response.status_code == 200:
-                        wizard_window.destroy()
-                        log_notification(f"{user} applied RG Popup to {username.upper()}", True)
-                        self.report_rg_notification(username.upper())
-                    else:
-                        messagebox.showerror("Error", f"Error updating person {person_id}: {update_response.status_code}")
-            else:
-                print(f'Error: {response.status_code}')
-
-        def fetch_usernames_and_compliance_dates():
-            filter_id = 65  # Your filter ID
-            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
-            response = requests.get(filter_url)
-            if response.status_code == 200:
-                persons = response.json().get('data', [])
-                user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
-                
-                # Sort the data by 'Compliance Popup' date in descending order
-                user_data.sort(key=lambda x: x[1], reverse=True)
-                
-                return user_data
-            else:
-                messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
-                return []
-
-        wizard_window = tk.Toplevel(root)
-        wizard_window.geometry("270x450")
-        wizard_window.title("Apply RG Popup")
-        wizard_window.iconbitmap('src/splash.ico')
-
-        screen_width = wizard_window.winfo_screenwidth()
-        wizard_window.geometry(f"+{screen_width - 350}+50")
-        wizard_window_frame = ttk.Frame(wizard_window, style='Card')
-        wizard_window_frame.place(x=5, y=5, width=260, height=440)
-
-        username_label = ttk.Label(wizard_window_frame, text="Username")
-        username_label.pack(padx=5, pady=5)
-        entry1 = ttk.Entry(wizard_window_frame)
-        entry1.pack(padx=5, pady=5)
-
-        popup_note = ttk.Label(wizard_window_frame, text="Enter a username above to apply popup on next login.", wraplength=200, anchor='center', justify='center')
-        popup_note.pack(padx=5, pady=5)
-
-        submit_button = ttk.Button(wizard_window_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
-        submit_button.pack(padx=5, pady=5)
-
-        Separator = ttk.Separator(wizard_window_frame, orient='horizontal')
-        Separator.pack(fill='x', pady=5)
-
-        user_data = fetch_usernames_and_compliance_dates()
-        tree = ttk.Treeview(wizard_window_frame, columns=('Username', 'Compliance Popup'), show='headings')
-        tree.heading('Username', text='Username')
-        tree.heading('Compliance Popup', text='Popup Date')
-        tree.column('Username', width=30) 
-        tree.column('Compliance Popup', width=30) 
-
-        for username, compliance_date in user_data:
-            tree.insert('', tk.END, values=(username, compliance_date))
-        tree.pack(padx=5, pady=5, fill='both', expand=True)
-
-    def report_rg_notification(self, username):
-        global user
-        try:
-            spreadsheet = self.gc.open("Compliance Diary")
-        except gspread.SpreadsheetNotFound:
-            messagebox.showerror("Error", f"Spreadsheet 'Compliance Diary' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
-            return
-        
-        worksheet = spreadsheet.get_worksheet(11)
-        next_row = len(worksheet.col_values(1)) + 1
-        current_date = datetime.now().strftime("%d/%m/%Y")
-        worksheet.update_cell(next_row, 1, username)
-        worksheet.update_cell(next_row, 2, current_date)
-        worksheet.update_cell(next_row, 3, user)
 
     def open_settings(self):
         settings_window = tk.Toplevel(root)
