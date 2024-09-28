@@ -1377,7 +1377,7 @@ class Notebook:
         self.initialize_ui()
         self.initialize_text_tags()
         self.update_notifications()
-        self.display_closure_requests()
+        #self.display_closure_requests()
         #self.run_factoring_sheet_thread()
 
     def initialize_ui(self):
@@ -2731,140 +2731,7 @@ class Notebook:
 
 
 
-    def display_closure_requests(self):
-        for widget in self.requests_frame.winfo_children():
-            widget.destroy()
 
-        def handle_request(request):
-            log_notification(f"{user} Handling {request['Restriction']} request for {request['Username']} ")
-
-            restriction_mapping = {
-                'Further Options': 'Self Exclusion'
-            }
-
-            request['Restriction'] = restriction_mapping.get(request['Restriction'], request['Restriction'])
-
-            current_date = datetime.now()
-
-            length_mapping = {
-                'One Day': timedelta(days=1),
-                'One Week': timedelta(weeks=1),
-                'Two Weeks': timedelta(weeks=2),
-                'Four Weeks': timedelta(weeks=4),
-                'Six Weeks': timedelta(weeks=6),
-                'Six Months': relativedelta(months=6),
-                'One Year': relativedelta(years=1),
-                'Two Years': relativedelta(years=2),
-                'Three Years': relativedelta(years=3),
-                'Four Years': relativedelta(years=4),
-                'Five Years': relativedelta(years=5),
-            }
-
-            length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
-
-            reopen_date = current_date + length_in_time
-
-            copy_string = f"{request['Restriction']}"
-
-            if request['Length'] not in [None, 'None', 'Null']:
-                copy_string += f" {request['Length']}"
-
-            copy_string += f" {current_date.strftime('%d/%m/%Y')}"
-            copy_string = copy_string.upper()
-
-            if request['Restriction'] in ['Take-A-Break', 'Self Exclusion']:
-                copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
-
-            copy_string += f" {user}"
-
-            pyperclip.copy(copy_string)
-
-            def handle_submit():
-                if self.confirm_betty_update_bool.get():
-                    try:
-                        if self.send_confirmation_email_bool.get():
-                            threading.Thread(target=self.send_email, args=(request['Username'], request['Restriction'], request['Length'])).start()
-                    except Exception as e:
-                        print(f"Error sending email: {e}")
-
-                    try:
-                        if self.archive_email_bool.get():
-                            threading.Thread(target=self.archive_email, args=(request['email_id'],)).start()
-                    except Exception as e:
-                        print(f"Error archiving email: {e}")
-
-                    try:
-                        threading.Thread(target=self.report_closure_requests, args=(request['Restriction'], request['Username'], request['Length'])).start()
-                    except Exception as e:
-                        print(f"Error reporting closure requests: {e}")
-
-                    request['completed'] = True
-
-                    with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'data.json'), 'w') as f:
-                        json.dump(data, f, indent=4)
-
-                    handle_closure_request.destroy()
-
-                    if request['completed']:
-                        self.display_closure_requests()
-
-                else:
-                    messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
-
-
-            handle_closure_request = tk.Toplevel(root)
-            handle_closure_request.geometry("270x410")
-            handle_closure_request.title("Closure Request")
-            handle_closure_request.iconbitmap('src/splash.ico')
-            screen_width = handle_closure_request.winfo_screenwidth()
-            handle_closure_request.geometry(f"+{screen_width - 350}+50")
-            
-            handle_closure_request_frame = ttk.Frame(handle_closure_request, style='Card')
-            handle_closure_request_frame.place(x=5, y=5, width=260, height=400)
-
-            username = ttk.Label(handle_closure_request_frame, text=f"Username: {request['Username']}\nRestriction: {request['Restriction']}\nLength: {request['Length'] if request['Length'] not in [None, 'Null'] else '-'}",  anchor='center', justify='center')
-            username.pack(padx=5, pady=5)
-
-            confirm_betty_update = ttk.Checkbutton(handle_closure_request_frame, text='Confirm Closed on Betty', variable=self.confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
-            confirm_betty_update.place(x=10, y=80)
-
-            send_confirmation_email = ttk.Checkbutton(handle_closure_request_frame, text='Send Pipedrive Confirmation Email', variable=self.send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
-            send_confirmation_email.place(x=10, y=110)
-
-            if user == 'DF':
-                archive_email_check = ttk.Checkbutton(handle_closure_request_frame, text='Archive Email Request', variable=self.archive_email_bool, onvalue=True, offvalue=False, cursor="hand2")
-                archive_email_check.place(x=10, y=140)
-
-            submit_button = ttk.Button(handle_closure_request_frame, text="Submit", command=handle_submit, cursor="hand2")
-            submit_button.place(x=80, y=190)
-
-            closure_request_label = ttk.Label(handle_closure_request_frame, text=f"Close on Betty before anything else!\n\nPlease double check:\n- Request details above are correct\n- Confirmation email was sent to client.\n\nReport to Sam any errors.", anchor='center', justify='center')
-            closure_request_label.place(x=10, y=240)
-
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'data.json'), 'r') as f:
-            data = json.load(f)
-            requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
-
-        if not requests:
-            ttk.Label(self.requests_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center').grid(row=0, column=1, padx=10, pady=2)
-        
-        restriction_mapping = {
-            'Account Deactivation': 'Deactivation',
-            'Further Options': 'Self Exclusion'
-        }
-
-        for i, request in enumerate(requests):
-            restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
-
-            length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
-
-            request_label = ttk.Label(self.requests_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
-            request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
-
-            tick_button = ttk.Button(self.requests_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
-            tick_button.grid(row=i, column=0, padx=3, pady=2)
-
-        root.after(20000, self.display_closure_requests)
 
     def update_person(self, update_url, update_data, person_id):
         update_response = requests.put(update_url, json=update_data)
@@ -2989,8 +2856,6 @@ class Notebook:
 
     def report_closure_requests(self, restriction, username, length):
         current_date = datetime.now().strftime("%d/%m/%Y")  
-
-
         try:
             spreadsheet = self.gc.open("Management Tool")
         except gspread.SpreadsheetNotFound:
@@ -3437,37 +3302,29 @@ class ClientWizard:
         self.wizard_notebook = ttk.Notebook(self.wizard_frame)
         self.wizard_notebook.pack(fill='both', expand=True)
 
-        self.factoring_tab = self.create_client_tab()
-        self.report_freebet_tab = self.create_freebet_tab()
-        self.rg_popup_tab = self.display_rg_popup()
-        self.closure_requests_tab = self.view_closure_requests_tab()
-        self.add_factoring_tab = self.create_factoring_tab()
+        self.report_freebet_tab = self.apply_freebet_tab()
+        self.rg_popup_tab = self.apply_rg_popup()
+        self.closure_requests_tab = self.display_closure_requests()
+        self.add_factoring_tab = self.apply_factoring_tab()
 
         self.wizard_notebook.add(self.report_freebet_tab, text="Report Freebet")
         self.wizard_notebook.add(self.rg_popup_tab, text="RG Popup")
-        self.wizard_notebook.add(self.closure_requests_tab, text="Closure Requests")
         self.wizard_notebook.add(self.add_factoring_tab, text="Factoring")
-
-        # Select the default tab
+        self.wizard_notebook.add(self.closure_requests_tab, text="Closure Requests")
         self.select_default_tab()
 
     def select_default_tab(self):
         tab_mapping = {
             "Report Freebet": 0,
             "RG Popup": 1,
-            "Closure Requests": 2,
-            "Factoring": 3
+            "Factoring": 2,
+            "Closure Requests": 3
         }
         
-        tab_index = tab_mapping.get(self.default_tab, 4)
+        tab_index = tab_mapping.get(self.default_tab, 0)
         self.wizard_notebook.select(tab_index)
 
-    def display_rg_popup(self):
-        # Load credentials and Pipedrive API token
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        pipedrive_api_token = data['pipedrive_api_key']
-    
+    def apply_rg_popup(self):
         custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'  # Your custom field ID
     
         def handle_submit():
@@ -3475,15 +3332,17 @@ class ClientWizard:
             submit_button.config(state=tk.DISABLED)
     
             if not entry1.get():
-                messagebox.showerror("Error", "Please make sure you enter a username.")
+                progress_note.config(text="Error: Please make sure all fields are completed.", anchor='center', justify='center')
+                time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
-                return 
+                progress_note.config(text="---", anchor='center', justify='center')
+                return
             
             # Get the provided username
             username = entry1.get().strip()
             
             # Search for the person using the provided username
-            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={pipedrive_api_token}'
+            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={self.pipedrive_api_token}'
             params = {
                 'term': username,
                 'item_types': 'person',
@@ -3496,73 +3355,88 @@ class ClientWizard:
                 persons = response.json().get('data', {}).get('items', [])
     
                 if not persons:
-                    messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or enter the risk category in Pipedrive manually.")
+                    progress_note.config(text=f"No persons found for username: {username} in Pipedrive.", anchor='center', justify='center')
+                    time.sleep(2)
                     submit_button.config(state=tk.NORMAL)
+                    progress_note.config(text="---", anchor='center', justify='center')
                     return
     
                 for person in persons:
                     person_id = person['item']['id']
-                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={pipedrive_api_token}'
+                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
                     update_data = {
                         custom_field_id: date.today().strftime('%m/%d/%Y')
                     }
                     update_response = requests.put(update_url, json=update_data)
                     if update_response.status_code == 200:
                         log_notification(f"{user} applied RG Popup to {username.upper()}", True)
-                        self.report_rg_notification(username.upper())
                     else:
                         messagebox.showerror("Error", f"Error updating person {person_id}: {update_response.status_code}")
+                        progress_note.config(text=f"Error updating {username} in Pipedrive.", anchor='center', justify='center')
+                        time.sleep(2)
+                        submit_button.config(state=tk.NORMAL)
+                        progress_note.config(text="---", anchor='center', justify='center')
+                        return
             else:
-                print(f'Error: {response.status_code}')
+                print(f'Error: {response.status_code}')         
+                progress_note.config(text=f"An error occurred.", anchor='center', justify='center')
+                time.sleep(2)
+                submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
+                return
     
             # Re-enable the submit button
             submit_button.config(state=tk.NORMAL)
     
-        def fetch_usernames_and_compliance_dates():
-            filter_id = 65  # Your filter ID
-            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
-            response = requests.get(filter_url)
-            if response.status_code == 200:
-                persons = response.json().get('data', [])
-                user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
-                
-                # Sort the data by 'Compliance Popup' date in descending order
-                user_data.sort(key=lambda x: x[1], reverse=True)
-                
-                return user_data
-            else:
-                messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
-                return []
+
     
         frame = ttk.Frame(self.wizard_notebook)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_columnconfigure(1, weight=1)
-    
+        frame.grid_rowconfigure(0, weight=1)  # Ensure the frame takes up the entire height
+
         # Left section
         left_frame = ttk.Frame(frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-    
-        username_label = ttk.Label(left_frame, text="Username")
+        left_frame.grid_rowconfigure(2, weight=1)  # Ensure the left frame takes up the entire height
+
+        username_label = ttk.Label(left_frame, text="Client Username")
         username_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
         entry1 = ttk.Entry(left_frame)
         entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    
-        popup_note = ttk.Label(left_frame, text="Enter a username above to apply popup on next login.", wraplength=200, anchor='center', justify='center')
-        popup_note.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-    
-        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
-        submit_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-    
+
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2", width=40)
+        submit_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
         # Right section
         right_frame = ttk.Frame(frame)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-    
+
         tree_title = ttk.Label(right_frame, text="RG Popup", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
         tree_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-    
+
         tree_description = ttk.Label(right_frame, text="Apply a Responsible Gambling Questionnaire on users next login.", wraplength=200, anchor='center', justify='center')
         tree_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        progress_note = ttk.Label(right_frame, text="---", wraplength=200, anchor='center', justify='center')
+        progress_note.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
     
+
+        # def fetch_usernames_and_compliance_dates():
+        #     filter_id = 65  # Your filter ID
+        #     filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
+        #     response = requests.get(filter_url)
+        #     if response.status_code == 200:
+        #         persons = response.json().get('data', [])
+        #         user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
+                
+        #         # Sort the data by 'Compliance Popup' date in descending order
+        #         user_data.sort(key=lambda x: x[1], reverse=True)
+                
+        #         return user_data
+        #     else:
+        #         messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
+        #         return []
         # user_data = fetch_usernames_and_compliance_dates()
         # tree = ttk.Treeview(right_frame, columns=('Username', 'Compliance Popup'), show='headings')
         # tree.heading('Username', text='Username')
@@ -3579,69 +3453,32 @@ class ClientWizard:
     
         return frame
 
-    def create_client_tab(self):
-        frame = ttk.Frame(self.wizard_notebook)
-        # Add your client creation UI components here
-        return frame
-
-    def create_factoring_tab(self):
-        frame = ttk.Frame(self.wizard_notebook)
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_columnconfigure(1, weight=1)
-
-        # Left section
-        left_frame = ttk.Frame(frame)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-
-        username_label = ttk.Label(left_frame, text="Client Username")
-        username_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        entry1 = ttk.Entry(left_frame)
-        entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-        riskcat_label = ttk.Label(left_frame, text="Risk Category")
-        riskcat_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        options = ["", "W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]
-        entry2 = ttk.Combobox(left_frame, values=options, state="readonly")
-        entry2.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        entry2.set(options[0])
-
-        ass_rating_label = ttk.Label(left_frame, text="Assessment Rating")
-        ass_rating_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        entry3 = ttk.Entry(left_frame)
-        entry3.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-
-        factoring_note = ttk.Label(left_frame, text="Risk Category will be updated in Pipedrive.\n\n", anchor='center', justify='center')
-        factoring_note.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-
-        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")
-        submit_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-
-        # Right section
-        right_frame = ttk.Frame(frame)
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-    
-        report_freebet_title = ttk.Label(right_frame, text="Modify Client Terms", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
-        report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-
-        tree_description = ttk.Label(right_frame, text="Apply Factoring and report new assessment ratings for clients.", wraplength=200, anchor='center', justify='center')
-        tree_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-
+    def apply_factoring_tab(self):
         def handle_submit():
             global user
             if not user:
                 user_login()
 
+            submit_button.config(state=tk.DISABLED)
             current_time = datetime.now().strftime("%H:%M:%S")
             current_date = datetime.now().strftime("%d/%m/%Y")
 
             if not entry1.get() or not entry3.get():
-                messagebox.showerror("Error", "Please make sure all fields are completed.")
+                # messagebox.showerror("Error", "Please make sure all fields are completed.")
+                progress_note.config(text="Error: Please make sure all fields are completed.", anchor='center', justify='center')
+                time.sleep(2)
+                submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
                 return
             
             try:
                 float(entry3.get())
             except ValueError:
-                messagebox.showerror("Error", "Assessment rating should be a number.")
+                # messagebox.showerror("Error", "Assessment rating should be a number.")
+                progress_note.config(text="Error: Assessment rating should be a number.", anchor='center', justify='center')
+                time.sleep(2)
+                submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
                 return
             
             params = {
@@ -3651,19 +3488,20 @@ class ClientWizard:
                 'exact_match': 'true',
             }
 
-
             copy_string = ""
-            if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "X - SP ONLY NO OFFERS", "S - SP ONLY", "D - BP ONLY", "O - NO OFFERS"]:
+            if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "C - MAX £100 STAKE"]:
                 copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {user}"
-
             pyperclip.copy(copy_string)
 
-            factoring_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
+            progress_note.config(text="Applying to User on Pipedrive...\n\n", anchor='center', justify='center')
             response = requests.get(self.pipedrive_api_url, params=params)
             if response.status_code == 200:
                 persons = response.json()['data']['items']
                 if not persons:
-                    messagebox.showerror("Error", f"No persons found for username: {entry1.get()}. Please make sure the username is correct, or enter the risk category in pipedrive manually.")
+                    progress_note.config(text=f"Error: No persons found in pipedrive for username: {entry1.get()}", anchor='center', justify='center')
+                    time.sleep(2)
+                    submit_button.config(state=tk.NORMAL)
+                    progress_note.config(text="---", anchor='center', justify='center')
                     return
 
                 for person in persons:
@@ -3681,14 +3519,17 @@ class ClientWizard:
                         print(f'Error updating person {person_id}: {update_response.status_code}')
             else:
                 print(f'Error: {response.status_code}')
-            
+                progress_note.config(text=f"Error: {response.status_code}", anchor='center', justify='center')
+                time.sleep(1)
+                submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
 
-            factoring_note.config(text="Factoring Applied on Pipedrive.\nReporting on Factoring Log...\n", anchor='center', justify='center')
+            progress_note.config(text="Factoring Applied on Pipedrive.\nReporting on Factoring Log...\n", anchor='center', justify='center')
 
             spreadsheet = self.gc.open('Factoring Diary')
             worksheet = spreadsheet.get_worksheet(4)
             
-            factoring_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
+            progress_note.config(text="Adding entry to Factoring Log...\n\n", anchor='center', justify='center')
 
             next_row = len(worksheet.col_values(1)) + 1
             entry2_value = entry2.get().split(' - ')[0]
@@ -3701,20 +3542,22 @@ class ClientWizard:
 
             worksheet3 = spreadsheet.get_worksheet(3)
             username = entry1.get().upper()
-            factoring_note.config(text="Trying to find user in Factoring Diary...\n\n", anchor='center', justify='center')
+            progress_note.config(text="Trying to find user in Factoring Diary...\n\n", anchor='center', justify='center')
             matching_cells = worksheet3.findall(username, in_column=2)
 
             if not matching_cells:
-                messagebox.showerror("Error", f"No client found for username: {username} in factoring diary. This may be due to them being a recent registration. Factoring reported to log, but not to diary.")
+                progress_note.config(text=f"Error: No persons found in factoring diary for client: {username}. Factoring logged, but not updated in diary.", anchor='center', justify='center')
+                time.sleep(1)
+                # submit_button.config(state=tk.NORMAL)
+                # progress_note.config(text="---", anchor='center', justify='center')
             else:
-                factoring_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
+                progress_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
                 cell = matching_cells[0]
                 row = cell.row
                 worksheet3.update_cell(row, 9, entry2_value)  # Column I
                 worksheet3.update_cell(row, 10, entry3.get())  # Column J
                 worksheet3.update_cell(row, 12, current_date)  # Column L
-            factoring_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
-            self.tree.insert("", "end", values=[current_date, current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
+            # self.tree.insert("", "end", values=[current_date, current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
             data = {
                 'Time': current_time,
                 'Username': entry1.get().upper(),
@@ -3725,17 +3568,64 @@ class ClientWizard:
             with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', 'factoring.json'), 'a') as file:
                 file.write(json.dumps(data) + '\n')
 
+            progress_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
             log_notification(f"{user} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
-            time.sleep(.5)
+            time.sleep(1)
+            submit_button.config(state=tk.NORMAL)
+                
+            # Clear the fields after successful submission
+            entry1.delete(0, tk.END)
+            entry2.set(options[0])
+            entry3.delete(0, tk.END)
 
-        return frame
+            progress_note.config(text="---", anchor='center', justify='center')
 
-    def view_closure_requests_tab(self):
         frame = ttk.Frame(self.wizard_notebook)
-        # Add your bet creation UI components here
-        return frame
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_rowconfigure(0, weight=1)  # Ensure the frame takes up the entire height
+
+        # Left section
+        left_frame = ttk.Frame(frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        left_frame.grid_rowconfigure(3, weight=1)  # Ensure the left frame takes up the entire height
+
+        username_label = ttk.Label(left_frame, text="Client Username")
+        username_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        entry1 = ttk.Entry(left_frame)
+        entry1.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+        riskcat_label = ttk.Label(left_frame, text="Risk Category")
+        riskcat_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        options = ["", "W - WATCHLIST", "M - BP ONLY NO OFFERS", "C - MAX £100 STAKE"]
+        entry2 = ttk.Combobox(left_frame, values=options, state="readonly")
+        entry2.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        entry2.set(options[0])
+
+        ass_rating_label = ttk.Label(left_frame, text="Assessment Rating")
+        ass_rating_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        entry3 = ttk.Entry(left_frame)
+        entry3.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2", width=40)
+        submit_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        # Right section
+        right_frame = ttk.Frame(frame)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
     
-    def create_freebet_tab(self):
+        report_freebet_title = ttk.Label(right_frame, text="Modify Client Terms", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
+        report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        tree_description = ttk.Label(right_frame, text="Apply factoring and report new assessment ratings for clients.", wraplength=200, anchor='center', justify='center')
+        tree_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        progress_note = ttk.Label(right_frame, text="---", wraplength=200, anchor='center', justify='center')
+        progress_note.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        return frame
+
+    def apply_freebet_tab(self):
         current_month = datetime.now().strftime('%B')
         global user
         if not user:
@@ -3746,15 +3636,19 @@ class ClientWizard:
             submit_button.config(state=tk.DISABLED)
     
             if not entry1.get() or not entry2.get() or not entry3.get():
-                messagebox.showerror("Error", "Please make sure all fields are completed.")
+                progress_note.config(text="Error: Please make sure all fields are completed.", anchor='center', justify='center')
+                time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
-                return 
+                progress_note.config(text="---", anchor='center', justify='center')
+                return
             
             try:
                 float(entry3.get())
             except ValueError:
-                messagebox.showerror("Error", "Freebet amount should be a number.")
+                progress_note.config(text="Error: Freebet amount should be a number.", anchor='center', justify='center')
+                time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
                 return
     
             progress_note.config(text="Finding Reporting Sheet", anchor='center', justify='center')
@@ -3763,9 +3657,10 @@ class ClientWizard:
             try:
                 spreadsheet = self.gc.open(spreadsheet_name)
             except gspread.SpreadsheetNotFound:
-                messagebox.showerror("Error", f"Spreadsheet '{spreadsheet_name}' not found. Please make sure the spreadsheet is available, or enter the freebet details manually.")
-                progress_note.config(text="---", anchor='center', justify='center')
+                progress_note.config(text=f"Error: {spreadsheet_name} not found.", anchor='center', justify='center')
+                time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
+                progress_note.config(text="---", anchor='center', justify='center')
                 return
     
             progress_note.config(text=f"Found {spreadsheet_name}.\nFree bet for {entry1.get().upper()} being added.\n", anchor='center', justify='center')
@@ -3786,18 +3681,21 @@ class ClientWizard:
             entry1.delete(0, tk.END)
             entry2.set(options[0])
             entry3.delete(0, tk.END)
-    
-            # Re-enable the submit button
+
+            time.sleep(2)
+            progress_note.config(text="---", anchor='center', justify='center')
             submit_button.config(state=tk.NORMAL)
     
         frame = ttk.Frame(self.wizard_notebook)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_columnconfigure(1, weight=1)
-    
+        frame.grid_rowconfigure(0, weight=1)  # Ensure the frame takes up the entire height
+
         # Left section
         left_frame = ttk.Frame(frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-    
+        left_frame.grid_rowconfigure(3, weight=1)  # Ensure the left frame takes up the entire height
+
         username = ttk.Label(left_frame, text="Client Username")
         username.grid(row=0, column=0, padx=5, pady=5, sticky="w")
         entry1 = ttk.Entry(left_frame)
@@ -3815,7 +3713,7 @@ class ClientWizard:
         entry3 = ttk.Entry(left_frame)
         entry3.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
     
-        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2")    
+        submit_button = ttk.Button(left_frame, text="Submit", command=lambda: threading.Thread(target=handle_submit).start(), cursor="hand2", width=40)    
         submit_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
     
         # Right section
@@ -3832,8 +3730,159 @@ class ClientWizard:
         progress_note.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
     
         return frame
+    
+    def display_closure_requests(self):
+        # for widget in self.requests_frame.winfo_children():
+        #     widget.destroy()
 
+        def handle_request(request):
+            log_notification(f"{user} Handling {request['Restriction']} request for {request['Username']} ")
 
+            request['Restriction'] = restriction_mapping.get(request['Restriction'], request['Restriction'])
+
+            current_date = datetime.now()
+
+            length_mapping = {
+                'One Day': timedelta(days=1),
+                'One Week': timedelta(weeks=1),
+                'Two Weeks': timedelta(weeks=2),
+                'Four Weeks': timedelta(weeks=4),
+                'Six Weeks': timedelta(weeks=6),
+                'Six Months': relativedelta(months=6),
+                'One Year': relativedelta(years=1),
+                'Two Years': relativedelta(years=2),
+                'Three Years': relativedelta(years=3),
+                'Four Years': relativedelta(years=4),
+                'Five Years': relativedelta(years=5),
+            }
+
+            length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
+
+            reopen_date = current_date + length_in_time
+
+            copy_string = f"{request['Restriction']}"
+
+            if request['Length'] not in [None, 'None', 'Null']:
+                copy_string += f" {request['Length']}"
+
+            copy_string += f" {current_date.strftime('%d/%m/%Y')}"
+            copy_string = copy_string.upper()
+
+            if request['Restriction'] in ['Take-A-Break', 'Self Exclusion']:
+                copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
+
+            copy_string += f" {user}"
+
+            pyperclip.copy(copy_string)
+
+            def handle_submit():
+                if self.confirm_betty_update_bool.get():
+                    try:
+                        if self.send_confirmation_email_bool.get():
+                            threading.Thread(target=self.send_email, args=(request['Username'], request['Restriction'], request['Length'])).start()
+                    except Exception as e:
+                        print(f"Error sending email: {e}")
+
+                    try:
+                        if self.archive_email_bool.get():
+                            threading.Thread(target=self.archive_email, args=(request['email_id'],)).start()
+                    except Exception as e:
+                        print(f"Error archiving email: {e}")
+
+                    try:
+                        threading.Thread(target=self.report_closure_requests, args=(request['Restriction'], request['Username'], request['Length'])).start()
+                    except Exception as e:
+                        print(f"Error reporting closure requests: {e}")
+
+                    request['completed'] = True
+
+                    with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'data.json'), 'w') as f:
+                        json.dump(data, f, indent=4)
+
+                    handle_closure_request.destroy()
+
+                    if request['completed']:
+                        self.display_closure_requests()
+
+                else:
+                    messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
+
+            handle_closure_request = tk.Toplevel(root)
+            handle_closure_request.geometry("270x410")
+            handle_closure_request.title("Closure Request")
+            handle_closure_request.iconbitmap('src/splash.ico')
+            screen_width = handle_closure_request.winfo_screenwidth()
+            handle_closure_request.geometry(f"+{screen_width - 350}+50")
+            
+            handle_closure_request_frame = ttk.Frame(handle_closure_request, style='Card')
+            handle_closure_request_frame.place(x=5, y=5, width=260, height=400)
+
+            username = ttk.Label(handle_closure_request_frame, text=f"Username: {request['Username']}\nRestriction: {request['Restriction']}\nLength: {request['Length'] if request['Length'] not in [None, 'Null'] else '-'}",  anchor='center', justify='center')
+            username.pack(padx=5, pady=5)
+
+            confirm_betty_update = ttk.Checkbutton(handle_closure_request_frame, text='Confirm Closed on Betty', variable=self.confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
+            confirm_betty_update.place(x=10, y=80)
+
+            send_confirmation_email = ttk.Checkbutton(handle_closure_request_frame, text='Send Pipedrive Confirmation Email', variable=self.send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+            send_confirmation_email.place(x=10, y=110)
+
+            if user == 'DF':
+                archive_email_check = ttk.Checkbutton(handle_closure_request_frame, text='Archive Email Request', variable=self.archive_email_bool, onvalue=True, offvalue=False, cursor="hand2")
+                archive_email_check.place(x=10, y=140)
+
+            submit_button = ttk.Button(handle_closure_request_frame, text="Submit", command=handle_submit, cursor="hand2")
+            submit_button.place(x=80, y=190)
+
+            closure_request_label = ttk.Label(handle_closure_request_frame, text=f"Close on Betty before anything else!\n\nPlease double check:\n- Request details above are correct\n- Confirmation email was sent to client.\n\nReport to Sam any errors.", anchor='center', justify='center')
+            closure_request_label.place(x=10, y=240)
+
+        frame = ttk.Frame(self.wizard_notebook)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_rowconfigure(0, weight=1)  # Ensure the frame takes up the entire height
+
+        # Left section
+        left_frame = ttk.Frame(frame)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        left_frame.grid_rowconfigure(3, weight=1)  # Ensure the left frame takes up the entire height
+
+        # Right section
+        right_frame = ttk.Frame(frame)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+    
+        report_freebet_title = ttk.Label(right_frame, text="Closure Requests", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
+        report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        report_freebet_description = ttk.Label(right_frame, text="Deactivation, Take-a-Break and Self Exclusion requests will appear here, ready for processing.", wraplength=200, anchor='center', justify='center')
+        report_freebet_description.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    
+        progress_note = ttk.Label(right_frame, text="---", wraplength=200, anchor='center', justify='center')
+        progress_note.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'data.json'), 'r') as f:
+            data = json.load(f)
+            requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
+
+        if not requests:
+            ttk.Label(left_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center').grid(row=0, column=1, padx=10, pady=2)
+        
+        restriction_mapping = {
+            'Account Deactivation': 'Deactivation',
+            'Further Options': 'Self Exclusion'
+        }
+        
+        for i, request in enumerate(requests):
+            restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
+
+            length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
+
+            tick_button = ttk.Button(left_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
+            tick_button.grid(row=i, column=0, padx=3, pady=2)
+
+            request_label = ttk.Label(left_frame, text=f"{restriction} | {request['Username']} | {length}", width=40)
+            request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
+
+        return frame
 
 
 class BetViewerApp:
@@ -3882,11 +3931,9 @@ class BetViewerApp:
         menu_bar.add_cascade(label="Options", menu=options_menu)
 
         report_menu = tk.Menu(menu_bar, tearoff=0)
-        # report_menu.add_command(label="Report Freebet", command=self.report_freebet, foreground="#000000", background="#ffffff")
         report_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Report", menu=report_menu)
 
-        # menu_bar.add_command(label="Send RG Popup", command=self.display_rg_popup, foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
         # Add Client Wizard menu item
