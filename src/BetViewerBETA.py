@@ -124,7 +124,6 @@ def update_local_cache():
         if not os.path.exists(local_cache_dir):
             os.makedirs(local_cache_dir)
         shutil.copyfile(DATABASE_PATH, LOCAL_DATABASE_PATH)
-        print(f"Local cache updated in {time.time() - start_time:.4f} seconds")
     except Exception as e:
         print(f"Error updating local cache: {e}")
 
@@ -1369,11 +1368,17 @@ class Notebook:
         _, _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
 
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
+            data = json.load(f)
+
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+        self.gc = gspread.authorize(credentials)
+
         self.initialize_ui()
         self.initialize_text_tags()
         self.update_notifications()
-        #self.apply_closure_requests()
-        #self.run_factoring_sheet_thread()
+        self.run_factoring_sheet_thread()
 
     def initialize_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -1399,10 +1404,10 @@ class Notebook:
         self.pinned_message.pack(side="top", pady=5, padx=5) 
         self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post", command=user_notification, cursor="hand2", width=10)
         self.post_message_button.pack(side="top", pady=(10, 5))
-
+    
         separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
         separator.pack(side="top", fill='x', pady=(12, 8), padx=5)
-
+    
         self.copy_frame = ttk.Frame(self.staff_feed_buttons_frame)
         self.copy_frame.pack(side="top", pady=(5, 0))
         self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
@@ -1425,17 +1430,18 @@ class Notebook:
         separator_tab_2.grid(row=0, column=1, sticky='ns')
         self.report_buttons_frame = ttk.Frame(tab_2)
         self.report_buttons_frame.grid(row=0, column=2, sticky='nsew')
-        self.report_combobox = ttk.Combobox(self.report_buttons_frame, values=["Daily Report", "Monthly Report", "Staff Report", "Traders Screener", "RG Screener"], width=30, state='readonly')
+        self.report_combobox = ttk.Combobox(self.report_buttons_frame, values=["Daily Report", "Monthly Report", "Staff Report", "Traders Screener", "RG Screener", "Client Report"], width=30, state='readonly')
         self.report_combobox.pack(side="top", pady=(10, 5), padx=(5, 0))
+        self.report_combobox.bind("<<ComboboxSelected>>", self.on_report_combobox_select)
         self.report_button = ttk.Button(self.report_buttons_frame, text="Generate", command=self.generate_report, cursor="hand2", width=30)
         self.report_button.pack(side="top", pady=(5, 10), padx=(5, 0))
-
+    
         self.progress_label = ttk.Label(self.report_buttons_frame, text="---", wraplength=150)
         self.progress_label.pack(side="top", pady=(20, 10), padx=(5, 0))
-
+    
         tab_3 = ttk.Frame(self.notebook)
         self.notebook.add(tab_3, text="Factoring Diary")
-
+    
         self.tree = ttk.Treeview(tab_3)
         columns = ["A", "B", "C", "D", "E", "F"]
         headings = ["Date", "Time", "User", "Risk", "Rating", ""]
@@ -1455,22 +1461,24 @@ class Notebook:
         tab_3.grid_columnconfigure(0, weight=1)
         tab_3.grid_rowconfigure(0, weight=1)
         tab_3.grid_columnconfigure(1, weight=0) 
-
+    
         factoring_buttons_frame = ttk.Frame(tab_3)
         factoring_buttons_frame.grid(row=0, column=1, sticky='ns', padx=(10, 0))
-
-        add_restriction_button = ttk.Button(factoring_buttons_frame, text="Add", cursor="hand2")
+    
+        add_restriction_button = ttk.Button(factoring_buttons_frame, text="Add", command=lambda: ClientWizard(self.root, "Factoring"), cursor="hand2")
         add_restriction_button.pack(side="top", pady=(10, 5))
         refresh_factoring_button = ttk.Button(factoring_buttons_frame, text="Refresh", command=self.run_factoring_sheet_thread, cursor="hand2")
         refresh_factoring_button.pack(side="top", pady=(10, 5))
         self.last_refresh_label = ttk.Label(factoring_buttons_frame, text=f"Last Refresh:\n---")
         self.last_refresh_label.pack(side="top", pady=(10, 5))
-
-        self.tab_4 = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_4, text="Closure Requests")
-
-        self.requests_frame = ttk.Frame(self.tab_4)
-        self.requests_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+    
+        self.client_id_frame = ttk.Frame(self.report_buttons_frame)
+        self.client_id_label = ttk.Label(self.client_id_frame, text="Username:")
+        self.client_id_label.pack(side="top", padx=(5, 5))  # Change side to "top"
+        self.client_id_entry = ttk.Entry(self.client_id_frame, width=15)
+        self.client_id_entry.pack(side="top", padx=(5, 5))  # Change side to "top"
+        self.client_id_frame.pack(side="top", pady=(5, 10), padx=(5, 0))
+        self.client_id_frame.pack_forget()  
 
     def initialize_text_tags(self):
         self.report_ticket.tag_configure("risk", foreground="#ad0202")
@@ -1519,6 +1527,13 @@ class Notebook:
         self.staff_feed.config(state='disabled') 
         self.staff_feed.after(1500, self.update_notifications)
 
+    def on_report_combobox_select(self, event):
+        selected_report = self.report_combobox.get()
+        if selected_report == "Client Report":
+            self.client_id_frame.pack(side="top", pady=(5, 10), padx=(5, 0))
+        else:
+            self.client_id_frame.pack_forget()
+
     def generate_report(self):
         report_type = self.report_combobox.get()
         if report_type == "Daily Report":
@@ -1528,12 +1543,6 @@ class Notebook:
         elif report_type == "Staff Report":
             self.report_thread = threading.Thread(target=self.create_staff_report)
         elif report_type == "Traders Screener":
-            # self.report_ticket.config(state="normal")
-            # self.report_ticket.delete('1.0', tk.END)
-            # self.report_ticket.insert('1.0', "Traders Screener not currently available")
-            # self.report_ticket.tag_configure("center", justify='center')
-            # self.report_ticket.tag_add("center", "1.0", "end")
-            # self.report_ticket.config(state="disabled")
             self.report_thread = threading.Thread(target=self.update_traders_report)
         elif report_type == "RG Screener":
             self.report_ticket.config(state="normal")
@@ -1542,8 +1551,10 @@ class Notebook:
             self.report_ticket.tag_configure("center", justify='center')
             self.report_ticket.tag_add("center", "1.0", "end")
             self.report_ticket.config(state="disabled")
-            #self.report_thread = threading.Thread(target=self.update_rg_report)
             return
+        elif report_type == "Client Report":
+            client_id = self.client_id_entry.get()
+            self.report_thread = threading.Thread(target=self.create_client_report, args=(client_id,))
         else:
             return
         self.report_thread.start()
@@ -2063,6 +2074,154 @@ class Notebook:
             if conn:
                 conn.close()
     
+
+    def create_client_report(self, client_id):
+        try:
+            conn, cursor = get_database()
+            client_id = client_id.upper()
+            
+            # Get the current date in string format
+            current_date_str = datetime.now().strftime("%d/%m/%Y")
+            formatted_time = datetime.now().strftime("%H:%M:%S")
+    
+            self.progress_label.config(text=f"Finding client data")
+    
+            # Fetch the count of bets for the client for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'BET'", (client_id, current_date_str))
+            total_bets = cursor.fetchone()[0]
+            
+            # Fetch the total stakes for the client for the current day
+            cursor.execute("SELECT SUM(total_stake) FROM database WHERE customer_ref = ? AND date = ? AND type = 'BET'", (client_id, current_date_str))
+            total_stakes = cursor.fetchone()[0] or 0.0
+            
+            # Fetch the count of knockbacks for the client for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK'", (client_id, current_date_str))
+            total_wageralerts = cursor.fetchone()[0]
+            
+            # Fetch the count of SMS for the client for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'SMS WAGER'", (client_id, current_date_str))
+            total_sms = cursor.fetchone()[0]
+            
+            # Fetch the count of bets for each sport for the client for the current day
+            cursor.execute("SELECT sports, COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'BET' GROUP BY sports", (client_id, current_date_str))
+            sport_counts = cursor.fetchall()
+            
+            self.progress_label.config(text=f"Finding knockback data")
+    
+            # Fetch the count of different types of wager alerts for the client for the current day
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Has Changed%'", (client_id, current_date_str))
+            price_change = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Liability Exceeded: True%'", (client_id, current_date_str))
+            liability_exceeded = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Event Has Ended%'", (client_id, current_date_str))
+            event_ended = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Price Type Disallowed%'", (client_id, current_date_str))
+            price_type_disallowed = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%Sport Disallowed%'", (client_id, current_date_str))
+            sport_disallowed = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message LIKE '%User Max Stake Exceeded%'", (client_id, current_date_str))
+            max_stake_exceeded = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND error_message NOT LIKE '%Price Has Changed%' AND error_message NOT LIKE '%Liability Exceeded: True%' AND error_message NOT LIKE '%Event Has Ended%' AND error_message NOT LIKE '%Price Type Disallowed%' AND error_message NOT LIKE '%Sport Disallowed%' AND error_message NOT LIKE '%User Max Stake Exceeded%'", (client_id, current_date_str))
+            other_alert = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM database WHERE customer_ref = ? AND date = ? AND type = 'WAGER KNOCKBACK' AND (error_message LIKE '%Price Type Disallowed%' OR error_message LIKE '%Sport Disallowed%' OR error_message LIKE '%User Max Stake Exceeded%')", (client_id, current_date_str))
+            user_restriction = cursor.fetchone()[0]
+            
+            self.progress_label.config(text=f"Calculating stakes")
+    
+            conn.close()
+    
+            # Initialize sport counts
+            horse_bets = 0
+            dog_bets = 0
+            other_bets = 0
+            
+            # Map the sport counts
+            sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
+            for sport, count in sport_counts:
+                sport_list = eval(sport)
+                if sport_mapping['Horses'] in sport_list:
+                    horse_bets += count
+                if sport_mapping['Dogs'] in sport_list:
+                    dog_bets += count
+                if sport_mapping['Other'] in sport_list:
+                    other_bets += count
+            
+            total_sport_bets = horse_bets + dog_bets + other_bets
+            percentage_horse_racing = (horse_bets / total_sport_bets) * 100 if total_sport_bets else 0
+            percentage_greyhound = (dog_bets / total_sport_bets) * 100 if total_sport_bets else 0
+            percentage_other = (other_bets / total_sport_bets) * 100 if total_sport_bets else 0
+    
+        except Exception as e:
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+            self.report_ticket.insert('1.0', "An error occurred while generating the report.\nPlease try again.")
+            self.progress_label.config(text="Error with Client Report")
+            self.report_ticket.tag_configure("center", justify='center')
+            self.report_ticket.tag_add("center", "1.0", "end")
+            self.report_ticket.config(state="disabled")
+            return
+        finally:
+            if conn:
+                conn.close()
+    
+        separator = "-" * 69
+
+        if total_bets > 0:
+            knockback_percentage = f"{total_wageralerts / total_bets * 100:.2f}%"
+        else:
+            knockback_percentage = "N/A"
+
+        self.report_ticket.config(state="normal")
+        self.report_ticket.delete('1.0', tk.END)
+    
+        self.report_ticket.insert(tk.END, f"CLIENT REPORT\nGenerated at {formatted_time}\n", 'center')
+        self.report_ticket.insert(tk.END, f"{client_id} - {current_date_str}\n", 'center')
+        self.report_ticket.insert(tk.END, separator + "\n", 'center')
+        self.report_ticket.insert(tk.END, f"Bets: ", 'center')
+        self.report_ticket.insert(tk.END, f"{total_bets}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Knockbacks: ", 'center')
+        self.report_ticket.insert(tk.END, f"{total_wageralerts}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Knockback %: ", 'center')
+        self.report_ticket.insert(tk.END, f"{knockback_percentage}\n", 'c')
+        self.report_ticket.insert(tk.END, f"SMS Bets: ", 'center')
+        self.report_ticket.insert(tk.END, f"{total_sms}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Stakes: ", 'center')
+        self.report_ticket.insert(tk.END, f"£{total_stakes:,}\n", 'c')
+        self.report_ticket.insert(tk.END, separator + "\n", 'center')
+        self.report_ticket.insert(tk.END, f"Knockbacks:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Price Change: ", 'center')
+        self.report_ticket.insert(tk.END, f"{price_change}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Liability Exceeded: ", 'center')
+        self.report_ticket.insert(tk.END, f"{liability_exceeded}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Event Ended: ", 'center')
+        self.report_ticket.insert(tk.END, f"{event_ended}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Price Type Disallowed: ", 'center')
+        self.report_ticket.insert(tk.END, f"{price_type_disallowed}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Sport Disallowed: ", 'center')
+        self.report_ticket.insert(tk.END, f"{sport_disallowed}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Max Stake Exceeded: ", 'center')
+        self.report_ticket.insert(tk.END, f"{max_stake_exceeded}\n", 'c')
+        self.report_ticket.insert(tk.END, f"Other: ", 'center')
+        self.report_ticket.insert(tk.END, f"{other_alert}\n", 'c')
+        self.report_ticket.insert(tk.END, f"User Restriction: ", 'center')
+        self.report_ticket.insert(tk.END, f"{user_restriction}\n", 'c')
+        self.report_ticket.insert(tk.END, separator + "\n", 'center')
+        self.report_ticket.insert(tk.END, f"Horse Racing Bets: ", 'center')
+        self.report_ticket.insert(tk.END, f"{horse_bets} ({percentage_horse_racing:.2f}%)\n", 'c')
+        self.report_ticket.insert(tk.END, f"Greyhound Bets: ", 'center')
+        self.report_ticket.insert(tk.END, f"{dog_bets} ({percentage_greyhound:.2f}%)\n", 'c')
+        self.report_ticket.insert(tk.END, f"Other Bets: ", 'center')
+        self.report_ticket.insert(tk.END, f"{other_bets} ({percentage_other:.2f}%)\n", 'c')
+        self.report_ticket.insert(tk.END, separator + "\n", 'center')
+    
+        self.report_ticket.config(state="disabled")
     
     def create_staff_report(self):
         global USER_NAMES
@@ -2490,7 +2649,6 @@ class Notebook:
         self.report_ticket.delete('1.0', tk.END)
         self.report_ticket.insert(tk.END, report_output)
         self.report_ticket.config(state='disabled')
-
 
 
 
@@ -3652,32 +3810,40 @@ class ClientWizard:
                     try:
                         if self.send_confirmation_email_bool.get():
                             threading.Thread(target=self.send_email, args=(username, request['Restriction'], request['Length'])).start()
+                            print(f"Email sent to {username} for {request['Restriction']} request.")
                     except Exception as e:
                         print(f"Error sending email: {e}")
+                        # self.progress_note.config(text="Error sending email.", anchor='center', justify='center')
     
                     try:
                         threading.Thread(target=self.report_closure_requests, args=(request['Restriction'], username, request['Length'])).start()
+                        print(f"Reported {request['Restriction']} request for {username}.")
                     except Exception as e:
                         print(f"Error reporting closure requests: {e}")
-    
+                        self.progress_note.config(text="Error reporting closure requests.", anchor='center', justify='center')
+
                     request['completed'] = True
     
                     data = load_data()
                     for req in data.get('closures', []):
                         if req['Username'] == request['Username'] and req['Restriction'] == request['Restriction']:
                             req['completed'] = True
+                            print(f"Marked {request['Restriction']} request for {username} as completed.")
                             break
                     save_data(data)
     
                     if request['completed']:
                         refresh_closure_requests()
+                        self.progress_note.config(text=f"{request['Restriction']} request for {username} has been processed.", anchor='center', justify='center')
     
                 else:
-                    messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
+                    # messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
+                    self.progress_note.config(text="Please confirm that the client has been updated in Betty.", anchor='center', justify='center')
+                    refresh_closure_requests()
     
             # Editable username entry
             ttk.Label(self.left_frame, text="Client Username").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-            self.username_entry = ttk.Entry(self.left_frame)
+            self.username_entry = ttk.Entry(self.left_frame, width=13)
             self.username_entry.insert(0, request['Username'])
             self.username_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
     
@@ -3690,19 +3856,17 @@ class ClientWizard:
             send_confirmation_email = ttk.Checkbutton(self.left_frame, text='Send Pipedrive Confirmation Email', variable=self.send_confirmation_email_bool, onvalue=True, offvalue=False, cursor="hand2")
             send_confirmation_email.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="w")
     
-            submit_button = ttk.Button(self.left_frame, text="Submit", command=handle_submit, cursor="hand2", width=40)
+            submit_button = ttk.Button(self.left_frame, text="Submit", command=handle_submit, cursor="hand2", width=33)
             submit_button.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
     
         def refresh_closure_requests():
-            print("refreshing closures")
             for widget in self.left_frame.winfo_children():
                 widget.destroy()
     
             data = load_data()
             requests = [request for request in data.get('closures', []) if not request.get('completed', False)]
-            print(len(requests))
             if not requests:
-                ttk.Label(self.left_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center').grid(row=0, column=1, padx=10, pady=2)
+                ttk.Label(self.left_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center', width=34).grid(row=0, column=1, padx=10, pady=2)
     
             for i, request in enumerate(requests):
                 restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
@@ -3746,10 +3910,14 @@ class ClientWizard:
         update_response = requests.put(update_url, json=update_data)
         if update_response.status_code == 200:
             print(f'Successfully updated person {person_id}')
-            self.progress_note.config(text=f"Successfully updated {person_id} in Pipedrive.", anchor='center', justify='center')
+            self.progress_note.config(text=f"Successfully updated in Pipedrive, email confirmation will be sent.", anchor='center', justify='center')
+            time.sleep(2)
+            self.progress_note.config(text="---", anchor='center', justify='center')
         else:
             print(f'Error updating person {person_id}: {update_response.status_code}')
-            self.progress_note.config(text=f"Error updating {person_id} in Pipedrive.", anchor='center', justify='center')
+            self.progress_note.config(text=f"Error updating in Pipedrive. Please send confirmation email manually.", anchor='center', justify='center')
+            time.sleep(2)
+            self.progress_note.config(text="---", anchor='center', justify='center')
 
     def send_email(self, username, restriction, length):
         params = {
@@ -3779,8 +3947,9 @@ class ClientWizard:
         persons = response.json()['data']['items']
         if not persons:
             # messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or apply the exclusion manually.")
-            self.progress_note.config(text=f"Error: No persons found for username: {username}.", anchor='center', justify='center')
-            print("twthbjufgnbkfjxbn ")
+            self.progress_note.config(text=f"No persons found in Pipedrive for username: {username}. Please make sure the username is correct.", anchor='center', justify='center')
+            time.sleep(2)
+            self.progress_note.config(text="---", anchor='center', justify='center')
             return
 
         ## This is Ridiculous
@@ -3812,6 +3981,7 @@ class ClientWizard:
                     self.update_person(update_url, update_data, person_id)
                 else:
                     print("Error: Invalid length")
+                    messagebox.showerror("Error", "Unknown error. Please tell Sam.")
 
             elif restriction == 'Take-A-Break':
                 if length.split()[0] in number_mapping:
@@ -3820,13 +3990,13 @@ class ClientWizard:
                     self.update_person(update_url, update_data, person_id)
                 else:
                     print("Error: Invalid length")
+                    messagebox.showerror("Error", "Unknown error. Please tell Sam.")
         
     def report_closure_requests(self, restriction, username, length):
         current_date = datetime.now().strftime("%d/%m/%Y")  
         try:
             spreadsheet = self.gc.open("Management Tool")
         except gspread.SpreadsheetNotFound:
-            messagebox.showerror("Error", f"Spreadsheet 'Management Tool' not found. Please notify Sam, or enter the exclusion details manually.")
             return
 
         print(restriction, username, length)
@@ -3852,6 +4022,7 @@ class ClientWizard:
 
         else:
             print("Error: Invalid restriction")
+            messagebox.showerror("Error", "Unknown error. Please tell Sam.")
 
 
 
