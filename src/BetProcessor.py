@@ -64,7 +64,7 @@ gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
 last_run_time = None
 file_lock = threading.Lock()
-path = 'F:\BWW\Export'
+path = 'F:\\BWW\\Export'
 processed_races = set()
 processed_closures = set()
 previously_seen_events = set()
@@ -1530,7 +1530,7 @@ class Application(tk.Tk):
         image = image.resize((100, 100)) 
         self.logo = ImageTk.PhotoImage(image)
 
-        self.logo_label = Label(self, image=self.logo)
+        self.logo_label = ttk.Label(self, image=self.logo)
         self.logo_label.grid(row=0, column=1) 
 
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
@@ -1566,11 +1566,9 @@ class Application(tk.Tk):
         process_thread.start()
         window.destroy()
         
-
     def log_message(self, message):
         current_time = datetime.now().strftime('%H:%M:%S')  # Get the current time
         self.text_area.insert(tk.END, f'{current_time}: {message}\n')  # Add the time to the message
-
         self.text_area.see(tk.END)
 
         max_lines = 1500
@@ -1580,8 +1578,6 @@ class Application(tk.Tk):
 
     def on_destroy(self, event):
         self.stop_main_loop = True
-
-
 
 ####################################################################################
 ## FILE HANDLER FOR INCOMING BETS USING WATCHDOG OBSERVER
@@ -1611,6 +1607,7 @@ class FileHandler(FileSystemEventHandler):
                 print(f"Failed to process the file {file_path} after {max_retries} attempts.")
         else:
             print(f"Directory created: {file_path}, skipping processing.")
+
 ####################################################################################
 ## MAIN FUNCTIONS CONTAINING MAIN LOOP
 ####################################################################################
@@ -1623,34 +1620,43 @@ def main(app):
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
 
-    run_get_data(app)
+    #run_get_data(app)
     schedule.every(2).minutes.do(run_get_data, app)
+    print("Running get data")
 
     run_get_deposit_data(app)
     schedule.every(10).minutes.do(run_get_deposit_data, app)
     schedule.every().day.at("23:57").do(run_get_deposit_data, app)
+    print("Running get deposit data")
 
     run_update_todays_oddsmonkey_selections()
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    print("Running update todays oddsmonkey selections")
 
-    check_closures_and_race_times()
+    #check_closures_and_race_times()
     schedule.every(50).seconds.do(check_closures_and_race_times)
+    print("Running check closures and race times")
 
-    fetch_and_print_new_events()
+    #fetch_and_print_new_events()
     schedule.every(10).minutes.do(fetch_and_print_new_events)
+    print("Running fetch and print new events")
 
     #find_stale_antepost_events()
     schedule.every().day.at("13:00").do(find_stale_antepost_events)
+    print("Running find stale antepost events")
 
     run_activity_report_notification()
     schedule.every(1).minute.do(run_activity_report_notification)
+    print("Running activity report notification")
 
     schedule.every(1).minute.do(run_staff_report_notification)
+    print("Running staff report notification")
 
     schedule.every().day.at("17:00").do(log_deposit_summary)
     schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
+        print("Main loop running")
         # Run pending tasks
         schedule.run_pending()
 
@@ -1661,6 +1667,7 @@ def main(app):
                 continue  
 
         if not observer_started or datetime.now() - last_processed_time > timedelta(minutes=3):
+            print("Attempting to start observer...")
             if observer_started:
                 observer.stop()
                 observer.join()
@@ -1678,7 +1685,8 @@ def main(app):
             app.reprocess() 
             time.sleep(10)
         except KeyboardInterrupt:
-            pass
+            break
+
     if observer is not None:
         observer.stop()
         log_notification("Processor Stopped")
