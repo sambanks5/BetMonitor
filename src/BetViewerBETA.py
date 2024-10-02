@@ -1407,13 +1407,6 @@ class Notebook:
     
         separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
         separator.pack(side="top", fill='x', pady=(12, 8), padx=5)
-    
-        self.copy_frame = ttk.Frame(self.staff_feed_buttons_frame)
-        self.copy_frame.pack(side="top", pady=(5, 0))
-        self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
-        self.copy_button.grid(row=0, column=0)
-        self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 12), wraplength=200)
-        self.password_result_label.grid(row=0, column=1, padx=(5, 5))
         
         tab_2 = ttk.Frame(self.notebook)
         self.notebook.add(tab_2, text="Reports/Screener")
@@ -2888,21 +2881,7 @@ class Notebook:
 
 
 
-    def generate_random_string(self):
-        random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-        
-        generated_string = 'GB' + random_numbers
-        
-        return generated_string
-
-    def copy_to_clipboard(self):
-        self.generated_string = self.generate_random_string()
-        
-        pyperclip.copy(self.generated_string)
-        
-        self.password_result_label.config(text=f"{self.generated_string}")
-        self.copy_button.config(state=tk.NORMAL)
-
+   
 class Settings:
     def __init__(self, root):
         self.root = root
@@ -2934,7 +2913,14 @@ class Settings:
         self.separator.pack(fill='x', pady=5)
 
         self.view_events_button = ttk.Button(self.settings_frame, text="Live Events", command=self.show_live_events, cursor="hand2", width=12)
-        self.view_events_button.pack(pady=(40, 0))
+        self.view_events_button.pack(pady=(20, 0))
+
+        self.copy_frame = ttk.Frame(self.settings_frame)
+        self.copy_frame.pack(pady=(15, 0))
+        self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
+        self.copy_button.grid(row=0, column=0)
+        self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 11), wraplength=200)
+        self.password_result_label.grid(row=0, column=1, padx=(5, 5))
 
     def fetch_and_save_events(self):
         url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M,F'
@@ -3155,6 +3141,21 @@ class Settings:
     
         with open(log_file, 'w') as f:
             f.writelines(data)
+    
+    def generate_random_string(self):
+        random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
+        generated_string = 'GB' + random_numbers
+        
+        return generated_string
+
+    def copy_to_clipboard(self):
+        self.generated_string = self.generate_random_string()
+        
+        pyperclip.copy(self.generated_string)
+        
+        self.password_result_label.config(text=f"{self.generated_string}")
+        self.copy_button.config(state=tk.NORMAL)
 
 class Next3Panel:
     def __init__(self, root):
@@ -3398,8 +3399,6 @@ class ClientWizard:
     
             # Re-enable the submit button
             submit_button.config(state=tk.NORMAL)
-    
-
     
         frame = ttk.Frame(self.wizard_notebook)
         frame.grid_columnconfigure(0, weight=1)
@@ -4066,19 +4065,15 @@ class BetViewerApp:
         menu_bar = tk.Menu(self.root)
         options_menu = tk.Menu(menu_bar, tearoff=0)
         options_menu.add_command(label="Set User Initials", command=self.user_login, foreground="#000000", background="#ffffff")
-        options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
+        # options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
+        options_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
         options_menu.add_separator(background="#ffffff")
         options_menu.add_command(label="Exit", command=self.root.quit, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Options", menu=options_menu)
-
-        report_menu = tk.Menu(menu_bar, tearoff=0)
-        report_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
-        menu_bar.add_cascade(label="Report", menu=report_menu)
-
+        menu_bar.add_command(label="Client Options", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
         # Add Client Wizard menu item
-        menu_bar.add_command(label="Client Wizard", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
 
         self.root.config(menu=menu_bar)
 
