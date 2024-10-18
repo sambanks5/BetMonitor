@@ -45,9 +45,9 @@ LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache pat
 LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 
 
-CACHE_UPDATE_INTERVAL = 60 * 1  # Update cache every 1 minutes
+CACHE_UPDATE_INTERVAL = 100 * 1
 
-# FOR TESTING - UNCOMMENT
+# UNCOMMENT FOR TESTING
 NETWORK_PATH_PREFIX = ''
 DATABASE_PATH = 'wager_database.sqlite'
 
@@ -75,30 +75,26 @@ def get_database():
         if not os.path.exists(LOCAL_DATABASE_PATH) or not is_cache_up_to_date():
             update_local_cache()
 
-        # Ensure the directory for the lock file exists
         lock_file_dir = os.path.dirname(LOCK_FILE_PATH)
         if not os.path.exists(lock_file_dir):
             os.makedirs(lock_file_dir)
 
-        # Create a lock file
         with open(LOCK_FILE_PATH, 'w') as lock_file:
             lock_file.write('locked')
 
         conn = sqlite3.connect(LOCAL_DATABASE_PATH)
-        conn.execute('PRAGMA journal_mode=WAL;')  # Enable WAL mode
+        conn.execute('PRAGMA journal_mode=WAL;')
         cursor = conn.cursor()
         return conn, cursor
     except Exception as e:
         print(f"Error accessing the database: {e}")
         return None, None
     finally:
-        # Remove the lock file
         if os.path.exists(LOCK_FILE_PATH):
             os.remove(LOCK_FILE_PATH)
 
 def prompt_for_database():
     try:
-        # Prompt the user to select the database file
         db_path = filedialog.askopenfilename(
             title="Select the database file",
             filetypes=[("SQLite Database", "*.sqlite"), ("All Files", "*.*")]
@@ -115,10 +111,9 @@ def prompt_for_database():
 def update_local_cache():
     while os.path.exists(LOCK_FILE_PATH):
         print("Database is locked, waiting...")
-        time.sleep(1)  # Wait for 1 second before checking again
+        time.sleep(1)
 
     try:
-        start_time = time.time()
         global DATABASE_PATH, LOCAL_DATABASE_PATH
         local_cache_dir = os.path.dirname(LOCAL_DATABASE_PATH)
         if not os.path.exists(local_cache_dir):
@@ -1399,14 +1394,19 @@ class Notebook:
         self.staff_feed_buttons_frame.grid(row=0, column=2, sticky='nsew')
         self.pinned_message_frame = ttk.Frame(self.staff_feed_buttons_frame, style='Card')
         self.pinned_message_frame.pack(side="top", pady=5, padx=(5, 0))
-        self.pinned_message = tk.Text(self.pinned_message_frame, font=("Helvetica", 10, 'bold'), bd=0, wrap='word', pady=2, fg="#000000", bg="#ffffff", height=5, width=35)  # Adjust height as needed
-        self.pinned_message.config(state='disabled') 
+        self.pinned_message = tk.Text(self.pinned_message_frame, font=("Helvetica", 10, 'bold'), bd=0, wrap='word', pady=2, fg="#000000", bg="#ffffff", height=3, width=30)  # Adjust height as needed
+        self.pinned_message.config(state='disabled')
         self.pinned_message.pack(side="top", pady=5, padx=5) 
-        self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post", command=user_notification, cursor="hand2", width=10)
-        self.post_message_button.pack(side="top", pady=(10, 5))
-    
-        separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
-        separator.pack(side="top", fill='x', pady=(12, 8), padx=5)
+        self.post_message_button = ttk.Button(self.staff_feed_buttons_frame, text="Post", command=user_notification, cursor="hand2", width=8)
+        self.post_message_button.pack(side="top", pady=(5, 5))
+
+        self.separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
+        self.separator.pack(side="top", fill='x', pady=(5, 5))
+
+        self.apply_freebet_button = ttk.Button(self.staff_feed_buttons_frame, text="Report Freebet", command=lambda: ClientWizard(self.root, default_tab="Freebet"), cursor="hand2", width=13)
+        self.apply_freebet_button.pack(side="top", pady=(5, 5))
+        self.apply_rg_popup_button = ttk.Button(self.staff_feed_buttons_frame, text="Apply Popup", command=lambda: ClientWizard(self.root, default_tab="RG Popup"), cursor="hand2", width=13)
+        self.apply_rg_popup_button.pack(side="top", pady=(5, 5))
         
         tab_2 = ttk.Frame(self.notebook)
         self.notebook.add(tab_2, text="Reports/Screener")
@@ -1474,6 +1474,7 @@ class Notebook:
         self.client_id_frame.pack_forget()  
 
     def initialize_text_tags(self):
+        self.pinned_message.tag_configure('center', justify='center')
         self.report_ticket.tag_configure("risk", foreground="#ad0202")
         self.report_ticket.tag_configure("watchlist", foreground="#e35f00")
         self.report_ticket.tag_configure("newreg", foreground="purple")
@@ -1497,7 +1498,7 @@ class Notebook:
                 self.pinned_message.config(state='normal') 
                 self.pinned_message.delete('1.0', 'end')  
                 if not pinned_notifications:
-                    self.pinned_message.insert('end', "No pinned message.\n")
+                    self.pinned_message.insert('end', "No bulletin message\n", "center")
                 for notification in pinned_notifications:
                     self.pinned_message.insert('end', f"{notification['message']}\n")
                 self.pinned_message.config(state='disabled') 
@@ -2324,7 +2325,7 @@ class Notebook:
         for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
     
-        self.report_ticket.insert(tk.END, "\nAverage Updates Per Day:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\nAverage Daily Updates Since {month_ago.strftime('%d-%m')}:\n", 'center')
         for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
     
@@ -2342,7 +2343,6 @@ class Notebook:
     
         self.progress_label.config(text=f"---")
         self.report_ticket.config(state="disabled")
-
 
     def create_rg_report(self):
 
@@ -2643,10 +2643,9 @@ class Notebook:
         self.report_ticket.insert(tk.END, report_output)
         self.report_ticket.config(state='disabled')
 
-
-
     def create_traders_report(self):
         self.progress_label.config(text="Retrieving database")
+        self.report_button.config(state="disabled")
         vip_clients, _, _, _, _ = access_data()
         conn = None
         cursor = None
@@ -2667,23 +2666,28 @@ class Notebook:
                     return
             
             self.progress_label.config(text=f"Finding users beating the SP...")
-    
             current_date = datetime.now().strftime('%d/%m/%Y')
             cursor.execute("SELECT DISTINCT customer_ref FROM database WHERE date = ?", (current_date,))
             customer_refs = [row[0] for row in cursor.fetchall()]
-    
+            print(f"Customer refs: {customer_refs}")
+                
+            self.progress_label.config(text=f"Retrieving client wagers...")
             client_wagers = self.get_client_wagers(conn, customer_refs)
+            self.progress_label.config(text=f"Getting Results...")
             data = self.get_results_json()
+            self.progress_label.config(text=f"Comparing odds to SP...")
             results = self.compare_odds(client_wagers, data)
+            print(f"Results: {results}")
     
             # Initialize new lists
             selection_to_users = defaultdict(list)
             users_without_risk_category = set()
             
             self.progress_label.config(text=f"Finding potential W users...")
-    
             cursor.execute("SELECT * FROM database WHERE date = ?", (current_date,))
             database_data = cursor.fetchall()
+            # print(f"Database data: {database_data}")
+    
             for bet in database_data:
                 try:
                     wager_type = bet[5]
@@ -2718,8 +2722,10 @@ class Notebook:
             
             # Exclude VIP clients from users_without_risk_category
             users_without_risk_category = {user for user in users_without_risk_category if user[0] not in vip_clients}
-            
+            print(f"Users without risk category: {users_without_risk_category}")
+    
             self.progress_label.config(text=f"---")
+            self.report_button.config(state="normal")
     
             return results, users_without_risk_category
                     
@@ -2832,25 +2838,30 @@ class Notebook:
         response = requests.get(url)
         data = response.json()
         return data
-
+    
     def get_client_wagers(self, conn, customer_refs):
-        time = datetime.now()
-        current_date_str = time.strftime("%d/%m/%Y")
+        current_date_str = datetime.now().strftime("%d/%m/%Y")
         cursor = conn.cursor()
         
-        client_wagers = {}
-        for customer_ref in customer_refs:
-            cursor.execute("SELECT * FROM database WHERE customer_ref = ? AND date = ?", (customer_ref, current_date_str,))
-            wagers = cursor.fetchall()
-            
-            user_wagers = []
-            for bet in wagers:
-                if bet[5] == 'BET':
-                    betID = bet[0]
-                    selections = json.loads(bet[10])
-                    user_wagers.append((betID, selections))
-            
-            client_wagers[customer_ref] = user_wagers
+        # Convert customer_refs to a tuple for use in SQL IN clause
+        customer_refs_tuple = tuple(customer_refs)
+        
+        # Construct the SQL query with the appropriate number of placeholders
+        placeholders = ','.join(['?'] * len(customer_refs_tuple))
+        query = f"SELECT * FROM database WHERE customer_ref IN ({placeholders}) AND date = ?"
+        
+        # Execute the query with the customer_refs and current_date_str as parameters
+        cursor.execute(query, (*customer_refs_tuple, current_date_str))
+        wagers = cursor.fetchall()
+        
+        # Process the results
+        client_wagers = defaultdict(list)
+        for bet in wagers:
+            if bet[5] == 'BET':
+                betID = bet[0]
+                customer_ref = bet[3]
+                selections = json.loads(bet[10])
+                client_wagers[customer_ref].append((betID, selections))
         
         return client_wagers
 
@@ -2859,8 +2870,6 @@ class Notebook:
             return 2.0
         numerator, denominator = map(int, fractional_odds.split('-'))
         return (numerator / denominator) + 1
-
-
 
     def run_factoring_sheet_thread(self):
         self.factoring_thread = threading.Thread(target=self.factoring_sheet)
@@ -2876,12 +2885,6 @@ class Notebook:
             self.tree.insert("", "end", values=[row[5], row[0], row[1], row[2], row[3], row[4]])
 
 
-
-
-
-
-
-   
 class Settings:
     def __init__(self, root):
         self.root = root
@@ -2912,14 +2915,14 @@ class Settings:
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
 
-        self.view_events_button = ttk.Button(self.settings_frame, text="Live Events", command=self.show_live_events, cursor="hand2", width=12)
+        self.view_events_button = ttk.Button(self.settings_frame, text="Live Events", command=self.show_live_events, cursor="hand2", width=13)
         self.view_events_button.pack(pady=(20, 0))
 
         self.copy_frame = ttk.Frame(self.settings_frame)
         self.copy_frame.pack(pady=(15, 0))
         self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
         self.copy_button.grid(row=0, column=0)
-        self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 11), wraplength=200)
+        self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 10), wraplength=200)
         self.password_result_label.grid(row=0, column=1, padx=(5, 5))
 
     def fetch_and_save_events(self):
@@ -3278,11 +3281,13 @@ class Next3Panel:
 
 class ClientWizard:
     def __init__(self, root, default_tab="Factoring"):
+        print(default_tab)
         self.root = root
         self.default_tab = default_tab
         self.toplevel = tk.Toplevel(self.root)
         self.toplevel.title("Client Reporting and Modifications")
         self.toplevel.geometry("600x300")
+        self.toplevel.iconbitmap('src/splash.ico')
         screen_width = self.toplevel.winfo_screenwidth()
         self.toplevel.geometry(f"+{screen_width - 750}+50")
         self.username_entry = None
@@ -3320,20 +3325,20 @@ class ClientWizard:
 
         self.wizard_notebook.add(self.report_freebet_tab, text="Report Freebet")
         self.wizard_notebook.add(self.rg_popup_tab, text="RG Popup")
-        self.wizard_notebook.add(self.add_factoring_tab, text="Factoring")
+        self.wizard_notebook.add(self.add_factoring_tab, text="Apply Factoring")
         self.wizard_notebook.add(self.closure_requests_tab, text="Closure Requests")
         self.select_default_tab()
 
-
     def select_default_tab(self):
         tab_mapping = {
-            "Report Freebet": 0,
-            "RG Popup": 1,
+            "Freebet": 1,
+            "Popup": 0,
             "Factoring": 2,
-            "Closure Requests": 3
+            "Closure": 3
         }
         
         tab_index = tab_mapping.get(self.default_tab, 0)
+        print(tab_index)
         self.wizard_notebook.select(tab_index)
 
     def apply_rg_popup(self):
@@ -3382,6 +3387,12 @@ class ClientWizard:
                     update_response = requests.put(update_url, json=update_data)
                     if update_response.status_code == 200:
                         log_notification(f"{user} applied RG Popup to {username.upper()}", True)
+                        progress_note.config(text=f"Successfully updated {username} in Pipedrive.", anchor='center', justify='center')
+                        time.sleep(2)
+                        submit_button.config(state=tk.NORMAL)
+                        entry1.delete(0, tk.END)
+                        progress_note.config(text="---", anchor='center', justify='center')
+                        return
                     else:
                         messagebox.showerror("Error", f"Error updating person {person_id}: {update_response.status_code}")
                         progress_note.config(text=f"Error updating {username} in Pipedrive.", anchor='center', justify='center')

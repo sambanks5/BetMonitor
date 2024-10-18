@@ -175,13 +175,13 @@ def calculate_date_range(days_back):
     if days_back == 1:
         start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
-        start_date = end_date - timedelta(days=days_back - 1)  # Adjust to include the current day
+        start_date = end_date - timedelta(days=days_back - 1) 
     
     return start_date, end_date
 
 def remove_existing_records(database, start_date, end_date):
     cursor = database.cursor()
-    # Convert date strings to dd/mm/yyyy format for the SQL query
+    # Convert date strings to dd/mm/yyyy format for the query
     start_date_str = start_date.strftime('%d/%m/%Y')
     end_date_str = end_date.strftime('%d/%m/%Y')
     
@@ -201,7 +201,6 @@ def reprocess_bets(days_back, bet_path, app):
     print(f"Processing bets from {start_date} to {end_date}")
     database = load_database()
 
-    # Remove existing records
     remove_existing_records(database, start_date, end_date)
 
     # Reprocess files in the bet_path directory (current day files)
@@ -210,7 +209,6 @@ def reprocess_bets(days_back, bet_path, app):
         if bet_file.endswith('.bww'):
             file_path = os.path.join(bet_path, bet_file)
             try:
-                # Check the creation date of the file
                 creation_time = os.path.getctime(file_path)
                 creation_date = datetime.fromtimestamp(creation_time)
                 if start_date <= creation_date <= end_date:
@@ -242,7 +240,6 @@ def reprocess_bets(days_back, bet_path, app):
                     if bet_file.endswith('.bww'):
                         file_path = os.path.join(folder_path, bet_file)
                         try:
-                            # Check the creation date of the file
                             creation_time = os.path.getctime(file_path)
                             creation_date = datetime.fromtimestamp(creation_time)
                             if start_date <= creation_date <= end_date:
@@ -270,7 +267,6 @@ def process_file(file_path):
 def add_bet(conn, bet, app, retries=5, delay=1):
     print("Adding a bet to the database")
     
-    # Create a lock file
     with open(LOCK_FILE_PATH, 'w') as lock_file:
         lock_file.write('locked')
 
@@ -301,10 +297,10 @@ def add_bet(conn, bet, app, retries=5, delay=1):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (bet['id'], bet['time'], bet['type'], bet['customer_ref'], selections, details['risk_category'], details['bet_details'], unit_stake, total_stake, details['bet_type'], bet['date'], json.dumps(bet['Sport'])))
             conn.commit()
-            break  # Exit the retry loop if the operation is successful
+            break
         except sqlite3.IntegrityError:
             app.log_message(f'Bet already in database {bet["id"]}, {bet["customer_ref"]}! Skipping...\n')
-            break  # Exit the retry loop if the bet is already in the database
+            break 
         except sqlite3.OperationalError as e:
             if 'database is locked' in str(e):
                 print(f"Database is locked, retrying in {delay} seconds...")
@@ -312,13 +308,12 @@ def add_bet(conn, bet, app, retries=5, delay=1):
             else:
                 print(f"SQLite error: {e}")
                 app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
-                break  # Exit the retry loop for other operational errors
+                break 
         except sqlite3.Error as e:
             print(f"SQLite error: {e}")
             app.log_message(f"SQLite error: {e} while processing bet {bet['id']}, {bet['customer_ref']}!\n")
-            break  # Exit the retry loop for other errors
+            break 
         finally:
-            # Remove the lock file
             if os.path.exists(LOCK_FILE_PATH):
                 os.remove(LOCK_FILE_PATH)
 
@@ -1620,7 +1615,7 @@ def main(app):
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
 
-    #run_get_data(app)
+    run_get_data(app)
     schedule.every(2).minutes.do(run_get_data, app)
     print("Running get data")
 
@@ -1633,15 +1628,15 @@ def main(app):
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
     print("Running update todays oddsmonkey selections")
 
-    #check_closures_and_race_times()
+    check_closures_and_race_times()
     schedule.every(50).seconds.do(check_closures_and_race_times)
     print("Running check closures and race times")
 
-    #fetch_and_print_new_events()
+    fetch_and_print_new_events()
     schedule.every(10).minutes.do(fetch_and_print_new_events)
     print("Running fetch and print new events")
 
-    #find_stale_antepost_events()
+    find_stale_antepost_events()
     schedule.every().day.at("13:00").do(find_stale_antepost_events)
     print("Running find stale antepost events")
 
@@ -1656,7 +1651,6 @@ def main(app):
     schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
-        print("Main loop running")
         # Run pending tasks
         schedule.run_pending()
 
