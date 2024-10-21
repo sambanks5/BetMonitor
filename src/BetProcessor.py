@@ -21,6 +21,7 @@ import gspread
 import requests
 import base64
 import datetime
+import atexit
 import tkinter as tk
 from tkinter import ttk, filedialog, Label, Toplevel
 from PIL import ImageTk, Image
@@ -28,6 +29,7 @@ from datetime import datetime, timedelta, date
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from oauth2client.service_account import ServiceAccountCredentials
+from concurrent.futures import ThreadPoolExecutor
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -64,6 +66,7 @@ gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
 last_run_time = None
 file_lock = threading.Lock()
+executor = ThreadPoolExecutor(max_workers=5)
 path = 'F:\\BWW\\Export'
 processed_races = set()
 processed_closures = set()
@@ -1443,18 +1446,11 @@ def update_data_file(app):
             app.log_message(f"An error occurred while updating the data file: {e}")
             log_notification(f"Processor Could not update data file.", True)
 
-
-
-####################################################################################
-## THREADING FUNCTIONS
-####################################################################################
 def run_get_data(app):
-    get_data_thread = threading.Thread(target=update_data_file, args=(app,))
-    get_data_thread.start()
+    executor.submit(update_data_file, app)
 
 def run_update_todays_oddsmonkey_selections():
-    update_todays_oddsmonkey_selections_thread = threading.Thread(target=update_todays_oddsmonkey_selections)
-    update_todays_oddsmonkey_selections_thread.start()
+    executor.submit(update_todays_oddsmonkey_selections)
 
 def run_get_deposit_data(app):
     global last_run_time
@@ -1464,16 +1460,13 @@ def run_get_deposit_data(app):
         return
     
     last_run_time = current_time
-    get_deposit_data_thread = threading.Thread(target=get_deposits, args=(app,))
-    get_deposit_data_thread.start()
+    executor.submit(get_deposits, app)
 
 def run_staff_report_notification():
-    staff_report_thread = threading.Thread(target=staff_report_notification)
-    staff_report_thread.start()
+    executor.submit(staff_report_notification)
 
 def run_activity_report_notification():
-    activity_report_thread = threading.Thread(target=activity_report_notification)
-    activity_report_thread.start()
+    executor.submit(activity_report_notification)
 
 def clear_processed():
     global processed_races, processed_closures, bet_count_1000, bet_count_500, knockback_count_250, notified_users
@@ -1489,6 +1482,13 @@ def clear_processed():
     with file_lock:
         with open('notifications.json', 'w') as f:
             json.dump([], f)
+
+def shutdown_executor():
+    executor.shutdown(wait=True)
+    print("Executor shutdown complete.")
+
+# Ensure the executor is shut down on program exit
+atexit.register(shutdown_executor)
 
 
 
