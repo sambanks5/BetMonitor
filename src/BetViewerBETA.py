@@ -11,6 +11,7 @@ import os
 import threading
 import pyperclip
 import fasteners
+import subprocess
 import json
 import sqlite3
 import requests
@@ -22,6 +23,7 @@ import time
 import tkinter as tk
 from collections import defaultdict, Counter
 from dateutil.relativedelta import relativedelta
+from google.oauth2 import service_account
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
@@ -37,8 +39,8 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
-NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
+DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
 
 
 LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
@@ -48,8 +50,8 @@ LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 CACHE_UPDATE_INTERVAL = 100 * 1
 
 # UNCOMMENT FOR TESTING
-# NETWORK_PATH_PREFIX = ''
 # DATABASE_PATH = 'wager_database.sqlite'
+# NETWORK_PATH_PREFIX = ''
 
 user = ""
 USER_NAMES = {
@@ -226,7 +228,6 @@ def user_notification():
 
 class BetDataFetcher:
     _instance = None
-
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(BetDataFetcher, cls).__new__(cls)
@@ -317,6 +318,20 @@ class BetFeed:
         self.filter_frame = ttk.Frame(self.feed_frame)
         self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(3, 0), padx=(11, 0))
 
+        self.filter_frame.grid_rowconfigure(0, weight=1)
+        self.filter_frame.grid_rowconfigure(1, weight=1)
+        self.filter_frame.grid_rowconfigure(2, weight=1)
+        self.filter_frame.grid_columnconfigure(0, weight=0)
+        self.filter_frame.grid_columnconfigure(1, weight=0)
+        self.filter_frame.grid_columnconfigure(2, weight=1)
+        self.filter_frame.grid_columnconfigure(3, weight=2)
+        self.filter_frame.grid_columnconfigure(4, weight=1)
+        self.filter_frame.grid_columnconfigure(5, weight=1)
+        self.filter_frame.grid_columnconfigure(6, weight=1)
+        self.filter_frame.grid_columnconfigure(7, weight=1)
+        self.filter_frame.grid_columnconfigure(8, weight=1)
+        self.filter_frame.grid_columnconfigure(9, weight=1)
+
         self.username_filter_entry = ttk.Entry(self.filter_frame, width=8)
         self.username_filter_entry.grid(row=0, column=0, pady=(0, 2), padx=4, sticky='ew')
         self.set_placeholder(self.username_filter_entry, 'Client')
@@ -367,20 +382,6 @@ class BetFeed:
         self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:250]", variable=self.limit_bets_var)
         self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e')
 
-        self.filter_frame.grid_rowconfigure(0, weight=1)
-        self.filter_frame.grid_rowconfigure(1, weight=1)
-        self.filter_frame.grid_rowconfigure(2, weight=1)
-        self.filter_frame.grid_columnconfigure(0, weight=0)
-        self.filter_frame.grid_columnconfigure(1, weight=0)
-        self.filter_frame.grid_columnconfigure(2, weight=1)
-        self.filter_frame.grid_columnconfigure(3, weight=2)
-        self.filter_frame.grid_columnconfigure(4, weight=1)
-        self.filter_frame.grid_columnconfigure(5, weight=1)
-        self.filter_frame.grid_columnconfigure(6, weight=1)
-        self.filter_frame.grid_columnconfigure(7, weight=1)
-        self.filter_frame.grid_columnconfigure(8, weight=1)
-        self.filter_frame.grid_columnconfigure(9, weight=1)
-
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
         self.activity_frame.place(x=530, y=5, width=365, height=150)
         
@@ -406,7 +407,7 @@ class BetFeed:
     
             try:
                 print("Refreshing feed...")
-                self.vip_clients, self.newreg_clients, self.oddsmonkey_selections, self.todays_oddsmonkey_selections, reporting_data = access_data()
+                vip_clients, newreg_clients, oddsmonkey_selections, _, reporting_data = access_data()
                 
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
@@ -521,7 +522,7 @@ class BetFeed:
                             bet_dict['selections'] = json.loads(bet_dict['selections'])  # Convert JSON string to dictionary
     
                         # Measure time taken to call self.display_bet
-                        text_segments = self.format_bet_text(bet_dict)
+                        text_segments = self.format_bet_text(bet_dict, oddsmonkey_selections, vip_clients, newreg_clients)
     
                         for text, tag in text_segments:
                             start_idx = sum(len(segment) for segment in text_to_insert)
@@ -653,7 +654,7 @@ class BetFeed:
             # Map the sport counts
             sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
             for sport, count in current_sport_counts:
-                sport_list = eval(sport)  # Convert string representation of list to actual list
+                sport_list = eval(sport)
                 if sport_mapping['Horses'] in sport_list:
                     horse_bets += count
                 if sport_mapping['Dogs'] in sport_list:
@@ -718,24 +719,24 @@ class BetFeed:
             self.activity_text.insert(tk.END, "An unexpected error occurred. Please try refreshing the feed.")
             self.activity_text.config(state='disabled')
 
-    def format_bet_text(self, bet_dict):
+    def format_bet_text(self, bet_dict, oddsmonkey_selections, vip_clients, newreg_clients):
         text_segments = []
         
         if bet_dict['type'] == 'SMS WAGER':
-            wager_number = bet_dict.get('id', '')  # Retrieve wager number
-            customer_reference = bet_dict.get('customer_ref', '')  # Retrieve customer reference
-            sms_wager_text = bet_dict.get('text_request', '')  # Retrieve SMS wager text
-            tag = f"customer_ref_{self.get_customer_tag(customer_reference)}"
+            wager_number = bet_dict.get('id', '')  
+            customer_reference = bet_dict.get('customer_ref', '')  
+            sms_wager_text = bet_dict.get('text_request', '') 
+            tag = f"customer_ref_{self.get_customer_tag(customer_reference, vip_clients, newreg_clients)}"
             text_segments.append((f"{customer_reference} {wager_number}", tag))
             text_segments.append((f" - SMS WAGER:", "sms"))
             text_segments.append((f"\n{sms_wager_text}\n", "black"))
             
         elif bet_dict['type'] == 'WAGER KNOCKBACK':
-            customer_ref = bet_dict.get('customer_ref', '')  # Retrieve customer reference
-            knockback_id = bet_dict.get('id', '')  # Retrieve knockback ID
+            customer_ref = bet_dict.get('customer_ref', '') 
+            knockback_id = bet_dict.get('id', '') 
             knockback_id = knockback_id.rsplit('-', 1)[0]
-            knockback_details = bet_dict.get('selections', {})  # Retrieve knockback details
-            timestamp = bet_dict.get('time', '')  # Retrieve time
+            knockback_details = bet_dict.get('selections', {}) 
+            timestamp = bet_dict.get('time', '')  
     
             if isinstance(knockback_details, dict):
                 formatted_knockback_details = '\n   '.join([f'{key}: {value}' for key, value in knockback_details.items() if key not in ['Selections', 'Knockback ID', 'Time', 'Customer Ref', 'Error Message']])
@@ -748,52 +749,51 @@ class BetFeed:
                 formatted_selections = ''
     
             formatted_knockback_details += '\n   ' + formatted_selections
-            error_message = bet_dict.get('error_message', '')  # Retrieve error message
+            error_message = bet_dict.get('error_message', '') 
             if 'Maximum stake available' in error_message:
                 error_message = error_message.replace(', Maximum stake available', '\n   Maximum stake available')
             formatted_knockback_details = f"Error Message: {error_message}   {formatted_knockback_details}"
             
-            tag = f"customer_ref_{self.get_customer_tag(customer_ref)}"
+            tag = f"customer_ref_{self.get_customer_tag(customer_ref, vip_clients, newreg_clients)}"
             text_segments.append((f"{customer_ref} {timestamp} - {knockback_id}", tag))
             text_segments.append((f" - WAGER KNOCKBACK:\n", "knockback"))
             text_segments.append((f"{formatted_knockback_details}\n", "black"))
         else:
-            bet_no = bet_dict.get('id', '')  # Retrieve bet number
-            details = bet_dict.get('selections', [])  # Retrieve selections
+            bet_no = bet_dict.get('id', '')  
+            details = bet_dict.get('selections', []) 
             if isinstance(details, list) and all(isinstance(item, list) for item in details):
                 parsed_selections = details
             else:
                 parsed_selections = []
             
-            timestamp = bet_dict.get('time', '')  # Retrieve timestamp
-            customer_reference = bet_dict.get('customer_ref', '')  # Retrieve customer reference
-            customer_risk_category = bet_dict.get('risk_category', '')  # Retrieve customer risk category
-            bet_details = bet_dict.get('bet_details', '')  # Retrieve bet details
-            unit_stake = bet_dict.get('unit_stake', 0.0)  # Retrieve unit stake
-            bet_type = bet_dict.get('bet_type', '')  # Retrieve bet type
+            timestamp = bet_dict.get('time', '')  
+            customer_reference = bet_dict.get('customer_ref', '')  
+            customer_risk_category = bet_dict.get('risk_category', '')  
+            bet_details = bet_dict.get('bet_details', '') 
+            unit_stake = bet_dict.get('unit_stake', 0.0)  
+            bet_type = bet_dict.get('bet_type', '')
             
             selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
         
-            # Format unit_stake as currency with 2 decimal points
             formatted_unit_stake = f"£{unit_stake:.2f}"
             
             text = f"{formatted_unit_stake} {bet_details}, {bet_type}:\n{selection}\n"
-            tag = f"customer_ref_{self.get_customer_tag(customer_reference, customer_risk_category)}"
+            tag = f"customer_ref_{self.get_customer_tag(customer_reference, vip_clients, newreg_clients, customer_risk_category)}"
             text_segments.append((f"{customer_reference} ({customer_risk_category}) {timestamp} - {bet_no}", tag))
             text_segments.append((f" - {text}", "black"))
         
             for sel in parsed_selections:
-                for om_sel in self.oddsmonkey_selections.items():
+                for om_sel in oddsmonkey_selections.items():
                     if ' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip():
                         oddsmonkey_text = f"Oddsmonkey Selection - {sel[0]} @ {om_sel[1][1]}\n"
                         text_segments.append((oddsmonkey_text, "newreg"))
         
         return text_segments
     
-    def get_customer_tag(self, customer_reference, customer_risk_category=None):
-        if customer_reference in self.vip_clients:
+    def get_customer_tag(self, customer_reference, vip_clients, newreg_clients, customer_risk_category=None):
+        if customer_reference in vip_clients:
             return "vip"
-        elif customer_reference in self.newreg_clients:
+        elif customer_reference in newreg_clients:
             return "newreg"
         elif customer_risk_category == 'W':
             return "watchlist"
@@ -944,15 +944,18 @@ class BetRuns:
             try:
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
-                    conn, cursor = get_database()
-                    if conn is not None and cursor is not None:
-                        break
-                    elif attempt < retry_attempts - 1:
-                        print("Failed to connect to the database. Retrying in 2 seconds...")
-                        time.sleep(2)
-                    else:
-                        self.update_ui_with_message("Failed to connect to the database after multiple attempts.")
-                        return
+                    try:
+                        conn, cursor = get_database()
+                        if conn is not None and cursor is not None:
+                            break
+                    except Exception as e:
+                        print(f"Attempt {attempt + 1}: Failed to connect to the database. Error: {e}")
+                        if attempt < retry_attempts - 1:
+                            print("Retrying in 2 seconds...")
+                            time.sleep(2)
+                        else:
+                            self.update_ui_with_message("Failed to connect to the database after multiple attempts.")
+                            return
 
                 # Get Current date in dd/mm/yyyy format to search
                 current_date = datetime.now().strftime('%d/%m/%Y')
@@ -1359,7 +1362,6 @@ class Notebook:
         self.last_notification = None
         self.generated_string = None
 
-    
         _, _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
 
@@ -1367,13 +1369,15 @@ class Notebook:
             data = json.load(f)
         self.pipedrive_api_token = data['pipedrive_api_key']
         self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/analytics.readonly']
         credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
         self.gc = gspread.authorize(credentials)
+        self.analytics_credentials = service_account.Credentials.from_service_account_info(data, scopes=scope)
 
         self.initialize_ui()
         self.initialize_text_tags()
         self.update_notifications()
+        self.update_live_users()  # Start the periodic update
         self.run_factoring_sheet_thread()
         self.run_freebet_sheet_thread()
         self.run_popup_sheet_thread()
@@ -1406,6 +1410,12 @@ class Notebook:
         self.separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
         self.separator.pack(side="top", fill='x', pady=(5, 5))
         
+        live_users_label = ttk.Label(self.staff_feed_buttons_frame, text="Live Users", font=("Helvetica", 10, 'bold'))
+        live_users_label.pack(side="top", pady=(18, 5))
+
+        self.live_users_label = ttk.Label(self.staff_feed_buttons_frame, text="---", font=("Helvetica", 10))
+        self.live_users_label.pack(side="top", pady=(5, 5))
+
         tab_2 = ttk.Frame(self.notebook)
         self.notebook.add(tab_2, text="Reporting")
         tab_2.grid_rowconfigure(0, weight=1)
@@ -1531,6 +1541,28 @@ class Notebook:
         refresh_popup_button.pack(side="top", pady=(10, 5))
         self.last_refresh_popup_label = ttk.Label(popup_buttons_frame, text=f"Last Refresh:\n---")
         self.last_refresh_popup_label.pack(side="top", pady=(10, 5))
+
+    def get_realtime_users(self):
+        analytics = build('analyticsdata', 'v1beta', credentials=self.analytics_credentials)
+        response = analytics.properties().runRealtimeReport(
+            property='properties/409643682',
+            body={
+                'metrics': [{'name': 'activeUsers'}]
+            }
+        ).execute()
+        return response
+
+    def update_live_users(self):
+        try:
+            response = self.get_realtime_users()
+            active_users = response['rows'][0]['metricValues'][0]['value']
+            self.live_users_label.config(text=active_users)
+        except Exception as e:
+            print(f"Failed to update live users: {e}")
+            self.live_users_label.config(text="---")
+        
+        # Schedule the function to run again after 10 seconds
+        self.root.after(10000, self.update_live_users)
 
     def initialize_text_tags(self):
         self.pinned_message.tag_configure('center', justify='center')
@@ -2126,7 +2158,6 @@ class Notebook:
         finally:
             if conn:
                 conn.close()
-    
 
     def create_client_report(self, client_id):
         try:
@@ -2974,7 +3005,7 @@ class Notebook:
         except Exception as e:
             print(f"Error in popup_sheet: {e}")
 
-    
+
     def run_factoring_sheet_thread(self):
         self.factoring_thread = threading.Thread(target=self.factoring_sheet, daemon=True)
         self.factoring_thread.start()
