@@ -1477,7 +1477,6 @@ def clear_processed():
     processed_races.clear()
     processed_closures.clear()
 
-    # Clear the notifications.json file
     file_lock = fasteners.InterProcessLock('notifications.lock')
     with file_lock:
         with open('notifications.json', 'w') as f:
@@ -1487,10 +1486,7 @@ def shutdown_executor():
     executor.shutdown(wait=True)
     print("Executor shutdown complete.")
 
-# Ensure the executor is shut down on program exit
 atexit.register(shutdown_executor)
-
-
 
 ####################################################################################
 ## GENERATE TKINTER UI
@@ -1529,10 +1525,10 @@ class Application(tk.Tk):
         self.logo_label.grid(row=0, column=1) 
 
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
-        self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
+        self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')
 
         self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
-        self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')  # sticky='nsew' to fill the cell
+        self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')
 
         self.bind('<Destroy>', self.on_destroy)
     
@@ -1562,8 +1558,8 @@ class Application(tk.Tk):
         window.destroy()
         
     def log_message(self, message):
-        current_time = datetime.now().strftime('%H:%M:%S')  # Get the current time
-        self.text_area.insert(tk.END, f'{current_time}: {message}\n')  # Add the time to the message
+        current_time = datetime.now().strftime('%H:%M:%S')
+        self.text_area.insert(tk.END, f'{current_time}: {message}\n')  
         self.text_area.see(tk.END)
 
         max_lines = 1500
@@ -1628,17 +1624,12 @@ def main(app):
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
     print("Running update todays oddsmonkey selections")
 
-    check_closures_and_race_times()
     schedule.every(50).seconds.do(check_closures_and_race_times)
     print("Running check closures and race times")
 
     fetch_and_print_new_events()
     schedule.every(10).minutes.do(fetch_and_print_new_events)
     print("Running fetch and print new events")
-
-    find_stale_antepost_events()
-    schedule.every().day.at("13:00").do(find_stale_antepost_events)
-    print("Running find stale antepost events")
 
     run_activity_report_notification()
     schedule.every(1).minute.do(run_activity_report_notification)

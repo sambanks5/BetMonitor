@@ -39,3 +39,4 @@ src/issues.txt.txt
 wager_database.sqlite
 wager_database.sqlite
 wager_database.sqlite
+*.sqlite

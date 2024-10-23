@@ -48,8 +48,8 @@ LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 CACHE_UPDATE_INTERVAL = 100 * 1
 
 # UNCOMMENT FOR TESTING
-NETWORK_PATH_PREFIX = ''
-DATABASE_PATH = 'wager_database.sqlite'
+# NETWORK_PATH_PREFIX = ''
+# DATABASE_PATH = 'wager_database.sqlite'
 
 user = ""
 USER_NAMES = {
@@ -1365,7 +1365,8 @@ class Notebook:
 
         with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
             data = json.load(f)
-
+        self.pipedrive_api_token = data['pipedrive_api_key']
+        self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
         self.gc = gspread.authorize(credentials)
@@ -1374,6 +1375,8 @@ class Notebook:
         self.initialize_text_tags()
         self.update_notifications()
         self.run_factoring_sheet_thread()
+        self.run_freebet_sheet_thread()
+        self.run_popup_sheet_thread()
 
     def initialize_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -1402,14 +1405,9 @@ class Notebook:
 
         self.separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
         self.separator.pack(side="top", fill='x', pady=(5, 5))
-
-        self.apply_freebet_button = ttk.Button(self.staff_feed_buttons_frame, text="Report Freebet", command=lambda: ClientWizard(self.root, default_tab="Freebet"), cursor="hand2", width=13)
-        self.apply_freebet_button.pack(side="top", pady=(5, 5))
-        self.apply_rg_popup_button = ttk.Button(self.staff_feed_buttons_frame, text="Apply Popup", command=lambda: ClientWizard(self.root, default_tab="RG Popup"), cursor="hand2", width=13)
-        self.apply_rg_popup_button.pack(side="top", pady=(5, 5))
         
         tab_2 = ttk.Frame(self.notebook)
-        self.notebook.add(tab_2, text="Reports/Screener")
+        self.notebook.add(tab_2, text="Reporting")
         tab_2.grid_rowconfigure(0, weight=1)
         tab_2.grid_rowconfigure(1, weight=1)
         tab_2.grid_columnconfigure(0, weight=3)
@@ -1433,24 +1431,24 @@ class Notebook:
         self.progress_label.pack(side="top", pady=(20, 10), padx=(5, 0))
     
         tab_3 = ttk.Frame(self.notebook)
-        self.notebook.add(tab_3, text="Factoring Diary")
+        self.notebook.add(tab_3, text="Factoring Log")
     
-        self.tree = ttk.Treeview(tab_3)
+        self.factoring_tree = ttk.Treeview(tab_3)
         columns = ["A", "B", "C", "D", "E", "F"]
         headings = ["Date", "Time", "User", "Risk", "Rating", ""]
-        self.tree["columns"] = columns
+        self.factoring_tree["columns"] = columns
         for col, heading in enumerate(headings):
-            self.tree.heading(columns[col], text=heading)
-            self.tree.column(columns[col], width=84, stretch=tk.NO)
-        self.tree.column("A", width=75, stretch=tk.NO)
-        self.tree.column("B", width=60, stretch=tk.NO)
-        self.tree.column("C", width=83, stretch=tk.NO)
-        self.tree.column("D", width=40, stretch=tk.NO)
-        self.tree.column("E", width=40, stretch=tk.NO)
-        self.tree.column("F", width=32, stretch=tk.NO)
-        self.tree.column("#0", width=10, stretch=tk.NO)
-        self.tree.heading("#0", text="", anchor="w")
-        self.tree.grid(row=0, column=0, sticky="nsew")
+            self.factoring_tree.heading(columns[col], text=heading)
+            self.factoring_tree.column(columns[col], width=84, stretch=tk.NO)
+        self.factoring_tree.column("A", width=75, stretch=tk.NO)
+        self.factoring_tree.column("B", width=60, stretch=tk.NO)
+        self.factoring_tree.column("C", width=83, stretch=tk.NO)
+        self.factoring_tree.column("D", width=40, stretch=tk.NO)
+        self.factoring_tree.column("E", width=40, stretch=tk.NO)
+        self.factoring_tree.column("F", width=32, stretch=tk.NO)
+        self.factoring_tree.column("#0", width=10, stretch=tk.NO)
+        self.factoring_tree.heading("#0", text="", anchor="w")
+        self.factoring_tree.grid(row=0, column=0, sticky="nsew")
         tab_3.grid_columnconfigure(0, weight=1)
         tab_3.grid_rowconfigure(0, weight=1)
         tab_3.grid_columnconfigure(1, weight=0) 
@@ -1472,6 +1470,67 @@ class Notebook:
         self.client_id_entry.pack(side="top", padx=(5, 5))  # Change side to "top"
         self.client_id_frame.pack(side="top", pady=(5, 10), padx=(5, 0))
         self.client_id_frame.pack_forget()  
+
+        tab_4 = ttk.Frame(self.notebook)
+        self.notebook.add(tab_4, text="Freebet Log")
+
+        self.freebet_tree = ttk.Treeview(tab_4)
+        columns = ["A", "B", "C", "E", "F"]
+        headings = ["Date", "Time", "User", "Amount", ""]
+        self.freebet_tree["columns"] = columns
+        for col, heading in enumerate(headings):
+            self.freebet_tree.heading(columns[col], text=heading)
+            self.freebet_tree.column(columns[col], width=84, stretch=tk.NO)
+        self.freebet_tree.column("A", width=75, stretch=tk.NO)
+        self.freebet_tree.column("B", width=60, stretch=tk.NO)
+        self.freebet_tree.column("C", width=83, stretch=tk.NO)
+        self.freebet_tree.column("E", width=65, stretch=tk.NO)
+        self.freebet_tree.column("F", width=32, stretch=tk.NO)
+        self.freebet_tree.column("#0", width=10, stretch=tk.NO)
+        self.freebet_tree.heading("#0", text="", anchor="w")
+        self.freebet_tree.grid(row=0, column=0, sticky="nsew")
+        tab_4.grid_columnconfigure(0, weight=1)
+        tab_4.grid_rowconfigure(0, weight=1)
+        tab_4.grid_columnconfigure(1, weight=0) 
+    
+        freebet_buttons_frame = ttk.Frame(tab_4)
+        freebet_buttons_frame.grid(row=0, column=1, sticky='ns', padx=(10, 0))
+    
+        add_freebet_button = ttk.Button(freebet_buttons_frame, text="Add", command=lambda: ClientWizard(self.root, "Freebet"), cursor="hand2")
+        add_freebet_button.pack(side="top", pady=(10, 5))
+        refresh_freebets_button = ttk.Button(freebet_buttons_frame, text="Refresh", command=self.run_freebet_sheet_thread, cursor="hand2")
+        refresh_freebets_button.pack(side="top", pady=(10, 5))
+        self.last_refresh_freebets_label = ttk.Label(freebet_buttons_frame, text=f"Last Refresh:\n---")
+        self.last_refresh_freebets_label.pack(side="top", pady=(10, 5))
+
+        tab_5 = ttk.Frame(self.notebook)
+        self.notebook.add(tab_5, text="Popup Log")
+
+        self.popup_tree = ttk.Treeview(tab_5)
+        columns = ["A", "B"]
+        headings = ["User", "Date Applied"]
+        self.popup_tree["columns"] = columns
+        for col, heading in enumerate(headings):
+            self.popup_tree.heading(columns[col], text=heading)
+            self.popup_tree.column(columns[col], width=84, stretch=tk.NO)
+        self.popup_tree.column("A", width=150, stretch=tk.NO)
+        self.popup_tree.column("B", width=150, stretch=tk.NO)
+        self.popup_tree.column("#0", width=10, stretch=tk.NO)
+        self.popup_tree.heading("#0", text="", anchor="w")
+        self.popup_tree.grid(row=0, column=0, sticky="nsew")
+        tab_5.grid_columnconfigure(0, weight=1)
+        tab_5.grid_rowconfigure(0, weight=1)
+        tab_5.grid_columnconfigure(1, weight=0)
+    
+        popup_buttons_frame = ttk.Frame(tab_5)
+        popup_buttons_frame.grid(row=0, column=1, sticky='ns', padx=(10, 0))
+    
+        add_popup_button = ttk.Button(popup_buttons_frame, text="Add", command=lambda: ClientWizard(self.root, "Popup"), cursor="hand2")
+        add_popup_button.pack(side="top", pady=(10, 5))
+        refresh_popup_button = ttk.Button(popup_buttons_frame, text="Refresh", command=self.run_popup_sheet_thread, cursor="hand2")
+        refresh_popup_button.pack(side="top", pady=(10, 5))
+        self.last_refresh_popup_label = ttk.Label(popup_buttons_frame, text=f"Last Refresh:\n---")
+        self.last_refresh_popup_label.pack(side="top", pady=(10, 5))
 
     def initialize_text_tags(self):
         self.pinned_message.tag_configure('center', justify='center')
@@ -2870,19 +2929,63 @@ class Notebook:
             return 2.0
         numerator, denominator = map(int, fractional_odds.split('-'))
         return (numerator / denominator) + 1
-
-    def run_factoring_sheet_thread(self):
-        self.factoring_thread = threading.Thread(target=self.factoring_sheet)
-        self.factoring_thread.start()
-
+    
     def factoring_sheet(self):
-        self.tree.delete(*self.tree.get_children())
-        spreadsheet = self.gc.open('Factoring Diary')
-        worksheet = spreadsheet.get_worksheet(4)
-        data = worksheet.get_all_values()
-        self.last_refresh_label.config(text=f"Last Refresh:\n{datetime.now().strftime('%H:%M:%S')}")
-        for row in data[2:]:
-            self.tree.insert("", "end", values=[row[5], row[0], row[1], row[2], row[3], row[4]])
+        try:
+            self.factoring_tree.delete(*self.factoring_tree.get_children())
+            spreadsheet = self.gc.open('Factoring Diary')
+            worksheet = spreadsheet.get_worksheet(4)
+            data = worksheet.get_all_values()
+            self.last_refresh_label.config(text=f"Last Refresh:\n{datetime.now().strftime('%H:%M:%S')}")
+            for row in data[2:][::-1]: 
+                self.factoring_tree.insert("", "end", values=[row[5], row[0], row[1], row[2], row[3], row[4]])
+        except Exception as e:
+            print(f"Error in factoring_sheet: {e}")
+    
+    def freebet_sheet(self):
+        try:
+            current_month = datetime.now().strftime('%B')
+            spreadsheet_name = 'Reporting ' + current_month
+            self.freebet_tree.delete(*self.freebet_tree.get_children())
+            spreadsheet = self.gc.open(spreadsheet_name)
+            worksheet = spreadsheet.get_worksheet(5)
+            data = worksheet.get_all_values()
+            self.last_refresh_freebets_label.config(text=f"Last Refresh:\n{datetime.now().strftime('%H:%M:%S')}")
+            for row in data[2:][::-1]:
+                if row[2]: 
+                    self.freebet_tree.insert("", "end", values=[row[1], row[3], row[4], row[5], row[10]])
+        except Exception as e:
+            print(f"Error in freebet_sheet: {e}")
+
+    def popup_sheet(self):
+        try:
+            filter_id = 65
+            custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633' 
+            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={self.pipedrive_api_token}'
+            response = requests.get(filter_url)
+            if response.status_code == 200:
+                persons = response.json().get('data', [])
+                user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
+                self.last_refresh_popup_label.config(text=f"Last Refresh:\n{datetime.now().strftime('%H:%M:%S')}")
+
+                user_data.sort(key=lambda x: x[1], reverse=True)
+                for username, compliance_date in user_data:
+                    self.popup_tree.insert('', tk.END, values=(username, compliance_date))
+        except Exception as e:
+            print(f"Error in popup_sheet: {e}")
+
+    
+    def run_factoring_sheet_thread(self):
+        self.factoring_thread = threading.Thread(target=self.factoring_sheet, daemon=True)
+        self.factoring_thread.start()
+    
+    def run_freebet_sheet_thread(self):
+        self.freebet_thread = threading.Thread(target=self.freebet_sheet, daemon=True)
+        self.freebet_thread.start()
+
+    def run_popup_sheet_thread(self):
+        self.popup_thread = threading.Thread(target=self.popup_sheet, daemon=True)
+        self.popup_thread.start()
 
 
 class Settings:
@@ -2900,7 +3003,7 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v11.2.1", font=("Helvetica", 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v11.3", font=("Helvetica", 10))
         self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
@@ -2968,10 +3071,8 @@ class Settings:
     def show_live_events(self):
         data = self.fetch_and_save_events()
         filename = os.path.join(NETWORK_PATH_PREFIX, 'events.json')
-
         if data:
             sorted_data = self.sort_events(data)
-
             live_events_window = tk.Toplevel(self.root)
             live_events_window.geometry("650x700")
             live_events_window.title("Live Events")
@@ -3034,6 +3135,18 @@ class Settings:
             update_events_label.pack(pady=5)
             not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
             not_included_events_label.pack(pady=2)
+
+            ## Run populate_tree every 5 seconds to keep the info live
+            def periodic_update():
+                data = self.fetch_and_save_events()
+                print("refreshing the events tree")
+                if data:
+                    sorted_data = self.sort_events(data)
+                    self.populate_tree(tree, sorted_data)
+                live_events_window.after(12000, periodic_update)
+            
+            periodic_update()
+
         else:
             messagebox.showerror("Error", "Failed to fetch events. Please tell Sam.")
 
@@ -3289,7 +3402,7 @@ class ClientWizard:
         self.toplevel.geometry("600x300")
         self.toplevel.iconbitmap('src/splash.ico')
         screen_width = self.toplevel.winfo_screenwidth()
-        self.toplevel.geometry(f"+{screen_width - 750}+50")
+        self.toplevel.geometry(f"+{screen_width - 1700}+700")
         self.username_entry = None
 
         with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
@@ -3307,7 +3420,6 @@ class ClientWizard:
         self.send_confirmation_email_bool.set(True) 
         self.archive_email_bool = tk.BooleanVar()
         self.archive_email_bool.set(False)
-
 
         self.initialize_ui()
 
@@ -3441,34 +3553,7 @@ class ClientWizard:
 
         progress_note = ttk.Label(right_frame, text="---", wraplength=200, anchor='center', justify='center')
         progress_note.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-    
 
-        # def fetch_usernames_and_compliance_dates():
-        #     filter_id = 65  # Your filter ID
-        #     filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={pipedrive_api_token}'
-        #     response = requests.get(filter_url)
-        #     if response.status_code == 200:
-        #         persons = response.json().get('data', [])
-        #         user_data = [(person['c1f84d7067cae06931128f22af744701a07b29c6'], person.get(custom_field_id, 'N/A')) for person in persons]
-                
-        #         # Sort the data by 'Compliance Popup' date in descending order
-        #         user_data.sort(key=lambda x: x[1], reverse=True)
-                
-        #         return user_data
-        #     else:
-        #         messagebox.showerror("Error", f"Error fetching persons from filter: {response.status_code}")
-        #         return []
-        # user_data = fetch_usernames_and_compliance_dates()
-        # tree = ttk.Treeview(right_frame, columns=('Username', 'Compliance Popup'), show='headings')
-        # tree.heading('Username', text='Username')
-        # tree.heading('Compliance Popup', text='Popup Date')
-        # tree.column('Username', width=100)  # Adjusted width
-        # tree.column('Compliance Popup', width=100)  # Adjusted width
-    
-        # for username, compliance_date in user_data:
-        #     tree.insert('', tk.END, values=(username, compliance_date))
-        # tree.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
-    
         # Add the new tab to the notebook
         self.wizard_notebook.add(frame, text="RG Popup")
     
@@ -3690,10 +3775,13 @@ class ClientWizard:
             next_row = len(worksheet.col_values(2)) + 1
     
             current_date = datetime.now().strftime("%d/%m/%Y")  
+            current_time = datetime.now().strftime("%H:%M:%S")
             worksheet.update_cell(next_row, 2, current_date)
-            worksheet.update_cell(next_row, 5, entry1.get().upper())
             worksheet.update_cell(next_row, 3, entry2.get().upper())
+            worksheet.update_cell(next_row, 4, current_time)
+            worksheet.update_cell(next_row, 5, entry1.get().upper())
             worksheet.update_cell(next_row, 6, entry3.get())
+            worksheet.update_cell(next_row, 11, user)
     
             progress_note.config(text=f"Free bet for {entry1.get().upper()} added successfully to reporting {current_month}\n", anchor='center', justify='center')
             log_notification(f"{user} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
@@ -3754,7 +3842,6 @@ class ClientWizard:
     
     def apply_closure_requests(self):
         restriction_mapping = {
-            'Account Deactivation': 'Deactivation',
             'Further Options': 'Self Exclusion'
         }
     
@@ -3836,7 +3923,7 @@ class ClientWizard:
     
                     data = load_data()
                     for req in data.get('closures', []):
-                        if req['Username'] == request['Username'] and req['Restriction'] == request['Restriction']:
+                        if req['Username'] == request['Username']:
                             req['completed'] = True
                             print(f"Marked {request['Restriction']} request for {username} as completed.")
                             break
