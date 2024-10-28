@@ -44,23 +44,35 @@ from tkinter import scrolledtext
 ####################################################################################
 ## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
 ####################################################################################
-USER_NAMES = {
-    'GB': 'George',
-    'JP': 'Jon',
-    'DF': 'Dave',
-    'SB': 'Sam',
-    'JJ': 'Joji',
-    'AE': 'Arch',
-    'EK': 'Ed',
-}
+USER_NAMES = {}
+
+def load_user_names():
+    global USER_NAMES
+    try:
+        with open('src/user_names.json') as file:
+            USER_NAMES = json.load(file)
+    except FileNotFoundError:
+        print("user_names.json file not found. Using default names.")
+        USER_NAMES = {
+            'GB': 'George B',
+            'GM': 'George M',
+            'JP': 'Jon',
+            'DF': 'Dave',
+            'SB': 'Sam',
+            'JJ': 'Joji',
+            'AE': 'Arch',
+            'EK': 'Ed',
+            'VO': 'Victor',
+            'MF': 'Mark'
+        }
+
 
 with open('src/creds.json') as f:
     creds = json.load(f)
 pipedrive_api_token = creds['pipedrive_api_key']
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-LOCK_FILE_PATH = 'database.lock'  # Path for the lock file
-
+LOCK_FILE_PATH = 'database.lock'
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
 gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
@@ -285,7 +297,7 @@ def add_bet(conn, bet, app, retries=5, delay=1):
             elif bet['type'] == 'WAGER KNOCKBACK':
                 details = bet['details']
                 selections = json.dumps(details.get('Selections', []))
-                requested_stake = float(details['Total Stake'].replace('£', '').replace(',', ''))
+                requested_stake = float(details['Total Stake'].replace('£', '').replace('€', '').replace(',', ''))
                 cursor.execute('''
                     INSERT INTO database (id, time, type, customer_ref, error_message, requested_type, requested_stake, selections, date, sports)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -293,8 +305,8 @@ def add_bet(conn, bet, app, retries=5, delay=1):
             elif bet['type'] == 'BET':
                 details = bet['details']
                 selections = json.dumps(details['selections'])
-                unit_stake = float(details['unit_stake'].replace('£', '').replace(',', ''))
-                total_stake = float(details['payment'].replace('£', '').replace(',', ''))
+                unit_stake = float(details['unit_stake'].replace('£', '').replace('€', '').replace(',', ''))
+                total_stake = float(details['payment'].replace('£', '').replace('€', '').replace(',', ''))
                 cursor.execute('''
                     INSERT INTO database (id, time, type, customer_ref, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -374,7 +386,7 @@ def parse_bet_details(bet_text):
     customer_risk_pattern = r"Customer Risk Category - (\w+)?"
     time_pattern = r"Bet placed on \d{2}/\d{2}/\d{4} (\d{2}:\d{2}:\d{2})"
     selection_pattern = r"(.+?, .+?, .+?) (?:at|on) (\d+\.\d+|SP)?"
-    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: (£[\d,]+\.\d+), Payment: (£[\d,]+\.\d+)\."
+    bet_details_pattern = r"Bets (Win Only|Each Way|Forecast): (\d+ .+?)\. Unit Stake: ([£€][\d,]+\.\d+), Payment: ([£€][\d,]+\.\d+)\."    
     bet_type_pattern = r"Wagers\s*:\s*([^\n@]+)"    
     odds_pattern = r"(?:at|on)\s+(\d+\.\d+|SP)"
 
@@ -704,7 +716,7 @@ def check_closures_and_race_times():
         if closure['email_id'] in processed_closures:
             continue
         if not closure.get('completed', False):
-            log_notification(f"{closure['Restriction']} request from {closure['Username'].strip()}")
+            log_notification(f"{closure['Restriction']} request from {closure['Username'].strip()}", important=True)
             processed_closures.add(closure['email_id'])
 
     try:
@@ -730,7 +742,7 @@ def check_closures_and_race_times():
                     meeting_name = race['meetingName']
                     time = race['time']
                     races_today.append(f'{meeting_name}, {time}')
-        else:  # This condition now correctly assumes the event is for tomorrow
+        else: 
             for meeting in event['meetings']:
                 for race in meeting['events']:
                     meeting_name = race['meetingName']

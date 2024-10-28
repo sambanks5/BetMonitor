@@ -39,8 +39,8 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
-NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
+DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
 
 LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
@@ -332,6 +332,10 @@ class BetFeed:
         self.filter_frame.grid_columnconfigure(8, weight=1)
         self.filter_frame.grid_columnconfigure(9, weight=1)
 
+        self.date_entry = DateEntry(self.filter_frame, width=8, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
+        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew', columnspan=2)
+        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
+
         self.username_filter_entry = ttk.Entry(self.filter_frame, width=8)
         self.username_filter_entry.grid(row=0, column=0, pady=(0, 2), padx=4, sticky='ew')
         self.set_placeholder(self.username_filter_entry, 'Client')
@@ -374,10 +378,6 @@ class BetFeed:
 
         self.refresh_button = ttk.Button(self.filter_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
         self.refresh_button.grid(row=0, column=7, padx=2, pady=2)
-
-        self.date_entry = DateEntry(self.filter_frame, width=8, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
-        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew', columnspan=2)
-        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
 
         self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:250]", variable=self.limit_bets_var)
         self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e')
@@ -1377,7 +1377,7 @@ class Notebook:
         self.initialize_ui()
         self.initialize_text_tags()
         self.update_notifications()
-        self.update_live_users()  # Start the periodic update
+        self.start_live_users_thread()  # Start the periodic update
         self.run_factoring_sheet_thread()
         self.run_freebet_sheet_thread()
         self.run_popup_sheet_thread()
@@ -1410,7 +1410,7 @@ class Notebook:
         self.separator = ttk.Separator(self.staff_feed_buttons_frame, orient='horizontal')
         self.separator.pack(side="top", fill='x', pady=(5, 5))
         
-        live_users_label = ttk.Label(self.staff_feed_buttons_frame, text="Live Users", font=("Helvetica", 10, 'bold'))
+        live_users_label = ttk.Label(self.staff_feed_buttons_frame, text=" Active Clients", font=("Helvetica", 10, 'bold'), wraplength=150)
         live_users_label.pack(side="top", pady=(18, 5))
 
         self.live_users_label = ttk.Label(self.staff_feed_buttons_frame, text="---", font=("Helvetica", 10))
@@ -1542,27 +1542,9 @@ class Notebook:
         self.last_refresh_popup_label = ttk.Label(popup_buttons_frame, text=f"Last Refresh:\n---")
         self.last_refresh_popup_label.pack(side="top", pady=(10, 5))
 
-    def get_realtime_users(self):
-        analytics = build('analyticsdata', 'v1beta', credentials=self.analytics_credentials)
-        response = analytics.properties().runRealtimeReport(
-            property='properties/409643682',
-            body={
-                'metrics': [{'name': 'activeUsers'}]
-            }
-        ).execute()
-        return response
 
-    def update_live_users(self):
-        try:
-            response = self.get_realtime_users()
-            active_users = response['rows'][0]['metricValues'][0]['value']
-            self.live_users_label.config(text=active_users)
-        except Exception as e:
-            print(f"Failed to update live users: {e}")
-            self.live_users_label.config(text="---")
-        
-        # Schedule the function to run again after 10 seconds
-        self.root.after(10000, self.update_live_users)
+
+
 
     def initialize_text_tags(self):
         self.pinned_message.tag_configure('center', justify='center')
@@ -3005,6 +2987,47 @@ class Notebook:
         except Exception as e:
             print(f"Error in popup_sheet: {e}")
 
+    def get_realtime_users(self):
+        analytics = build('analyticsdata', 'v1beta', credentials=self.analytics_credentials)
+        response = analytics.properties().runRealtimeReport(
+            property='properties/409643682',  # Replace with your Google Analytics Property ID
+            body=
+                {
+                "metrics": [
+                    {
+                    "name": "activeUsers"
+                    }
+                ],
+                "minuteRanges": [
+                    {
+                    "startMinutesAgo": 5,
+                    "endMinutesAgo": 0
+                    }
+                ]
+                }
+        ).execute()
+        return response
+
+    def update_live_users(self):
+        print("updating live users")
+        try:
+            response = self.get_realtime_users()
+            active_users = response['rows'][0]['metricValues'][0]['value']
+            self.root.after(0, self.update_live_users_label, active_users)
+        except Exception as e:
+            print(f"Failed to update live users: {e}")
+            self.root.after(0, self.update_live_users_label, "---")
+
+    def update_live_users_label(self, active_users):
+        self.live_users_label.config(text=active_users)
+
+    def live_users_loop(self):
+        while True:
+            self.update_live_users()
+            time.sleep(20)
+
+    def start_live_users_thread(self):
+        threading.Thread(target=self.live_users_loop, daemon=True).start()
 
     def run_factoring_sheet_thread(self):
         self.factoring_thread = threading.Thread(target=self.factoring_sheet, daemon=True)
@@ -4159,16 +4182,19 @@ class BetViewerApp:
         self.root = root
 
         # Initialize Google Sheets API client
-
-        threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
         user_login()
-        self.bet_feed = BetFeed(root)
+
+        threading.Thread(target=schedule_data_updates, daemon=True).start()
+
+
         self.race_updation = RaceUpdaton(root)
         self.next3_panel = Next3Panel(root)
-        self.notebook = Notebook(root) # FACTORING IS DISABLED
+        self.notebook = Notebook(root)
+        self.bet_feed = BetFeed(root)
         self.bet_runs = BetRuns(root)
         self.settings = Settings(root)
+
 
     def initialize_ui(self):
         self.root.title("Bet Viewer")
