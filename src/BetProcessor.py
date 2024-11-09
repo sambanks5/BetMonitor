@@ -44,27 +44,37 @@ from tkinter import scrolledtext
 ####################################################################################
 ## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
 ####################################################################################
-USER_NAMES = {}
-
-def load_user_names():
-    global USER_NAMES
-    try:
-        with open('src/user_names.json') as file:
-            USER_NAMES = json.load(file)
-    except FileNotFoundError:
-        print("user_names.json file not found. Using default names.")
-        USER_NAMES = {
-            'GB': 'George B',
-            'GM': 'George M',
-            'JP': 'Jon',
-            'DF': 'Dave',
-            'SB': 'Sam',
-            'JJ': 'Joji',
-            'AE': 'Arch',
-            'EK': 'Ed',
-            'VO': 'Victor',
-            'MF': 'Mark'
-        }
+USER_NAMES = {
+    'GB': 'George B',
+    'GM': 'George M',
+    'JP': 'Jon',
+    'DF': 'Dave',
+    'SB': 'Sam',
+    'JJ': 'Joji',
+    'AE': 'Arch',
+    'EK': 'Ed',
+    'VO': 'Victor',
+    'MF': 'Mark'
+}
+# def load_user_names():
+#     global USER_NAMES
+#     try:
+#         with open('src/user_names.json') as file:
+#             USER_NAMES = json.load(file)
+#     except FileNotFoundError:
+#         print("user_names.json file not found. Using default names.")
+#         USER_NAMES = {
+#             'GB': 'George B',
+#             'GM': 'George M',
+#             'JP': 'Jon',
+#             'DF': 'Dave',
+#             'SB': 'Sam',
+#             'JJ': 'Joji',
+#             'AE': 'Arch',
+#             'EK': 'Ed',
+#             'VO': 'Victor',
+#             'MF': 'Mark'
+#         }
 
 
 with open('src/creds.json') as f:

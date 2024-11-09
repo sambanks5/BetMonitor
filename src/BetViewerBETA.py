@@ -39,19 +39,22 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
-NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
+# DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
+# NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
 
-LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
-LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
+# LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
+# LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 
 
 CACHE_UPDATE_INTERVAL = 100 * 1
 
+LOCAL_DATABASE_PATH = './src/wager_database.sqlite'  # Local cache path
+LOCK_FILE_PATH = './src/database.lock'  # Path for the lock file
+
 # UNCOMMENT FOR TESTING
-# DATABASE_PATH = 'wager_database.sqlite'
-# NETWORK_PATH_PREFIX = ''
+DATABASE_PATH = 'wager_database.sqlite'
+NETWORK_PATH_PREFIX = ''
 
 user = ""
 USER_NAMES = {
@@ -66,6 +69,7 @@ USER_NAMES = {
     'VO': 'Victor',
     'MF': 'Mark'
 }
+
 
 def get_database():
     global DATABASE_PATH, LOCAL_DATABASE_PATH, LOCK_FILE_PATH
@@ -4206,7 +4210,7 @@ class BetViewerApp:
         screenheight = self.root.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width - 10), 0)
         self.root.geometry(alignstr)
-        self.root.resizable(False, False)
+        # self.root.resizable(False, False)
         self.import_logo()
         self.setup_menu_bar()
 
