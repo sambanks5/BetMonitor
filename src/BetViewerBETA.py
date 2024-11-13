@@ -50,8 +50,8 @@ LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 CACHE_UPDATE_INTERVAL = 100 * 1
 
 # UNCOMMENT FOR TESTING
-# DATABASE_PATH = 'wager_database.sqlite'
-# NETWORK_PATH_PREFIX = ''
+DATABASE_PATH = 'wager_database.sqlite'
+NETWORK_PATH_PREFIX = ''
 
 user = ""
 USER_NAMES = {
@@ -934,13 +934,12 @@ class BetRuns:
             self.manual_refresh_bets()
         except ValueError:
             pass
-    
     def bet_runs(self, num_bets, num_run_bets):
         def fetch_and_process_bets():
             if not self.bet_runs_lock.acquire(blocking=False):
                 print("Bet runs update already in progress. Skipping this update.")
                 return
-
+    
             try:
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
@@ -956,45 +955,54 @@ class BetRuns:
                         else:
                             self.update_ui_with_message("Failed to connect to the database after multiple attempts.")
                             return
-
-                # Get Current date in dd/mm/yyyy format to search
-                current_date = datetime.now().strftime('%d/%m/%Y')
-                cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
-                database_data = cursor.fetchall()
-
-                if not database_data:
-                    self.update_ui_with_message("No bets found for the current date or database not found.")
-                    return
-
-                selection_to_bets = defaultdict(list)
-
-                for bet in database_data:
-                    bet_id = bet[0] 
-                    if ':' in bet_id:
-                        continue 
-                    selections = bet[10] 
-                    if selections:
-                        try:
-                            selections = json.loads(selections)  # Convert JSON string to dictionary
-                        except json.JSONDecodeError:
-                            continue  # Skip if JSON is invalid
-                        for selection in selections:
-                            selection_name = selection[0]
-                            selection_to_bets[selection_name].append(bet_id)
-
-                sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
-
-                self.update_ui_with_selections(sorted_selections, num_run_bets, cursor)
-            except Exception as e:
-                self.update_ui_with_message(f"An error occurred: {e}")
+    
+                retry_attempts = 2
+                for attempt in range(retry_attempts):
+                    try:
+                        # Get Current date in dd/mm/yyyy format to search
+                        current_date = datetime.now().strftime('%d/%m/%Y')
+                        cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
+                        database_data = cursor.fetchall()
+    
+                        if not database_data:
+                            self.update_ui_with_message("No bets found for the current date or database not found.")
+                            return
+    
+                        selection_to_bets = defaultdict(list)
+    
+                        for bet in database_data:
+                            bet_id = bet[0] 
+                            if ':' in bet_id:
+                                continue 
+                            selections = bet[10] 
+                            if selections:
+                                try:
+                                    selections = json.loads(selections)  # Convert JSON string to dictionary
+                                except json.JSONDecodeError:
+                                    continue  # Skip if JSON is invalid
+                                for selection in selections:
+                                    selection_name = selection[0]
+                                    selection_to_bets[selection_name].append(bet_id)
+    
+                        sorted_selections = sorted(selection_to_bets.items(), key=lambda item: len(item[1]), reverse=True)
+    
+                        self.update_ui_with_selections(sorted_selections, num_run_bets, cursor)
+                        break  # Exit the retry loop if successful
+                    except Exception as e:
+                        print(f"Attempt {attempt + 1}: An error occurred while processing bets. Error: {e}")
+                        if attempt < retry_attempts - 1:
+                            print("Retrying in 2 seconds...")
+                            time.sleep(2)
+                        else:
+                            self.update_ui_with_message(f"An error occurred after multiple attempts: {e}\nPlease try refreshing.")
+                            return
             finally:
                 if conn:
                     conn.close()
                 self.bet_runs_lock.release()
-
-        # Run the fetch_and_process_bets function in a separate thread to avoid blocking the main thread
-        threading.Thread(target=fetch_and_process_bets, daemon=True).start()
     
+        threading.Thread(target=fetch_and_process_bets, daemon=True).start()
+
     def update_ui_with_message(self, message):
         self.runs_text.config(state="normal")
         self.runs_text.delete('1.0', tk.END)
@@ -1255,6 +1263,123 @@ class RaceUpdaton:
         else:
             forward_button.config(state='normal')
 
+    def log_update(self, course, time, user, last_update_time):
+        now = datetime.now()
+        date_string = now.strftime('%d-%m-%Y')
+        time_string = now.strftime('%H:%M')
+        log_file = os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', f'update_log_{date_string}.txt')
+        score = 0.0
+    
+        try:
+            response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h,o')
+            response.raise_for_status()
+            api_data = response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching data from API: {e}")
+            messagebox.showerror("Error", f"Failed to fetch courses data from API. You will be allocated 0.1 score for this update.")
+            score = 0.1
+            api_data = None
+        except json.JSONDecodeError:
+            print("Error decoding JSON from API response.")
+            messagebox.showerror("Error", f"Failed to decode JSON from API response. You will be allocated 0.1 score for this update.")
+            score = 0.1
+            api_data = None
+    
+        try:
+            if api_data:
+                if course == 'SIS Greyhounds' or course == 'TRP Greyhounds':
+                    if time_string >= '09:00' and time_string <= '11:30':
+                        score += 0.8
+                    elif time_string >= '16:30' and time_string <= '19:30':
+                        score += 1.0
+                    else:
+                        score += 0.5
+                else:
+                    for event in api_data:
+                        for meeting in event['meetings']:
+                            if course == meeting['meetinName']:
+                                for race in meeting['events']:
+                                    if race['status'] == '':
+                                        score += 0.2
+                    if score == 0.0:
+                        messagebox.showerror("Error", f"Course {course} not found. You will be allocated 0.3 score for this update.\nPlease check the course name matches exactly to what we have on the website, and try again.")
+                        score = 0.3
+    
+            score = round(score, 2)
+            print(f"Score: {score}")
+    
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r') as f:
+                        data = f.readlines()
+                except IOError as e:
+                    print(f"Error reading log file: {e}")
+                    data = []
+            else:
+                data = []
+    
+            if last_update_time:
+                last_updated = last_update_time.time()
+                now_time = now.time()
+                time_diff = (datetime.combine(date.today(), now_time) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+                print(f"Time difference: {time_diff}")
+                if time_diff < 10:
+                    score *= 0.7
+    
+            update = f"{time} - {user} - {score}\n"
+            
+            log_notification(f"{user} updated {course} ({score})")
+    
+            course_index = None
+            for i, line in enumerate(data):
+                if line.strip() == course + ":":
+                    course_index = i
+                    break
+    
+            if course_index is not None:
+                data.insert(course_index + 1, update)
+            else:
+                data.append(f"\n{course}:\n")
+                data.append(update)
+    
+            try:
+                with open(log_file, 'w') as f:
+                    f.writelines(data)
+            except IOError as e:
+                print(f"Error writing to log file: {e}")
+    
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+
+    def update_course(self, course):
+        global user
+        if not user:
+            user_login()
+    
+        now = datetime.now()
+        time_string = now.strftime('%H:%M')
+    
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'r') as f:
+            data = json.load(f)
+    
+        last_update_time = data['courses'].get(course, None)
+        if last_update_time and last_update_time != "Not updated":
+            last_update_time = last_update_time.split(' ')[0]
+            try:
+                last_update_time = datetime.strptime(last_update_time, '%H:%M')
+            except ValueError:
+                last_update_time = None
+        else:
+            last_update_time = None
+    
+        data['courses'][course] = f"{time_string} - {user}"
+        with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
+            json.dump(data, f)
+    
+        threading.Thread(target=self.log_update, args=(course, time_string, user, last_update_time), daemon=True).start()
+        self.display_courses()
+
     def remove_course(self):
         course = simpledialog.askstring("Remove Course", "Enter the course name:")
         
@@ -1305,55 +1430,6 @@ class RaceUpdaton:
         if (self.current_page + 1) * self.courses_per_page < total_courses:
             self.current_page += 1
             self.display_courses()
-
-    def update_course(self, course):
-        global user
-        if not user:
-            user_login()
-
-        now = datetime.now()
-        time_string = now.strftime('%H:%M')
-
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'r') as f:
-            data = json.load(f)
-
-        data['courses'][course] = f"{time_string} - {user}"
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
-            json.dump(data, f)
-
-        self.log_update(course, time_string, user)
-        self.display_courses()
-
-    def log_update(self, course, time, user):
-        now = datetime.now()
-        date_string = now.strftime('%d-%m-%Y')
-        log_file = os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', f'update_log_{date_string}.txt')
-
-        if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
-                data = f.readlines()
-        else:
-            data = []
-
-        update = f"{time} - {user}\n"
-
-        course_index = None
-        for i, line in enumerate(data):
-            if line.strip() == course + ":":
-                course_index = i
-                break
-
-        if course_index is not None:
-            data.insert(course_index + 1, update)
-        else:
-            data.append(f"\n{course}:\n")
-            data.append(update)
-
-        log_message = f"{user} updated {course}"
-        log_notification(log_message)
-
-        with open(log_file, 'w') as f:
-            f.writelines(data)
 
 class Notebook:
     ##Stupid class
@@ -2295,6 +2371,7 @@ class Notebook:
         course_updates = Counter()
         staff_updates = Counter()
         staff_updates_today = Counter()
+        staff_updates_count_today = Counter()  # New counter for counting updates
         factoring_updates = Counter()
         offenders = Counter()
         daily_updates = Counter()
@@ -2324,12 +2401,13 @@ class Notebook:
                         course = parts[0].replace(':', '')
                         continue
     
-                    if len(parts) == 2:
-                        time, staff_initials = parts
+                    if len(parts) == 3:
+                        time, staff_initials, score = parts
+                        score = float(score)
                         staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                        course_updates[course] += 1
-                        staff_updates[staff_name] += 1
-                        daily_updates[(staff_name, file_date)] += 1
+                        course_updates[course] += score
+                        staff_updates[staff_name] += score
+                        daily_updates[(staff_name, file_date)] += score
     
                         if file_date == today:
                             current_time = datetime.strptime(time, '%H:%M')
@@ -2342,7 +2420,8 @@ class Notebook:
                             if update_counts[course][staff_name][current_time] > 1:
                                 offenders[staff_name] += 1
     
-                            staff_updates_today[staff_name] += 1
+                            staff_updates_today[staff_name] += score
+                            staff_updates_count_today[staff_name] += 1  # Increment the count for today's updates
     
         # Filter out non-staff members from staff_updates_today and staff_updates
         staff_updates_today = Counter({staff: count for staff, count in staff_updates_today.items() if staff in USER_NAMES.values()})
@@ -2382,22 +2461,26 @@ class Notebook:
         self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
     
         employee_of_the_month, _ = staff_updates.most_common(1)[0]
-        self.report_ticket.insert(tk.END, f"\nEmployee Of The Month:\n", 'center')
+        self.report_ticket.insert(tk.END, f"Employee Of The Month:\n", 'center')
         self.report_ticket.insert(tk.END, f"{employee_of_the_month}\n", 'c')
-
+    
         factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
         self.report_ticket.insert(tk.END, f"\nAll Time Factoring Leader:\n", 'center')
         self.report_ticket.insert(tk.END, f"{factoring_employee_of_the_month}\n", 'c')
-
-        self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
+    
+        self.report_ticket.insert(tk.END, "\nToday's Staff Scores:\n", 'center')
         for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
+        for staff, count in sorted(staff_updates_count_today.items(), key=lambda item: item[1], reverse=True):  # Use the new counter
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
     
-        self.report_ticket.insert(tk.END, f"\nTotal Staff Updates Since {month_ago.strftime('%d-%m')}:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\nTotal Scores Since {month_ago.strftime('%d-%m')}:\n", 'center')
         for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
     
-        self.report_ticket.insert(tk.END, f"\nAverage Daily Updates Since {month_ago.strftime('%d-%m')}:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\nAverage Daily Score Since {month_ago.strftime('%d-%m')}:\n", 'center')
         for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
     
@@ -2405,9 +2488,9 @@ class Notebook:
         for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
     
-        self.report_ticket.insert(tk.END, "\nCourse/Event Updates:\n", 'center')
+        self.report_ticket.insert(tk.END, "\nScores Per Event:\n", 'center')
         for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
-            self.report_ticket.insert(tk.END, f"\t{course}  |  {count}\n", 'c')
+            self.report_ticket.insert(tk.END, f"\t{course}  |  {count:.2f}\n", 'c')
     
         self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
         for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
@@ -3009,7 +3092,6 @@ class Notebook:
         return response
 
     def update_live_users(self):
-        print("updating live users")
         try:
             response = self.get_realtime_users()
             active_users = response['rows'][0]['metricValues'][0]['value']
@@ -3083,7 +3165,7 @@ class Settings:
         self.password_result_label.grid(row=0, column=1, padx=(5, 5))
 
     def fetch_and_save_events(self):
-        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M,F'
+        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,K,E,b,A,Y,n,c,y,M,F'
         
         try:
             response = requests.get(url)
@@ -3147,7 +3229,7 @@ class Settings:
             tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set, selectmode="extended")
             tree.pack(fill=tk.BOTH, expand=True)
             tree_scroll.config(command=tree.yview)
-
+    
             tree["columns"] = ("eventFile", "numChildren", "eventDate", "lastUpdate", "user")
             tree.column("#0", width=200, minwidth=200)
             tree.column("eventFile", width=50, minwidth=50)
@@ -3161,9 +3243,9 @@ class Settings:
             tree.heading("eventDate", text="Event Date", anchor=tk.W)
             tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
             tree.heading("user", text="User", anchor=tk.W)
-
+    
             self.populate_tree(tree, sorted_data)
-
+    
             def on_button_click():
                 global user
                 selected_items = tree.selection()
@@ -3172,24 +3254,36 @@ class Settings:
                     event_name = item['text']
                     for event in data:
                         if event['eventName'] == event_name:
+                            markets = len(event["meetings"])
+                            original_last_update = event.get('lastUpdate', None)
+                            if original_last_update and original_last_update != '-':
+                                try:
+                                    original_last_update = datetime.strptime(original_last_update, '%d-%m-%Y %H:%M:%S')
+                                except ValueError:
+                                    original_last_update = None
+                            else:
+                                original_last_update = None
                             event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                             event['user'] = user
-                            log_notification(f"{user} updated {event_name}")
-                            self.log_update(event_name, event['lastUpdate'], user)
+                            if event['meetings'][0]['eventFile'][3:5].lower() == 'ap':
+                                antepost = True
+                            else:
+                                antepost = False
+                            threading.Thread(target=self.log_update, args=(event_name, markets, antepost, original_last_update, user), daemon=True).start()
                             break
-
+            
                 with open(filename, 'w') as f:
                     json.dump(data, f, indent=4)
-
+            
                 self.populate_tree(tree, data)
-
+    
             action_button = ttk.Button(live_events_frame, text="Update Event", command=on_button_click)
             action_button.pack(pady=10)
             update_events_label = ttk.Label(live_events_frame, text="Select an event (or multiple) and click 'Update Event' to log latest refresh.", wraplength=600)
             update_events_label.pack(pady=5)
             not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
             not_included_events_label.pack(pady=2)
-
+    
             ## Run populate_tree every 5 seconds to keep the info live
             def periodic_update():
                 data = self.fetch_and_save_events()
@@ -3197,12 +3291,80 @@ class Settings:
                 if data:
                     sorted_data = self.sort_events(data)
                     self.populate_tree(tree, sorted_data)
-                live_events_window.after(12000, periodic_update)
+                live_events_window.after(20000, periodic_update)
             
             periodic_update()
-
+    
         else:
             messagebox.showerror("Error", "Failed to fetch events. Please tell Sam.")
+
+    def log_update(self, event_name, markets, antepost, last_update_time, user):
+        if last_update_time:
+            log_time = last_update_time.strftime('%H:%M')
+        else:
+            log_time = datetime.now().strftime('%H:%M')
+        event_name = event_name.replace("-", "")
+        now = datetime.now()
+        date_string = now.strftime('%d-%m-%Y')
+        
+        big_events = ['Flat Racing Futures', 'National Hunt Futures', 'Cheltenham Festival Futures', 'International Racing Futures', 'Greyhound Futures', 'Football Futures', 'Tennis Futures', 'Golf Futures']
+    
+        log_file = os.path.join(NETWORK_PATH_PREFIX, f'logs/updatelogs/update_log_{date_string}.txt')
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r') as f:
+                    data = f.readlines()
+            except IOError as e:
+                print(f"Error reading log file: {e}")
+                data = []
+        else:
+            data = []
+    
+        # Calculate the time difference between now and the last update
+        if last_update_time:
+            time_diff = now - last_update_time
+            hours_diff = time_diff.total_seconds() / 3600
+        else:
+            hours_diff = float('inf')  # No previous update, so set a large number
+    
+        # Determine the base score
+        if antepost:
+            score = round(0.3 * markets, 2)
+            if event_name in big_events:
+                score += 3
+            elif event_name == 'MMA Futures' or event_name == 'Boxing Futures':
+                score = round(0.08 * markets, 2)
+            else:
+                score += 1
+        else:
+            score = round(0.2 * markets, 2)
+    
+        if hours_diff < 4:
+            score *= 0.4
+    
+        update = f"{log_time} - {user} - {score}\n"
+    
+        log_notification(f"{user} updated {event_name} ({score:.2f})")
+    
+        course_index = None
+        for i, line in enumerate(data):
+            if line.strip() == event_name + ":":
+                course_index = i
+                break
+    
+        if course_index is not None:
+            data.insert(course_index + 1, update)
+        else:
+            data.append(f"\n{event_name}:\n")
+            data.append(update)
+    
+        try:
+            with open(log_file, 'w') as f:
+                f.writelines(data)
+        except IOError as e:
+            print(f"Error writing to log file: {e}")
 
     def populate_tree(self, tree, data):
         # Clear existing tree items
@@ -3267,50 +3429,10 @@ class Settings:
 
     def sort_events(self, data):
         antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
-        print(len(antepost_events))
         non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
         return antepost_events + non_antepost_events
 
-    def log_update(self, course, full_time, user):
-        # Extract just the time in HH:MM format
-        log_time = datetime.strptime(full_time, '%d-%m-%Y %H:%M:%S').strftime('%H:%M')
 
-        course.replace("-", "")
-
-        print(course)
-    
-        now = datetime.now()
-        date_string = now.strftime('%d-%m-%Y')
-            
-        log_file = os.path.join(NETWORK_PATH_PREFIX, f'logs/updatelogs/update_log_{date_string}.txt')
-    
-        # Ensure the directory exists
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    
-        if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
-                data = f.readlines()
-        else:
-            data = []
-    
-        update = f"{log_time} - {user}\n"
-    
-        course_index = None
-        for i, line in enumerate(data):
-            if line.strip() == course + ":":
-                course_index = i
-                break
-    
-        if course_index is not None:
-            data.insert(course_index + 1, update)
-        else:
-            if data and not data[-1].endswith('\n'):
-                data.append('\n')
-            data.append(f"{course}:\n")
-            data.append(update)
-    
-        with open(log_file, 'w') as f:
-            f.writelines(data)
     
     def generate_random_string(self):
         random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(6)])

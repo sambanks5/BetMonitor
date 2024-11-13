@@ -742,12 +742,12 @@ def check_closures_and_race_times():
                     meeting_name = race['meetingName']
                     time = race['time']
                     races_today.append(f'{meeting_name}, {time}')
-        else: 
-            for meeting in event['meetings']:
-                for race in meeting['events']:
-                    meeting_name = race['meetingName']
-                    time = race['time']
-                    races_tomorrow.append(f'{meeting_name}, {time}')
+        # else: 
+        #     for meeting in event['meetings']:
+        #         for race in meeting['events']:
+        #             meeting_name = race['meetingName']
+        #             time = race['time']
+        #             races_tomorrow.append(f'{meeting_name}, {time}')
 
     races_today.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
     total_races_today = len(races_today)
