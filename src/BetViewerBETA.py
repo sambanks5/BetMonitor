@@ -39,22 +39,22 @@ from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-# DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
-# NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
+DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
 
-# LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
-# LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
+LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
+LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
 
 
 CACHE_UPDATE_INTERVAL = 100 * 1
 
-LOCAL_DATABASE_PATH = './src/wager_database.sqlite'  # Local cache path
-LOCK_FILE_PATH = './src/database.lock'  # Path for the lock file
+# LOCAL_DATABASE_PATH = './src/wager_database.sqlite'  # Local cache path
+# LOCK_FILE_PATH = './src/database.lock'  # Path for the lock file
 
 # UNCOMMENT FOR TESTING
-DATABASE_PATH = 'wager_database.sqlite'
-NETWORK_PATH_PREFIX = ''
+# DATABASE_PATH = 'wager_database.sqlite'
+# NETWORK_PATH_PREFIX = ''
 
 user = ""
 USER_NAMES = {
@@ -1110,7 +1110,9 @@ class RaceUpdaton:
         today = date.today()
         courses = set()
         api_data = []
-
+        dogs_api_data = []
+        others_api_data = []
+    
         try:
             response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h')
             response.raise_for_status()
@@ -1119,20 +1121,51 @@ class RaceUpdaton:
             print("Error fetching data from GB API for Courses.")
         except json.JSONDecodeError:
             print("Error decoding JSON from GB API response.")
-
+    
         if api_data:
             for event in api_data:
                 for meeting in event['meetings']:
                     courses.add(meeting['meetinName'])
-
-        courses.add("SIS Greyhounds")
-        courses.add("TRP Greyhounds")
-
+    
+        try:
+            dogs_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=,g')
+            dogs_response.raise_for_status()
+            dogs_api_data = dogs_response.json()
+        except requests.RequestException as e:
+            print("Error fetching data from GB API for Dogs.")
+        except json.JSONDecodeError:
+            print("Error decoding JSON from GB API response.")
+    
+        self.dog_courses = set()
+        if dogs_api_data:
+            for event in dogs_api_data:
+                if ' AUS ' not in event['eventName']:
+                    for meeting in event['meetings']:
+                        meeting_name = meeting['meetinName']
+                        if not meeting_name.endswith(' Dg'):
+                            meeting_name += ' Dg'
+                        self.dog_courses.add(meeting_name)
+    
+        try:
+            others_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=o')
+            others_response.raise_for_status()
+            others_api_data = others_response.json()
+        except requests.RequestException as e:
+            print("Error fetching data from GB API for International Courses.")
+        except json.JSONDecodeError:
+            print("Error decoding JSON from GB API response.")
+    
+        self.others_courses = set()
+        if others_api_data:
+            for event in others_api_data:
+                for meeting in event['meetings']:
+                    self.others_courses.add(meeting['meetinName'])
+    
         courses = list(courses)
         print("Courses:", courses)
-
+    
         update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-
+    
         try:
             with open(update_times_path, 'r') as f:
                 update_data = json.load(f)
@@ -1140,15 +1173,135 @@ class RaceUpdaton:
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
             with open(update_times_path, 'w') as f:
                 json.dump(update_data, f)
-
+    
         if update_data['date'] != today.strftime('%Y-%m-%d'):
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in courses}}
             with open(update_times_path, 'w') as f:
                 json.dump(update_data, f)
-
+    
         self.display_courses_periodic()
         return courses
-
+    
+    def add_course(self):
+        def on_select():
+            selected_course = combobox.get()
+            if selected_course:
+                with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'r') as f:
+                    data = json.load(f)
+    
+                data['courses'][selected_course] = ""
+    
+                with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
+                    json.dump(data, f)
+    
+                log_notification(f"'{selected_course}' added by {user}")
+    
+                self.display_courses()
+                top.destroy()
+    
+        top = tk.Toplevel(self.root)
+        top.title("Select Course")
+        top.geometry("300x120")
+        top.iconbitmap('src/splash.ico')
+        screen_width = top.winfo_screenwidth()
+        top.geometry(f"+{screen_width - 400}+200")
+        all_courses = sorted(self.dog_courses | self.others_courses)
+        combobox = ttk.Combobox(top, values=all_courses, state='readonly')
+        combobox.pack(fill=tk.BOTH, padx=10, pady=10)
+    
+        select_button = ttk.Button(top, text="Select", command=on_select)
+        select_button.pack(pady=10)
+    
+    def display_courses(self):
+        update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
+        
+        with open(update_times_path, 'r') as f:
+            data = json.load(f)
+    
+        courses = list(data['courses'].keys())
+        # Sort courses: Horses first, then Dogs
+        courses.sort(key=lambda x: (x.endswith(" Dg"), x))
+    
+        start = self.current_page * self.courses_per_page
+        end = start + self.courses_per_page
+        courses_page = courses[start:end]
+    
+        for widget in self.race_updation_frame.winfo_children():
+            widget.destroy()
+        
+        button_frame = ttk.Frame(self.race_updation_frame)
+        button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
+    
+        add_button = ttk.Button(button_frame, text="+", command=self.add_course, width=2, cursor="hand2")
+        add_button.pack(side='left')
+    
+        update_indicator = ttk.Label(button_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
+        update_indicator.pack(side='left', padx=2, expand=True)
+    
+        remove_button = ttk.Button(button_frame, text="-", command=self.remove_course, width=2, cursor="hand2")
+        remove_button.pack(side='right')
+    
+        for i, course in enumerate(courses_page):
+            course_button = ttk.Button(self.race_updation_frame, text=course, command=lambda course=course: self.update_course(course), width=15, cursor="hand2")
+            course_button.grid(row=i, column=0, padx=5, pady=2, sticky="w")
+    
+            if course in data['courses'] and data['courses'][course]:
+                last_updated_time = data['courses'][course].split(' ')[0]
+                last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
+            else:
+                last_updated = datetime.now().time()
+    
+            now = datetime.now().time()
+    
+            time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
+    
+            if course.endswith(" Dg"):
+                if 60 <= time_diff < 90:
+                    color = 'Orange'
+                elif time_diff >= 90:
+                    color = 'red'
+                else:
+                    color = 'black'
+            else:
+                if 25 <= time_diff < 35:
+                    color = 'Orange'
+                elif time_diff >= 35:
+                    color = 'red'
+                else:
+                    color = 'black'
+    
+            if course in data['courses'] and data['courses'][course]:
+                time_text = data['courses'][course]
+            else:
+                time_text = "Not updated"
+    
+            time_label = ttk.Label(self.race_updation_frame, text=time_text, foreground=color)
+            time_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+    
+        navigation_frame = ttk.Frame(self.race_updation_frame)
+        navigation_frame.grid(row=len(courses_page), column=1, padx=2, pady=2, sticky='ew')
+    
+        back_button = ttk.Button(navigation_frame, text="<", command=self.back, width=2, cursor="hand2")
+        back_button.grid(row=0, column=0, padx=2, pady=2)
+    
+        forward_button = ttk.Button(navigation_frame, text=">", command=self.forward, width=2, cursor="hand2")
+        forward_button.grid(row=0, column=1, padx=2, pady=2)
+    
+        other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
+        if any(self.course_needs_update(course, data) for course in other_courses):
+            update_indicator.pack()
+        else:
+            update_indicator.pack_forget()
+    
+        if self.current_page == 0:
+            back_button.config(state='disabled')
+        else:
+            back_button.config(state='normal')
+    
+        if self.current_page == len(courses) // self.courses_per_page:
+            forward_button.config(state='disabled')
+        else:
+            forward_button.config(state='normal')
 
     def reset_update_times(self):
         update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
@@ -1178,94 +1331,7 @@ class RaceUpdaton:
         else:
             return time_diff >= 25
 
-    def display_courses(self):
-        update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-        
-        with open(update_times_path, 'r') as f:
-            data = json.load(f)
 
-        courses = list(data['courses'].keys())
-        courses.sort(key=lambda x: (x=="SIS Greyhounds", x=="TRP Greyhounds"))
-        start = self.current_page * self.courses_per_page
-        end = start + self.courses_per_page
-        courses_page = courses[start:end]
-
-        for widget in self.race_updation_frame.winfo_children():
-            widget.destroy()
-        
-        button_frame = ttk.Frame(self.race_updation_frame)
-        button_frame.grid(row=len(courses_page), column=0, padx=2, sticky='ew')
-
-        add_button = ttk.Button(button_frame, text="+", command=self.add_course, width=2, cursor="hand2")
-        add_button.pack(side='left')
-
-        update_indicator = ttk.Label(button_frame, text="\u2022", foreground='red', font=("Helvetica", 24))
-        update_indicator.pack(side='left', padx=2, expand=True)
-
-        remove_button = ttk.Button(button_frame, text="-", command=self.remove_course, width=2, cursor="hand2")
-        remove_button.pack(side='right')
-
-        for i, course in enumerate(courses_page):
-            course_button = ttk.Button(self.race_updation_frame, text=course, command=lambda course=course: self.update_course(course), width=15, cursor="hand2")
-            course_button.grid(row=i, column=0, padx=5, pady=2, sticky="w")
-
-            if course in data['courses'] and data['courses'][course]:
-                last_updated_time = data['courses'][course].split(' ')[0]
-                last_updated = datetime.strptime(last_updated_time, '%H:%M').time()
-            else:
-                last_updated = datetime.now().time()
-
-            now = datetime.now().time()
-
-            time_diff = (datetime.combine(date.today(), now) - datetime.combine(date.today(), last_updated)).total_seconds() / 60
-
-            if course in ["SIS Greyhounds", "TRP Greyhounds"]:
-                if 60 <= time_diff < 90:
-                    color = 'Orange'
-                elif time_diff >= 90:
-                    color = 'red'
-                else:
-                    color = 'black'
-            else:
-                if 25 <= time_diff < 35:
-                    color = 'Orange'
-                elif time_diff >= 35:
-                    color = 'red'
-                else:
-                    color = 'black'
-
-            if course in data['courses'] and data['courses'][course]:
-                time_text = data['courses'][course]
-            else:
-                time_text = "Not updated"
-
-            time_label = ttk.Label(self.race_updation_frame, text=time_text, foreground=color)
-            time_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
-
-        navigation_frame = ttk.Frame(self.race_updation_frame)
-        navigation_frame.grid(row=len(courses_page), column=1, padx=2, pady=2, sticky='ew')
-
-        back_button = ttk.Button(navigation_frame, text="<", command=self.back, width=2, cursor="hand2")
-        back_button.grid(row=0, column=0, padx=2, pady=2)
-
-        forward_button = ttk.Button(navigation_frame, text=">", command=self.forward, width=2, cursor="hand2")
-        forward_button.grid(row=0, column=1, padx=2, pady=2)
-
-        other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
-        if any(self.course_needs_update(course, data) for course in other_courses):
-            update_indicator.pack()
-        else:
-            update_indicator.pack_forget()
-
-        if self.current_page == 0:
-            back_button.config(state='disabled')
-        else:
-            back_button.config(state='normal')
-
-        if self.current_page == len(courses) // self.courses_per_page:
-            forward_button.config(state='disabled')
-        else:
-            forward_button.config(state='normal')
 
     def log_update(self, course, time, user, last_update_time):
         now = datetime.now()
@@ -1274,8 +1340,14 @@ class RaceUpdaton:
         log_file = os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', f'update_log_{date_string}.txt')
         score = 0.0
     
+        # Remove ' Dg' suffix for dog courses when searching the API
+        search_course = course.replace(' Dg', '')
+    
         try:
-            response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h,o')
+            if course.endswith(" Dg"):
+                response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=,g')
+            else:
+                response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h,o')
             response.raise_for_status()
             api_data = response.json()
         except requests.RequestException as e:
@@ -1291,23 +1363,24 @@ class RaceUpdaton:
     
         try:
             if api_data:
-                if course == 'SIS Greyhounds' or course == 'TRP Greyhounds':
-                    if time_string >= '09:00' and time_string <= '11:30':
-                        score += 0.8
-                    elif time_string >= '16:30' and time_string <= '19:30':
-                        score += 1.0
-                    else:
-                        score += 0.5
-                else:
-                    for event in api_data:
-                        for meeting in event['meetings']:
-                            if course == meeting['meetinName']:
-                                for race in meeting['events']:
-                                    if race['status'] == '':
+                for event in api_data:
+                    for meeting in event['meetings']:
+                        if search_course in meeting['meetinName']:
+                            for race in meeting['events']:
+                                if race['status'] == '':
+                                    if course.endswith(" Dg"):
+                                        score += 0.1
+                                    else:
                                         score += 0.2
-                    if score == 0.0:
-                        messagebox.showerror("Error", f"Course {course} not found. You will be allocated 0.3 score for this update.\nPlease check the course name matches exactly to what we have on the website, and try again.")
-                        score = 0.3
+                            if score == 0.0:
+                                messagebox.showerror("Error", f"Course {course} not found. You will be allocated 0.3 base score for this update.\nPlease check the course name matches exactly to what we have on the website, and try again.")
+                                score = 0.3
+    
+            # Apply surge bonus for updates made between 1:00 PM and 3:30 PM
+            surge_start = datetime.strptime('13:00', '%H:%M').time()
+            surge_end = datetime.strptime('15:30', '%H:%M').time()
+            if surge_start <= now.time() <= surge_end:
+                score += 0.1
     
             score = round(score, 2)
             print(f"Score: {score}")
@@ -1332,7 +1405,7 @@ class RaceUpdaton:
     
             update = f"{time} - {user} - {score}\n"
             
-            log_notification(f"{user} updated {course} ({score})")
+            log_notification(f"{user} updated {course} ({score:.2f})")
     
             course_index = None
             for i, line in enumerate(data):
@@ -1354,7 +1427,6 @@ class RaceUpdaton:
     
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
-
 
     def update_course(self, course):
         global user
@@ -1404,21 +1476,6 @@ class RaceUpdaton:
                     json.dump(data, f)
 
                 log_notification(f"'{original_course}' removed by {user}")
-
-            self.display_courses()
-
-    def add_course(self):
-        course_name = simpledialog.askstring("Add Course", "Enter the course name:")
-        if course_name:
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'r') as f:
-                data = json.load(f)
-
-            data['courses'][course_name] = ""
-
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
-                json.dump(data, f)
-
-            log_notification(f"'{course_name}' added by {user}")
 
             self.display_courses()
 
@@ -2375,10 +2432,12 @@ class Notebook:
         course_updates = Counter()
         staff_updates = Counter()
         staff_updates_today = Counter()
-        staff_updates_count_today = Counter()  # New counter for counting updates
+        staff_updates_count_today = Counter()
+        staff_updates_count_month = Counter()  # New counter for total updates for the month
         factoring_updates = Counter()
         offenders = Counter()
         daily_updates = Counter()
+        individual_update_scores = []  # List to track individual update scores
         today = datetime.now().date()
         current_date = datetime.now().date()
         month_ago = current_date.replace(day=1)
@@ -2413,6 +2472,9 @@ class Notebook:
                         staff_updates[staff_name] += score
                         daily_updates[(staff_name, file_date)] += score
     
+                        # Track individual update scores
+                        individual_update_scores.append((staff_name, score))
+    
                         if file_date == today:
                             current_time = datetime.strptime(time, '%H:%M')
                             if course not in update_counts:
@@ -2426,6 +2488,9 @@ class Notebook:
     
                             staff_updates_today[staff_name] += score
                             staff_updates_count_today[staff_name] += 1  # Increment the count for today's updates
+    
+                        # Increment the count for the month's updates
+                        staff_updates_count_month[staff_name] += 1
     
         # Filter out non-staff members from staff_updates_today and staff_updates
         staff_updates_today = Counter({staff: count for staff, count in staff_updates_today.items() if staff in USER_NAMES.values()})
@@ -2456,6 +2521,25 @@ class Notebook:
                 staff_name = USER_NAMES.get(staff_initials, staff_initials)
                 factoring_updates[staff_name] += 1
     
+        # Calculate the ratio of score to updates for each user for the current month
+        score_to_updates_ratio = {}
+        for staff in staff_updates_count_month:
+            if staff_updates_count_month[staff] > 0:
+                ratio = staff_updates[staff] / staff_updates_count_month[staff]
+                score_to_updates_ratio[staff] = ratio
+    
+        # Find the user with the lowest ratio (busiest idiot)
+        busiest_idiot = min(score_to_updates_ratio, key=score_to_updates_ratio.get)
+    
+        # Find the user with the highest ratio (playing the system)
+        playing_the_system = max(score_to_updates_ratio, key=score_to_updates_ratio.get)
+    
+        # Find the user with the highest single update score
+        highest_single_update_score = max(individual_update_scores, key=lambda item: item[1])
+    
+        # Find the user with the lowest single update score
+        lowest_single_update_score = min(individual_update_scores, key=lambda item: item[1])
+    
         separator = "-" * 69
     
         self.report_ticket.config(state="normal")
@@ -2468,10 +2552,8 @@ class Notebook:
         self.report_ticket.insert(tk.END, f"Employee Of The Month:\n", 'center')
         self.report_ticket.insert(tk.END, f"{employee_of_the_month}\n", 'c')
     
-        factoring_employee_of_the_month, _ = factoring_updates.most_common(1)[0]
-        self.report_ticket.insert(tk.END, f"\nAll Time Factoring Leader:\n", 'center')
-        self.report_ticket.insert(tk.END, f"{factoring_employee_of_the_month}\n", 'c')
-    
+        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+        self.report_ticket.insert(tk.END, "Current Day", 'center')    
         self.report_ticket.insert(tk.END, "\nToday's Staff Scores:\n", 'center')
         for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
@@ -2479,29 +2561,52 @@ class Notebook:
         self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
         for staff, count in sorted(staff_updates_count_today.items(), key=lambda item: item[1], reverse=True):  # Use the new counter
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+        
+        if offenders:
+            self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
+            for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
     
-        self.report_ticket.insert(tk.END, f"\nTotal Scores Since {month_ago.strftime('%d-%m')}:\n", 'center')
+        self.report_ticket.insert(tk.END, "Current Month", 'center')    
+        self.report_ticket.insert(tk.END, f"\nScores:\n", 'center')
         for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
     
-        self.report_ticket.insert(tk.END, f"\nAverage Daily Score Since {month_ago.strftime('%d-%m')}:\n", 'center')
-        for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nAll Time Staff Factoring:\n", 'center')
-        for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
+        self.report_ticket.insert(tk.END, f"\nUpdates:\n", 'center')  # New section for total updates
+        for staff, count in sorted(staff_updates_count_month.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
     
+        self.report_ticket.insert(tk.END, f"\nAverage Daily Score:\n", 'center')
+        for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
+            self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
+        
+        self.report_ticket.insert(tk.END, "\nBusiest Idiot:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\t{busiest_idiot}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "Playing the System:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\t{playing_the_system}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "\nHighest Single Update Score:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\t{highest_single_update_score[0]}  |  {highest_single_update_score[1]:.2f}\n", 'c')
+    
+        self.report_ticket.insert(tk.END, "Lowest Single Update Score:\n", 'center')
+        self.report_ticket.insert(tk.END, f"\t{lowest_single_update_score[0]}  |  {lowest_single_update_score[1]:.2f}\n", 'c')
+
         self.report_ticket.insert(tk.END, "\nScores Per Event:\n", 'center')
         for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
             self.report_ticket.insert(tk.END, f"\t{course}  |  {count:.2f}\n", 'c')
+
+        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
     
-        self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
-        for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
+        self.report_ticket.insert(tk.END, "All Time Staff Factoring:\n", 'center')
+        for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
             self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
     
         self.progress_label.config(text=f"---")
         self.report_ticket.config(state="disabled")
+
 
     def create_rg_report(self):
 
@@ -3326,19 +3431,17 @@ class Settings:
         else:
             data = []
     
-        # Calculate the time difference between now and the last update
         if last_update_time:
             time_diff = now - last_update_time
             hours_diff = time_diff.total_seconds() / 3600
         else:
-            hours_diff = float('inf')  # No previous update, so set a large number
+            hours_diff = float('inf') 
     
-        # Determine the base score
         if antepost:
             score = round(0.3 * markets, 2)
             if event_name in big_events:
                 score += 3
-            elif event_name == 'MMA Futures' or event_name == 'Boxing Futures':
+            elif event_name == 'MMA Futures' or event_name == 'Boxing Futures' or event_name == 'Mma Futures':
                 score = round(0.08 * markets, 2)
             else:
                 score += 1

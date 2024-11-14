@@ -56,25 +56,7 @@ USER_NAMES = {
     'VO': 'Victor',
     'MF': 'Mark'
 }
-# def load_user_names():
-#     global USER_NAMES
-#     try:
-#         with open('src/user_names.json') as file:
-#             USER_NAMES = json.load(file)
-#     except FileNotFoundError:
-#         print("user_names.json file not found. Using default names.")
-#         USER_NAMES = {
-#             'GB': 'George B',
-#             'GM': 'George M',
-#             'JP': 'Jon',
-#             'DF': 'Dave',
-#             'SB': 'Sam',
-#             'JJ': 'Joji',
-#             'AE': 'Arch',
-#             'EK': 'Ed',
-#             'VO': 'Victor',
-#             'MF': 'Mark'
-#         }
+
 
 
 with open('src/creds.json') as f:
@@ -93,7 +75,6 @@ path = 'F:\\BWW\\Export'
 processed_races = set()
 processed_closures = set()
 previously_seen_events = set()
-notified_users = {}
 bet_count_500 = False
 bet_count_750 = False
 bet_count_1000 = False
@@ -576,45 +557,57 @@ def log_notification(message, important=False):
 
 def staff_report_notification():
     global USER_NAMES
-    global notified_users
 
-    # Dictionary to track notification status for each user
-    if 'notified_users' not in globals():
-        notified_users = {}
-
-    staff_updates_today = Counter()
+    staff_scores_today = Counter()
     today = datetime.now().date()
-    log_files = os.listdir('logs/updatelogs')
-    log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
+    
+    try:
+        log_files = os.listdir('logs/updatelogs')
+        log_files.sort(key=lambda file: os.path.getmtime('logs/updatelogs/' + file))
+    except Exception as e:
+        print(f"Error reading log files: {e}")
+        return
 
     # Read the log file for today
     for log_file in log_files:
-        file_date = datetime.fromtimestamp(os.path.getmtime('logs/updatelogs/' + log_file)).date()
-        if file_date == today:
-            with open('logs/updatelogs/' + log_file, 'r') as file:
-                lines = file.readlines()
+        try:
+            file_date = datetime.fromtimestamp(os.path.getmtime('logs/updatelogs/' + log_file)).date()
+            if file_date == today:
+                with open('logs/updatelogs/' + log_file, 'r') as file:
+                    lines = file.readlines()
 
-            for line in lines:
-                if line.strip() == '':
-                    continue
+                for line in lines:
+                    if line.strip() == '':
+                        continue
 
-                parts = line.strip().split(' - ')
+                    parts = line.strip().split(' - ')
 
-                if len(parts) == 2:
-                    time, staff_initials = parts
-                    staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                    staff_updates_today[staff_name] += 1
+                    if len(parts) == 3:
+                        time, staff_initials, score = parts
+                        score = float(score)
+                        staff_name = USER_NAMES.get(staff_initials, staff_initials)
+                        staff_scores_today[staff_name] += score
+        except Exception as e:
+            print(f"Error processing log file {log_file}: {e}")
+            continue
 
-    for user, count in staff_updates_today.items():
-        if user not in notified_users:
-            notified_users[user] = {'50': False, '100': False}
+    # Load personalized messages from user_messages.json
+    try:
+        with open('user_messages.json', 'r') as f:
+            user_messages = json.load(f)
+    except Exception as e:
+        print(f"Error loading user messages: {e}")
+        user_messages = {}
 
-        if count >= 100 and not notified_users[user]['100']:
-            log_notification(f"{user} has {count} updates!", True)
-            notified_users[user]['100'] = True
-        elif count >= 50 and not notified_users[user]['50']:
-            log_notification(f"{user} has {count} updates!", True)
-            notified_users[user]['50'] = True
+    # Find the user with the highest score
+    if staff_scores_today:
+        highest_scorer = max(staff_scores_today, key=staff_scores_today.get)
+        highest_score = staff_scores_today[highest_scorer]
+        message = user_messages.get(highest_scorer, "What a legend!")
+        try:
+            log_notification(f"{message} {highest_scorer} leading with {highest_score:.2f} score.", True)
+        except Exception as e:
+            print(f"Error sending notification for {highest_scorer}: {e}")
 
 def activity_report_notification():
     conn = load_database()
@@ -641,8 +634,6 @@ def activity_report_notification():
             globals()[data['flag']] = True
 
     conn.close()
-
-
 
 
 
@@ -1484,15 +1475,14 @@ def run_get_deposit_data(app):
     last_run_time = current_time
     executor.submit(get_deposits, app)
 
-def run_staff_report_notification():
+def run_staff_report_notification(event=None):
     executor.submit(staff_report_notification)
 
 def run_activity_report_notification():
     executor.submit(activity_report_notification)
 
 def clear_processed():
-    global processed_races, processed_closures, bet_count_1000, bet_count_500, knockback_count_250, notified_users
-    notified_users.clear()
+    global processed_races, processed_closures, bet_count_1000, bet_count_500, knockback_count_250
     bet_count_500 = False
     bet_count_1000 = False
     knockback_count_250 = False
@@ -1546,6 +1536,9 @@ class Application(tk.Tk):
         self.logo_label = ttk.Label(self, image=self.logo)
         self.logo_label.grid(row=0, column=1) 
 
+        # Bind the logo to the run_staff_report_notification function
+        self.logo_label.bind('<Button-1>', self.run_staff_report_notification)
+
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')
 
@@ -1553,6 +1546,11 @@ class Application(tk.Tk):
         self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')
 
         self.bind('<Destroy>', self.on_destroy)
+
+    def run_staff_report_notification(self, event):
+        # Your logic for running the staff report notification
+        print("Logo clicked! Running staff report notification...")
+        executor.submit(staff_report_notification)
     
     def set_bet_path(self):
         global path
@@ -1635,30 +1633,24 @@ def main(app):
 
     run_get_data(app)
     schedule.every(2).minutes.do(run_get_data, app)
-    print("Running get data")
 
     run_get_deposit_data(app)
     schedule.every(10).minutes.do(run_get_deposit_data, app)
     schedule.every().day.at("23:57").do(run_get_deposit_data, app)
-    print("Running get deposit data")
 
     run_update_todays_oddsmonkey_selections()
     schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
-    print("Running update todays oddsmonkey selections")
 
     schedule.every(50).seconds.do(check_closures_and_race_times)
-    print("Running check closures and race times")
 
     fetch_and_print_new_events()
     schedule.every(10).minutes.do(fetch_and_print_new_events)
-    print("Running fetch and print new events")
 
     run_activity_report_notification()
     schedule.every(1).minute.do(run_activity_report_notification)
-    print("Running activity report notification")
 
-    schedule.every(1).minute.do(run_staff_report_notification)
-    print("Running staff report notification")
+    run_staff_report_notification()
+    schedule.every(2).hours.do(run_staff_report_notification)
 
     schedule.every().day.at("17:00").do(log_deposit_summary)
     schedule.every().day.at("00:05").do(clear_processed)
