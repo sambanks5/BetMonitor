@@ -21,7 +21,6 @@ import gspread
 import requests
 import base64
 import datetime
-import atexit
 import tkinter as tk
 from tkinter import ttk, filedialog, Label, Toplevel
 from PIL import ImageTk, Image
@@ -29,9 +28,11 @@ from datetime import datetime, timedelta, date
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from oauth2client.service_account import ServiceAccountCredentials
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
+import google.auth.exceptions
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -57,19 +58,8 @@ USER_NAMES = {
     'MF': 'Mark'
 }
 
-
-
-with open('src/creds.json') as f:
-    creds = json.load(f)
-pipedrive_api_token = creds['pipedrive_api_key']
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 LOCK_FILE_PATH = 'database.lock'
-credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
-gc = gspread.authorize(credentials)
 last_processed_time = datetime.now()
-last_run_time = None
-file_lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=5)
 path = 'F:\\BWW\\Export'
 processed_races = set()
@@ -90,10 +80,6 @@ def set_bet_folder_path():
     if new_folder_path:
         path = new_folder_path
 
-
-####################################################################################
-## SET BET DATABASE OR GENERATE A NEW BET DATABASE FOR THE DAY
-####################################################################################
 def load_database():
     print("\nLoading database")
     conn = sqlite3.connect('wager_database.sqlite')
@@ -366,11 +352,6 @@ def add_sport_to_selections(selections):
         sports.add(sport)
     return list(sports)
 
-
-
-####################################################################################
-## EXTRACT DATA POINTS FROM BET TEXT
-####################################################################################
 def parse_bet_details(bet_text):
     bet_number_pattern = r"Wager Number - (\d+)"
     customer_ref_pattern = r"Customer Reference - (\w+)"
@@ -430,11 +411,6 @@ def parse_bet_details(bet_text):
     else:
         return None, None, None, None, None, None, None, None, None
 
-
-
-####################################################################################
-## EXTRACT DATA POINTS FROM KNOCKBACK TEXT
-####################################################################################
 def parse_wageralert_details(content):
     customer_ref_pattern = r'Customer Ref: (\w+)'
     knockback_id_pattern = r'Knockback Details: (\d+)'
@@ -503,11 +479,6 @@ def extract_details(content, pattern):
             selections.append(selection)
     return selections
 
-
-
-####################################################################################
-## EXTRACT DATA POINTS FROM SMS REQUEST TEXT 
-####################################################################################
 def parse_sms_details(bet_text):
     bet_text = bet_text.encode("ascii", "ignore").decode()
 
@@ -553,7 +524,6 @@ def log_notification(message, important=False):
     with file_lock:
         with open('notifications.json', 'w') as f:
             json.dump(notifications, f, indent=4)
-
 
 def staff_report_notification():
     global USER_NAMES
@@ -635,63 +605,8 @@ def activity_report_notification():
 
     conn.close()
 
-
-
-
-####################################################################################
-## GET VIP CLIENTS & DAILY REPORTING FROM GOOGLE SHEETS API
-####################################################################################
-def get_vip_clients(app):
-    spreadsheet = gc.open('Management Tool')
-    worksheet = spreadsheet.get_worksheet(33)
-    data = worksheet.get_all_values()
-
-    vip_clients = [row[0] for row in data if row[0]]
-    
-    return vip_clients
-
-def get_reporting_data(app):
-    current_month = datetime.now().strftime('%B')
-
-    spreadsheet_name = 'Reporting ' + current_month
-    spreadsheet = gc.open(spreadsheet_name)
-
-    worksheet = spreadsheet.get_worksheet(3)
-    daily_turnover = worksheet.acell('E1').value
-    daily_profit = worksheet.acell('F1').value
-    daily_profit_percentage = worksheet.acell('G1').value
-
-    drive_service = build('drive', 'v3', credentials=credentials)
-    file_id = spreadsheet.id
-    request = drive_service.files().get(fileId=file_id, fields='modifiedTime')
-    response = request.execute()
-    last_updated_time = datetime.strptime(response['modifiedTime'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%H:%M:%S")
-
-    enhanced_place = spreadsheet.get_worksheet(7)
-    values = enhanced_place.get_all_values()
-    today = datetime.now().strftime('%d/%m/%Y')  # adjust the date format as needed
-
-    enhanced_places = [f'{row[3].title()}, {row[2]}' for row in values if row[1] == today]
-
-    return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, enhanced_places
-
-
-
-####################################################################################
-## GET NEW REGISTRATIONS FROM PIPEDRIVE API
-####################################################################################
-def get_new_registrations(app):
-    response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={pipedrive_api_token}&filter_id=60')
-
-    if response.status_code == 200:
-        data = response.json()
-
-        persons = data.get('data', [])
-        newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
-    
-    return newreg_clients
-
-
+def run_staff_report_notification():
+    executor.submit(staff_report_notification)
 
 ####################################################################################
 ## LOG NOTIFICATIONS
@@ -699,7 +614,6 @@ def get_new_registrations(app):
 def check_closures_and_race_times():
     global processed_races, processed_closures
     current_time = datetime.now().strftime('%H:%M')
-    current_date = datetime.now().date()
 
     try:
         with open('src/data.json', 'r') as f:
@@ -739,16 +653,19 @@ def check_closures_and_race_times():
         event_weekday_name = event['eventName'].split("'s")[0]
         if event_weekday_name == current_weekday_name:
             for meeting in event['meetings']:
+                meeting_name = meeting['meetinName']
                 for race in meeting['events']:
-                    meeting_name = race['meetingName']
+                    # meeting_name = race['meetinName']
                     time = race['time']
                     races_today.append(f'{meeting_name}, {time}')
-        # else: 
-        #     for meeting in event['meetings']:
-        #         for race in meeting['events']:
-        #             meeting_name = race['meetingName']
-        #             time = race['time']
-        #             races_tomorrow.append(f'{meeting_name}, {time}')
+        else: 
+            for meeting in event['meetings']:
+                meeting_name = meeting['meetinName']
+                for race in meeting['events']:
+                    # meeting_name = race['meetinName']
+                    time = race['time']
+                    races_tomorrow.append(f'{meeting_name}, {time}')
+
 
     races_today.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
     total_races_today = len(races_today)
@@ -764,7 +681,6 @@ def check_closures_and_race_times():
     
 def fetch_and_print_new_events():
     global previously_seen_events
-    print("Fetching new events...")
     url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M'
     response = requests.get(url)
     data = response.json() 
@@ -773,313 +689,18 @@ def fetch_and_print_new_events():
     current_events = set(event['eventName'] for event in data)
 
     if not previously_seen_events:
-        print("yep")
         previously_seen_events = current_events
     else:
         new_events = current_events - previously_seen_events
-        print(len(new_events))
-
         for event in new_events:
             log_notification(f"New event live: {event}", True)
 
         previously_seen_events.update(new_events)
 
-    print(len(current_events))
-
-def find_stale_antepost_events():
-    with open('events.json', 'r') as f:
-        data = json.load(f)
-
-    current_date = datetime.now()
-    stale_antepost_events = []
-    stale_events = []
-
-    for event in data:
-        event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
-        last_update_str = event.get("lastUpdate", "-")
-        
-        if len(event_file) > 5 and event_file[3:5].lower() == 'ap':
-            try:
-                last_update_date = datetime.strptime(last_update_str, '%d-%m-%Y %H:%M:%S')
-            except ValueError:
-                continue
-            
-            if current_date - last_update_date > timedelta(weeks=1):
-                stale_antepost_events.append(event["eventName"])
-                
-        elif len(event_file) > 5:
-            try:
-                last_update_date = datetime.strptime(last_update_str, '%d-%m-%Y %H:%M:%S')
-            except ValueError:
-                continue
-            
-            if current_date - last_update_date > timedelta(days=1):
-                stale_events.append(event["eventName"])
-
-    if stale_antepost_events:
-        events_str = ', '.join(stale_antepost_events)
-        log_notification(f"{events_str} may need updating", True)
-    if stale_events:
-        events_str = ', '.join(stale_events)
-        log_notification(f"{events_str} may need updating", True)
-
-
-####################################################################################
-## GET ODDSMONKEY EMAILS FROM GMAIL API, EXTRACT SELECTIONS
-####################################################################################
-def get_oddsmonkey_selections(app, num_messages=None, query=''):
-    creds = None
-
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json')
-    if not creds or not creds.valid:
-        try:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
-                creds = flow.run_local_server(port=0)
-        except RefreshError:
-            print("The access token has expired or been revoked. Please re-authorize the app.")
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
-            creds = flow.run_local_server(port=0)
-
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    # Call the Gmail API
-    service = build('gmail', 'v1', credentials=creds)
-
-    results = service.users().labels().list(userId='me').execute()
-    labels = results.get('labels', [])
-    oddsmonkey_label_id = None
-    for label in labels:
-        if label['name'] == 'ODDSMONKEY':
-            oddsmonkey_label_id = label['id']
-            break
-
-    if oddsmonkey_label_id is None:
-        print("Label 'Oddsmonkey' not found")
-        return
-    results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=query).execute()
-
-    messages = results.get('messages', [])
-    length = len(messages)
-
-    all_selections = {}
-
-    for message in messages if num_messages is None else messages[:num_messages]:
-        try:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-
-            payload = msg['payload']
-            headers = payload['headers']
-
-            for d in headers:
-                if d['name'] == 'Subject':
-                    subject = d['value']
-                if d['name'] == 'From':
-                    sender = d['value']
-
-            parts = payload.get('parts')
-            if parts is not None:
-                part = parts[0]
-                data = part['body']['data']
-            else:
-                data = payload['body']['data']
-
-            data = data.replace("-","+").replace("_","/")
-            decoded_data = base64.b64decode(data)
-
-            soup = BeautifulSoup(decoded_data , "lxml")
-            
-            td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
-
-            try:
-                selections = extract_oddsmonkey_selections(td_tags)
-                all_selections.update(selections)
-            except Exception as e:
-                app.log_message(f"An error occurred while extracting oddsmonkey data {e}")
-                print(f"An error occurred while extracting selections: {e}")
-
-        except Exception as e:
-            app.log_message(f"An error occurred while processing oddsmonkey data {e}")
-            print(e)
-
-    return all_selections
-
-def update_todays_oddsmonkey_selections():
-    with file_lock:
-        try:
-            today = date.today().strftime('%Y/%m/%d')
-            todays_selections = get_oddsmonkey_selections(app, query=f'after:{today}')
-
-            with open('src/data.json', 'r+') as f:
-                data = json.load(f)
-                data['todays_oddsmonkey_selections'] = todays_selections
-                f.seek(0)
-                json.dump(data, f, indent=4)
-                f.truncate()
-
-        except Exception as e:
-            print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
-
-def extract_oddsmonkey_selections(td_tags):
-    selections = {}
-
-    # Convert BeautifulSoup elements to strings and strip whitespace
-    td_tags = [str(td.text).strip() for td in td_tags]
-    #print(td_tags)
-
-    # Check if the length of td_tags is a multiple of 11 (since each selection has 11 lines)
-    if len(td_tags) % 11 != 0:
-        print("Unexpected number of lines in td_tags")
-        return selections
-
-    # Iterate over td_tags in steps of 11
-    for i in range(0, len(td_tags), 11):
-        event = td_tags[i+2]  # Line 3
-        selection = td_tags[i+3]  # Line 4
-        lay_odds = td_tags[i+10]  # Line 11
-
-        # Add the selection to the selections dictionary
-        selections[event] = selection, lay_odds
-
-    return selections
-
-
 
 ####################################################################################
 ## GET ACCOUNT CLOSURE REQUESTS & DEPOSITS FROM GMAIL API
 ####################################################################################
-def get_closures(app):
-    creds = None
-    closures = []
-    label_ids = {}
-
-    # Load the existing closures from the JSON file
-    with open('src/data.json', 'r') as f:
-        existing_closures = json.load(f).get('closures', [])
-
-    # Create a dictionary mapping email IDs to 'completed' status
-    completed_status = {closure['email_id']: closure.get('completed', False) for closure in existing_closures}
-
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json')
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'src/gmailcreds.json', ['https://www.googleapis.com/auth/gmail.readonly'])
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    # Call the Gmail API
-    service = build('gmail', 'v1', credentials=creds)
-
-    results = service.users().labels().list(userId='me').execute()
-    labels = results.get('labels', [])
-
-    # Find the IDs of the labels
-    for label_name in ['REPORTING/ACCOUNT DEACTIVATION', 'REPORTING/SELF EXCLUSION', 'REPORTING/TAKE A BREAK']:
-        for label in labels:
-            if label['name'] == label_name:
-                label_ids[label_name] = label['id']
-                break
-
-    for label_name, label_id in label_ids.items():
-        if label_id is None:
-            print(f"Label '{label_name}' not found")
-            continue
-
-        # Get the messages in the label
-        results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
-        messages = results.get('messages', [])
-
-        for message in messages:
-            # Get the message details
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-
-            timestamp = int(msg['internalDate']) // 1000  # Convert to seconds
-            date_time = datetime.fromtimestamp(timestamp)
-            date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
-
-            payload = msg['payload']
-            email_id = message['id']
-
-
-            # Get the message body
-            parts = payload.get('parts')
-            if parts is not None:
-                part = parts[0]
-                data = part['body']['data']
-            else:
-                # If there are no parts, get the body from the 'body' field
-                data = payload['body']['data']
-
-            data = data.replace("-","+").replace("_","/")
-            decoded_data = base64.b64decode(data)
-
-            soup = BeautifulSoup(decoded_data , "lxml")
-
-            # Extract the data from the specified tags
-            first_name_tag = soup.find('span', {'class': 'given-name'})
-            last_name_tag = soup.find('span', {'class': 'family-name'})
-            username_tag = soup.find('td', {'id': 'roField4'}).find('div')
-
-            # Find all 'tr' elements with class 'radio'
-            tr_tags = soup.find_all('tr', {'class': 'radio'})
-
-            # Initialize restriction and length
-            restriction = None
-            length = None
-
-            # Iterate over the 'tr' elements
-            for tr_tag in tr_tags:
-                # Find the 'th' and 'div' elements within the 'tr' element
-                th_tag = tr_tag.find('th')
-                div_tag = tr_tag.find('div')
-
-                # If both 'th' and 'div' elements are found
-                if th_tag and div_tag:
-                    # Get the text content of the 'th' and 'div' elements
-                    # Get the text content of the 'th' and 'div' elements
-                    th_text = th_tag.get_text().strip().replace('\n', '').replace('*', '').strip()
-                    div_text = div_tag.get_text().strip()
-
-                    # Check if the 'th' text is 'Restriction Required' or 'Further Options', and if so, set the restriction
-                    if th_text in ['Restriction Required', 'Further Options']:
-                        restriction = div_text
-
-                    # Check if the 'th' text is 'Take-A-Break Length' or 'Self-Exclusion Length', and if so, set the length
-                    elif th_text in ['Take-A-Break Length', 'Self-Exclusion Length']:
-                        length = div_text
-
-            # Get the text content of the tags
-            first_name = first_name_tag.get_text() if first_name_tag else None
-            last_name = last_name_tag.get_text() if last_name_tag else None
-            username = username_tag.get_text().upper() if username_tag else None
-
-            closure_data = {
-                'email_id': email_id,
-                'timestamp': date_time_str,
-                'Label': label_name,
-                'First name': first_name,
-                'Last name': last_name,
-                'Username': username,
-                'Restriction': restriction,
-                'Length': length,
-                'completed': completed_status.get(email_id, False),  # Preserve the 'completed' status
-            }
-            closures.append(closure_data)
-    return closures
-
 def get_deposits(app):
     creds = None
     messages_data = []
@@ -1434,49 +1055,6 @@ def parse_paypal_email(html):
 ####################################################################################
 ## WRITE API DATA TO DATA.JSON
 ####################################################################################
-def update_data_file(app):
-    with file_lock:
-        try:
-            app.log_message(" --- Updating data file --- ")
-            # Load existing data
-            with open('src/data.json', 'r') as f:
-                data = json.load(f)
-
-            # Update data
-            data['vip_clients'] = get_vip_clients(app)
-            data['new_registrations'] = get_new_registrations(app)
-            data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'], data['enhanced_places'] = get_reporting_data(app)
-            data['oddsmonkey_selections'] = get_oddsmonkey_selections(app, 5)
-            data['closures'] = get_closures(app)
-            data['deposits_summary'] = calculate_deposit_summary()
-
-            with open('src/data.json', 'w') as f:
-                json.dump(data, f, indent=4)
-            
-            app.log_message(" --- Data file updated --- ")
-
-        except Exception as e:
-            app.log_message(f"An error occurred while updating the data file: {e}")
-            log_notification(f"Processor Could not update data file.", True)
-
-def run_get_data(app):
-    executor.submit(update_data_file, app)
-
-def run_update_todays_oddsmonkey_selections():
-    executor.submit(update_todays_oddsmonkey_selections)
-
-def run_get_deposit_data(app):
-    global last_run_time
-    current_time = datetime.now()
-    if last_run_time is not None and (current_time - last_run_time).total_seconds() < 120:
-        print("Function just ran")
-        return
-    
-    last_run_time = current_time
-    executor.submit(get_deposits, app)
-
-def run_staff_report_notification(event=None):
-    executor.submit(staff_report_notification)
 
 def run_activity_report_notification():
     executor.submit(activity_report_notification)
@@ -1494,11 +1072,369 @@ def clear_processed():
         with open('notifications.json', 'w') as f:
             json.dump([], f)
 
-def shutdown_executor():
-    executor.shutdown(wait=True)
-    print("Executor shutdown complete.")
+class DataUpdater:
+    def __init__(self, app):
+        self.app = app
+        self.file_lock = threading.Lock()
+        self.data_file_path = 'src/data.json'
+        self.executor = ThreadPoolExecutor(max_workers=5)
+        self.creds = self.get_google_api_tokens()
 
-atexit.register(shutdown_executor)
+        with open('src/creds.json') as f:
+            creds = json.load(f)
+        self.pipedrive_api_token = creds['pipedrive_api_key']
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        # NO IDEA
+        self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
+        self.gc = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_dict(creds, scope))
+
+        self.run_get_data()
+        schedule.every(4).minutes.do(self.run_get_data)
+
+        scheduler_thread = threading.Thread(target=self.run_scheduler)
+        scheduler_thread.daemon = True
+        scheduler_thread.start()
+
+    def run_scheduler(self):
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
+    def run_get_data(self):
+        self.executor.submit(self.update_data_file)
+
+    def get_google_api_tokens(self):
+        creds = None
+        token_path = 'token.json'
+        SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/spreadsheets.readonly']
+        try:
+            if os.path.exists(token_path):
+                creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+                    creds.refresh(Request())
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        'src/gmailcreds.json', SCOPES)
+                    log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+                    creds = flow.run_local_server(port=0)
+                # Save the credentials for the next run
+                with open(token_path, 'w') as token:
+                    token.write(creds.to_json())
+        except google.auth.exceptions.RefreshError:
+            print("Token has been expired or revoked. Deleting the token file and re-authenticating.")
+            log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+            if os.path.exists(token_path):
+                os.remove(token_path)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'src/gmailcreds.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open(token_path, 'w') as token:
+                token.write(creds.to_json())
+
+        return creds
+
+    def log_message(self, message):
+        self.app.log_message(message)
+
+    def load_data(self):
+        with open(self.data_file_path, 'r') as f:
+            return json.load(f)
+
+    def save_data(self, data):
+        with open(self.data_file_path, 'w') as f:
+            json.dump(data, f, indent=4)
+  
+    def update_data_file(self):
+        with self.file_lock:
+            try:
+                self.log_message(" --- Updating data file --- ")
+                data = self.load_data()
+    
+                timeout = 50 
+    
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    futures = {
+                        executor.submit(self.get_vip_clients): 'vip_clients',
+                        executor.submit(self.get_new_registrations): 'new_registrations',
+                        executor.submit(self.get_reporting_data): 'reporting_data',
+                        executor.submit(self.update_todays_oddsmonkey_selections, data.get('todays_oddsmonkey_selections', {})): 'todays_oddsmonkey_selections',
+                        executor.submit(self.get_closures): 'closures'
+                    }
+    
+                    for future in concurrent.futures.as_completed(futures, timeout=timeout):
+                        func_name = futures[future]
+                        try:
+                            result = future.result()
+                            if func_name == 'vip_clients':
+                                data['vip_clients'] = result
+                            elif func_name == 'new_registrations':
+                                data['new_registrations'] = result
+                            elif func_name == 'reporting_data':
+                                data['daily_turnover'], data['daily_profit'], data['daily_profit_percentage'], data['last_updated_time'], data['enhanced_places'] = result
+                            elif func_name == 'todays_oddsmonkey_selections':
+                                data['todays_oddsmonkey_selections'] = result
+                            elif func_name == 'closures':
+                                data['closures'] = result
+                        except concurrent.futures.TimeoutError:
+                            self.log_message(f"Timeout occurred while executing {func_name}")
+                            print(f"Timeout occurred while executing {func_name}")
+                        except Exception as e:
+                            self.log_message(f"An error occurred while executing {func_name}: {e}")
+                            print(f"An error occurred while executing {func_name}: {e}")
+    
+                self.save_data(data)
+    
+                self.log_message(" --- Data file updated --- ")
+    
+            except Exception as e:
+                self.log_message(f"An error occurred while updating the data file: {e}")
+                log_notification(f"Processor Could not update data file.", True)
+
+    def get_closures(self):
+        closures = []
+        label_ids = {}
+
+        with open(self.data_file_path, 'r') as f:
+            existing_closures = json.load(f).get('closures', [])
+
+        completed_status = {closure['email_id']: closure.get('completed', False) for closure in existing_closures}
+
+        service = build('gmail', 'v1', credentials=self.creds)
+
+        results = service.users().labels().list(userId='me').execute()
+        labels = results.get('labels', [])
+
+        for label_name in ['REPORTING/ACCOUNT DEACTIVATION', 'REPORTING/SELF EXCLUSION', 'REPORTING/TAKE A BREAK']:
+            for label in labels:
+                if label['name'] == label_name:
+                    label_ids[label_name] = label['id']
+                    break
+
+        for label_name, label_id in label_ids.items():
+            if label_id is None:
+                print(f"Label '{label_name}' not found")
+                continue
+
+            results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
+            messages = results.get('messages', [])
+
+            for message in messages:
+                msg = service.users().messages().get(userId='me', id=message['id']).execute()
+
+                timestamp = int(msg['internalDate']) // 1000  
+                date_time = datetime.fromtimestamp(timestamp)
+                date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
+
+                payload = msg['payload']
+                email_id = message['id']
+
+                parts = payload.get('parts')
+                if parts is not None:
+                    part = parts[0]
+                    data = part['body']['data']
+                else:
+                    data = payload['body']['data']
+
+                data = data.replace("-","+").replace("_","/")
+                decoded_data = base64.b64decode(data)
+
+                soup = BeautifulSoup(decoded_data , "lxml")
+
+                first_name_tag = soup.find('span', {'class': 'given-name'})
+                last_name_tag = soup.find('span', {'class': 'family-name'})
+                username_tag = soup.find('td', {'id': 'roField4'}).find('div')
+
+                tr_tags = soup.find_all('tr', {'class': 'radio'})
+
+                restriction = None
+                length = None
+
+                for tr_tag in tr_tags:
+                    th_tag = tr_tag.find('th')
+                    div_tag = tr_tag.find('div')
+
+                    if th_tag and div_tag:
+                        th_text = th_tag.get_text().strip().replace('\n', '').replace('*', '').strip()
+                        div_text = div_tag.get_text().strip()
+
+                        if th_text in ['Restriction Required', 'Further Options']:
+                            restriction = div_text
+
+                        elif th_text in ['Take-A-Break Length', 'Self-Exclusion Length']:
+                            length = div_text
+
+                first_name = first_name_tag.get_text() if first_name_tag else None
+                last_name = last_name_tag.get_text() if last_name_tag else None
+                username = username_tag.get_text().upper() if username_tag else None
+
+                closure_data = {
+                    'email_id': email_id,
+                    'timestamp': date_time_str,
+                    'Label': label_name,
+                    'First name': first_name,
+                    'Last name': last_name,
+                    'Username': username,
+                    'Restriction': restriction,
+                    'Length': length,
+                    'completed': completed_status.get(email_id, False),
+                }
+                closures.append(closure_data)
+
+        return closures
+
+    def get_vip_clients(self):
+        spreadsheet = self.gc.open('Management Tool')
+        worksheet = spreadsheet.get_worksheet(33)
+        data = worksheet.get_all_values()
+
+        vip_clients = [row[0] for row in data if row[0]]
+        
+        return vip_clients
+
+    def get_new_registrations(self):
+        response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={self.pipedrive_api_token}&filter_id=60')
+
+        if response.status_code == 200:
+            data = response.json()
+
+            persons = data.get('data', [])
+            newreg_clients = [person.get('c1f84d7067cae06931128f22af744701a07b29c6', '') for person in persons]
+        
+        return newreg_clients
+
+    def get_reporting_data(self):
+        current_month = datetime.now().strftime('%B')
+        spreadsheet_name = 'Reporting ' + current_month
+        spreadsheet = self.gc.open(spreadsheet_name)
+
+        worksheet = spreadsheet.get_worksheet(3)
+        daily_turnover = worksheet.acell('E1').value
+        daily_profit = worksheet.acell('F1').value
+        daily_profit_percentage = worksheet.acell('G1').value
+
+        drive_service = build('drive', 'v3', credentials=self.credentials)
+        file_id = spreadsheet.id
+        request = drive_service.files().get(fileId=file_id, fields='modifiedTime')
+        response = request.execute()
+        last_updated_time = datetime.strptime(response['modifiedTime'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%H:%M:%S")
+
+        enhanced_place = spreadsheet.get_worksheet(7)
+        values = enhanced_place.get_all_values()
+        today = datetime.now().strftime('%d/%m/%Y')
+
+        enhanced_places = [f'{row[3].title()}, {row[2]}' for row in values if row[1] == today]
+
+        return daily_turnover, daily_profit, daily_profit_percentage, last_updated_time, enhanced_places
+
+    def get_oddsmonkey_selections(self, num_messages=None, query=''):
+        service = build('gmail', 'v1', credentials=self.creds)
+
+        results = service.users().labels().list(userId='me').execute()
+        labels = results.get('labels', [])
+        oddsmonkey_label_id = None
+        for label in labels:
+            if label['name'] == 'ODDSMONKEY':
+                oddsmonkey_label_id = label['id']
+                break
+
+        if oddsmonkey_label_id is None:
+            print("Label 'Oddsmonkey' not found")
+            return {}
+        results = service.users().messages().list(userId='me', labelIds=[oddsmonkey_label_id], q=query).execute()
+
+        messages = results.get('messages', [])
+        length = len(messages)
+
+        all_selections = {}
+
+        for message in messages if num_messages is None else messages[:num_messages]:
+            try:
+                msg = service.users().messages().get(userId='me', id=message['id']).execute()
+
+                payload = msg['payload']
+                headers = payload['headers']
+
+                for d in headers:
+                    if d['name'] == 'Subject':
+                        subject = d['value']
+                    if d['name'] == 'From':
+                        sender = d['value']
+
+                parts = payload.get('parts')
+                if parts is not None:
+                    part = parts[0]
+                    data = part['body']['data']
+                else:
+                    data = payload['body']['data']
+
+                data = data.replace("-","+").replace("_","/")
+                decoded_data = base64.b64decode(data)
+
+                soup = BeautifulSoup(decoded_data , "lxml")
+                
+                td_tags = soup.find_all('td', style="padding-left: 7px;padding-right: 7px;")
+
+                try:
+                    selections = self.extract_oddsmonkey_selections(td_tags)
+                    all_selections.update(selections)
+                except Exception as e:
+                    self.log_message(f"An error occurred while extracting oddsmonkey data {e}")
+                    print(f"An error occurred while extracting selections: {e}")
+
+            except Exception as e:
+                self.log_message(f"An error occurred while processing oddsmonkey data {e}")
+                print(e)
+
+        return all_selections
+
+    def update_todays_oddsmonkey_selections(self, existing_selections):
+        try:
+            today = date.today().strftime('%Y/%m/%d')
+            new_selections = self.get_oddsmonkey_selections(query=f'after:{today}')
+
+            # Update existing selections with new selections and latest lay odds
+            for event, (selection, lay_odds) in new_selections.items():
+                if event in existing_selections:
+                    existing_selections[event] = (selection, lay_odds)
+                else:
+                    existing_selections[event] = (selection, lay_odds)
+
+            return existing_selections
+
+        except Exception as e:
+            self.log_message(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
+            print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
+            return existing_selections
+
+    def extract_oddsmonkey_selections(self, td_tags):
+        selections = {}
+
+        # Convert BeautifulSoup elements to strings and strip whitespace
+        td_tags = [str(td.text).strip() for td in td_tags]
+
+        # Check if the length of td_tags is a multiple of 11 (since each selection has 11 lines)
+        if len(td_tags) % 11 != 0:
+            print("Unexpected number of lines in td_tags")
+            return selections
+
+        # Iterate over td_tags in steps of 11
+        for i in range(0, len(td_tags), 11):
+            event = td_tags[i+2]  # Line 3
+            selection = td_tags[i+3]  # Line 4
+            lay_odds = td_tags[i+10]  # Line 11
+
+            # Add the selection to the selections dictionary
+            selections[event] = (selection, lay_odds)
+
+        return selections
+
+    def calculate_deposit_summary(self):
+        # Implement the logic to calculate deposit summary
+        pass
+
 
 ####################################################################################
 ## GENERATE TKINTER UI
@@ -1507,7 +1443,7 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Bet Processor v4.0')
-        self.geometry('820x300')
+        self.geometry('800x300')
         
         self.iconbitmap('src/splash.ico')
         self.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
@@ -1530,25 +1466,23 @@ class Application(tk.Tk):
         self.text_area.grid(row=0, column=0, rowspan=5, sticky='nsew')
 
         image = Image.open('src/splash.ico')
-        image = image.resize((100, 100)) 
+        image = image.resize((90, 90)) 
         self.logo = ImageTk.PhotoImage(image)
 
         self.logo_label = ttk.Label(self, image=self.logo)
         self.logo_label.grid(row=0, column=1) 
 
-        # Bind the logo to the run_staff_report_notification function
         self.logo_label.bind('<Button-1>', self.run_staff_report_notification)
 
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
-        self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='nsew')
+        self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
 
         self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
-        self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='nsew')
+        self.set_path_button.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
 
         self.bind('<Destroy>', self.on_destroy)
 
     def run_staff_report_notification(self, event):
-        # Your logic for running the staff report notification
         print("Logo clicked! Running staff report notification...")
         executor.submit(staff_report_notification)
     
@@ -1596,15 +1530,13 @@ class Application(tk.Tk):
 class FileHandler(FileSystemEventHandler):
     def on_created(self, event):
         global last_processed_time
-        # Normalize the file path
         file_path = os.path.normpath(event.src_path)
         
         if not os.path.isdir(file_path):
-            max_retries = 6  # In case it takes a while to write the bet text
+            max_retries = 6  
             for attempt in range(max_retries):
                 try:
                     print("Loading database")
-                    # Check if the file is accessible
                     if os.access(file_path, os.R_OK):
                         process_file(file_path)
                         last_processed_time = datetime.now()
@@ -1613,7 +1545,7 @@ class FileHandler(FileSystemEventHandler):
                         raise PermissionError(f"Permission denied: '{file_path}'")
                 except Exception as e:
                     print(f"Attempt {attempt + 1} - An error occurred while processing the file {file_path}: {e}")
-                    time.sleep(2)  # Add a delay before retrying
+                    time.sleep(2)  
             else:
                 print(f"Failed to process the file {file_path} after {max_retries} attempts.")
         else:
@@ -1630,16 +1562,7 @@ def main(app):
     
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
-
-    run_get_data(app)
-    schedule.every(2).minutes.do(run_get_data, app)
-
-    run_get_deposit_data(app)
-    schedule.every(10).minutes.do(run_get_deposit_data, app)
-    schedule.every().day.at("23:57").do(run_get_deposit_data, app)
-
-    run_update_todays_oddsmonkey_selections()
-    schedule.every(15).minutes.do(run_update_todays_oddsmonkey_selections)
+    data_updater = DataUpdater(app)
 
     schedule.every(50).seconds.do(check_closures_and_race_times)
 
@@ -1656,7 +1579,6 @@ def main(app):
     schedule.every().day.at("00:05").do(clear_processed)
 
     while not app.stop_main_loop:
-        # Run pending tasks
         schedule.run_pending()
 
         if not os.path.exists(path):
@@ -1666,7 +1588,6 @@ def main(app):
                 continue  
 
         if not observer_started or datetime.now() - last_processed_time > timedelta(minutes=3):
-            print("Attempting to start observer...")
             if observer_started:
                 observer.stop()
                 observer.join()
@@ -1689,7 +1610,6 @@ def main(app):
     if observer is not None:
         observer.stop()
         log_notification("Processor Stopped")
-        print("OBSERVER STOPPED!")  
         observer.join()
 
 if __name__ == "__main__":
