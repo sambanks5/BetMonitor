@@ -92,6 +92,7 @@ def get_database():
         conn.execute('PRAGMA journal_mode=WAL;')
         cursor = conn.cursor()
         return conn, cursor
+    
     except Exception as e:
         print(f"Error accessing the database: {e}")
         return None, None
@@ -292,8 +293,8 @@ class BetFeed:
         self.root = root
         self.current_filters = {'username': None, 'unit_stake': None, 'risk_category': None, 'sport': None, 'selection': None, 'type': None}
         self.feed_lock = threading.Lock()
-        self.last_update_time = None  # Store the last update time
-        self.previous_selected_date = None  # Initialize the previous selected date
+        self.last_update_time = None
+        self.previous_selected_date = None 
         self.initialize_ui()
         self.initialize_text_tags()
         self.start_feed_update()
@@ -379,7 +380,7 @@ class BetFeed:
         self.refresh_button = ttk.Button(self.filter_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
         self.refresh_button.grid(row=0, column=7, padx=2, pady=2)
 
-        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:250]", variable=self.limit_bets_var)
+        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:200]", variable=self.limit_bets_var)
         self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e')
 
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
@@ -404,11 +405,9 @@ class BetFeed:
             if not self.feed_lock.acquire(blocking=False):
                 print("Feed update already in progress. Skipping this update.")
                 return
-    
             try:
                 print("Refreshing feed...")
                 vip_clients, newreg_clients, todays_oddsmonkey_selections, reporting_data = access_data()
-                
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
                     conn, cursor = get_database()
@@ -425,15 +424,12 @@ class BetFeed:
                         return
     
                 selected_date = self.date_entry.get_date().strftime('%d/%m/%Y')
-    
-                # Reset last_update_time if the selected date has changed
                 if self.previous_selected_date != selected_date:
                     self.last_update_time = None
                     self.previous_selected_date = selected_date
-    
+
                 self.update_activity_frame(reporting_data, cursor, selected_date)
-    
-                # Check for new bets since the last update
+
                 filters_active = any([
                     self.current_filters['username'],
                     self.current_filters['unit_stake'],
@@ -447,7 +443,6 @@ class BetFeed:
                     cursor.execute("SELECT MAX(time) FROM database WHERE date = ?", (selected_date,))
                     latest_time = cursor.fetchone()[0]
                     if latest_time <= self.last_update_time:
-                        print("No new bets since the last update. Skipping this update.")
                         return
     
                 username = self.current_filters['username']
@@ -456,7 +451,7 @@ class BetFeed:
                 sport = self.current_filters['sport']
                 selection_search_term = self.current_filters['selection']
                 type_filter = self.current_filters['type']
-                # Mapping for sports filter
+
                 sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
                 sport_value = sport_mapping.get(sport)
     
@@ -489,27 +484,22 @@ class BetFeed:
                     query += " AND type = ?"
                     params.append(type_value)
     
-                # Order by timestamp in descending order
                 query += " ORDER BY time DESC"
     
                 cursor.execute(query, params)
                 filtered_bets = cursor.fetchall()
-    
-                # Close the connection immediately after fetching the results
                 conn.close()
     
                 self.feed_text.config(state="normal")
                 self.feed_text.delete('1.0', tk.END)
-    
                 separator = '-------------------------------------------------------------------------------------------------\n'
                 column_names = [desc[0] for desc in cursor.description]
     
                 if not filtered_bets:
                     self.feed_text.insert('end', "No bets found with the current filters or date.", 'center')
                 else:
-                    # Check the state of the checkbox to limit the number of bets displayed
                     if self.limit_bets_var.get():
-                        filtered_bets = filtered_bets[:250]
+                        filtered_bets = filtered_bets[:200]
     
                     text_to_insert = []
                     tags_to_apply = []
@@ -517,12 +507,10 @@ class BetFeed:
                     for bet in filtered_bets:
                         bet_dict = dict(zip(column_names, bet))
     
-                        # Measure time taken to convert JSON strings to dictionaries
                         if bet_dict['type'] != 'SMS WAGER' and bet_dict['selections'] is not None:
                             bet_dict['selections'] = json.loads(bet_dict['selections'])  # Convert JSON string to dictionary
     
-                        # Measure time taken to call self.display_bet
-                        text_segments = self.format_bet_text(bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients)
+                        text_segments = self.format_bet_text(bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients, reporting_data)
     
                         for text, tag in text_segments:
                             start_idx = sum(len(segment) for segment in text_to_insert)
@@ -531,16 +519,13 @@ class BetFeed:
                             if tag:
                                 tags_to_apply.append((tag, start_idx, end_idx))
     
-                        # Add separator with its own tag
                         sep_start_idx = sum(len(segment) for segment in text_to_insert)
                         text_to_insert.append(separator)
                         sep_end_idx = sep_start_idx + len(separator)
                         tags_to_apply.append(("bold", sep_start_idx, sep_end_idx))
     
-                    # Measure time taken to insert all text at once
                     self.feed_text.insert('end', ''.join(text_to_insert))
     
-                    # Optimize tag application by combining adjacent ranges with the same tag
                     optimized_tags = []
                     if tags_to_apply:
                         current_tag, current_start, current_end = tags_to_apply[0]
@@ -552,22 +537,18 @@ class BetFeed:
                                 current_tag, current_start, current_end = tag, start, end
                         optimized_tags.append((current_tag, current_start, current_end))
     
-                    # Apply tags
                     for tag, start_idx, end_idx in optimized_tags:
                         start_idx = f"1.0 + {start_idx}c"
                         end_idx = f"1.0 + {end_idx}c"
                         self.feed_text.tag_add(tag, start_idx, end_idx)
     
-    
                 self.feed_text.config(state="disabled")
     
-                # Update the last update time
                 if filtered_bets:
                     self.last_update_time = max(bet[2] for bet in filtered_bets)
             finally:
                 self.feed_lock.release()
     
-        # Run the fetch_and_display_bets function in a separate thread to avoid blocking the main thread
         threading.Thread(target=fetch_and_display_bets, daemon=True).start()
 
     def update_activity_frame(self, reporting_data, cursor, selected_date_str):
@@ -585,7 +566,7 @@ class BetFeed:
             # Determine if the selected date is today
             is_today = selected_date_str == today_date_str
     
-            retry_attempts = 2
+            retry_attempts = 3
             for attempt in range(retry_attempts):
                 try:
                     # Fetch counts for the current and previous day in a single query
@@ -634,24 +615,20 @@ class BetFeed:
                         print(f"Database error: {e}. No more retries.")
                         raise
     
-            # Calculate the percentage change in bets
             if previous_bets > 0:
                 percentage_change_bets = ((current_bets - previous_bets) / previous_bets) * 100
             else:
                 percentage_change_bets = 0
     
-            # Calculate the percentage change in knockbacks
             if previous_knockbacks > 0:
                 percentage_change_knockbacks = ((current_knockbacks - previous_knockbacks) / previous_knockbacks) * 100
             else:
                 percentage_change_knockbacks = 0
     
-            # Initialize sport counts
             horse_bets = 0
             dog_bets = 0
             other_bets = 0
     
-            # Map the sport counts
             sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
             for sport, count in current_sport_counts:
                 sport_list = eval(sport)
@@ -670,24 +647,20 @@ class BetFeed:
             daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
             full_name = USER_NAMES.get(user, user)
     
-            # Determine the change indicators for bets and knockbacks
             bet_change_indicator = "↑" if current_bets > previous_bets else "↓" if current_bets < previous_bets else "→"
             knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
     
-            # Conditionally include the turnover, profit, and profit percentage line
             turnover_profit_line = (
                 f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
                 if is_today else ''
             )
     
-            # Get the day names
             current_day_name = current_date.strftime('%A')
             previous_day_name = previous_date.strftime('%a')
     
             self.activity_text.config(state='normal')
             self.activity_text.delete('1.0', tk.END)
     
-            # Insert the text with tags
             self.activity_text.insert(tk.END, f"{current_day_name} {selected_date_str} {'  |  ' + full_name if user else ''}\n", 'bold')
             self.activity_text.insert(tk.END, f"Bets: {current_bets:,} ")
             self.activity_text.insert(tk.END, f" {bet_change_indicator}{percentage_change_bets:.2f}% ", 'green' if percentage_change_bets > 0 else 'red')
@@ -701,7 +674,6 @@ class BetFeed:
             self.activity_text.insert(tk.END, f"Clients: {current_total_unique_clients:,} | M: {current_unique_m_clients:,} | W: {current_unique_w_clients:,} | --: {current_unique_norisk_clients:,}\n")
             self.activity_text.insert(tk.END, f"Horses: {horse_bets:,} | Dogs: {dog_bets:,} | Other: {other_bets:,}")
     
-            # Apply the center tag to all text
             self.activity_text.tag_add('center', '1.0', 'end')
     
             self.activity_text.config(state='disabled')
@@ -719,7 +691,8 @@ class BetFeed:
             self.activity_text.insert(tk.END, "An unexpected error occurred. Please try refreshing the feed.")
             self.activity_text.config(state='disabled')
 
-    def format_bet_text(self, bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients):
+    def format_bet_text(self, bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients, reporting_data):
+        enhanced_places = reporting_data.get('enhanced_places', [])
         text_segments = []
         
         if bet_dict['type'] == 'SMS WAGER':
@@ -765,7 +738,6 @@ class BetFeed:
                 parsed_selections = details
             else:
                 parsed_selections = []
-            
             timestamp = bet_dict.get('time', '')  
             customer_reference = bet_dict.get('customer_ref', '')  
             customer_risk_category = bet_dict.get('risk_category', '')  
@@ -774,20 +746,34 @@ class BetFeed:
             bet_type = bet_dict.get('bet_type', '')
             
             selection = "\n".join([f"   - {sel[0]} at {sel[1]}" for sel in parsed_selections])
-        
             formatted_unit_stake = f"£{unit_stake:.2f}"
-            
             text = f"{formatted_unit_stake} {bet_details}, {bet_type}:\n{selection}\n"
             tag = f"customer_ref_{self.get_customer_tag(customer_reference, vip_clients, newreg_clients, customer_risk_category)}"
             text_segments.append((f"{customer_reference} ({customer_risk_category}) {timestamp} - {bet_no}", tag))
             text_segments.append((f" - {text}", "black"))
         
             for sel in parsed_selections:
-                for om_sel in todays_oddsmonkey_selections.items():
-                    if ' - ' in sel[0] and sel[0].split(' - ')[1].strip() == om_sel[1][0].strip():
-                        oddsmonkey_text = f"Oddsmonkey Selection - {sel[0]} @ {om_sel[1][1]}\n"
-                        text_segments.append((oddsmonkey_text, "newreg"))
-        
+                for event_name, om_sel in todays_oddsmonkey_selections.items():
+                    if ' - ' in sel[0]:
+                        selection_parts = sel[0].split(' - ')
+                        if len(selection_parts) > 1 and selection_parts[0].strip() == event_name.strip() and selection_parts[1].strip() == om_sel[0].strip():
+                            print(f"Comparing selections: {selection_parts[0]}, {selection_parts[1]} with {event_name}, {om_sel[0]}")
+                            if sel[1] == 'evs':
+                                sel[1] = '2.0'
+                            print(f"Comparing odds: {sel[1]} with {om_sel[1]}")
+                            if sel[1] != 'SP' and float(sel[1]) >= float(om_sel[1]):
+                                oddsmonkey_text = f"{sel[0]}  |  Lay Odds: {om_sel[1]}\n"
+                                text_segments.append((oddsmonkey_text, "oddsmonkey"))
+    
+                parts = sel[0].split(' - ')
+                if len(parts) > 1:
+                    meeting_info = parts[0].split(', ')
+                    if len(meeting_info) > 1 and ':' in meeting_info[1]:
+                        meeting_time = meeting_info[1]
+                        if f"{meeting_info[0]}, {meeting_time}" in enhanced_places:
+                            enhanced_text = f"{sel[0]}  |  Enhanced Race\n"
+                            text_segments.append((enhanced_text, "oddsmonkey"))
+    
         return text_segments
     
     def get_customer_tag(self, customer_reference, vip_clients, newreg_clients, customer_risk_category=None):
@@ -810,6 +796,7 @@ class BetFeed:
         self.feed_text.tag_configure("sms", foreground="#6CCFF6")
         self.feed_text.tag_configure("knockback", foreground="#FF006E")
         self.feed_text.tag_configure('center', justify='center')
+        self.feed_text.tag_configure("oddsmonkey", foreground="#ff00e6", justify='center')
         self.feed_text.tag_configure('bold', font=('Helvetica', 11, 'bold'), foreground='#d0cccc')
         self.feed_text.tag_configure('customer_ref_vip', font=('Helvetica', 11, 'bold'), foreground='#009685')
         self.feed_text.tag_configure('customer_ref_newreg', font=('Helvetica', 11, 'bold'), foreground='purple')
@@ -882,7 +869,8 @@ class BetRuns:
         self.root = root
         self.bet_runs_lock = threading.Lock()
         self.initialize_ui()
-        self.refresh_bets()  # Start the auto-refresh
+        self.initialize_text_tags()
+        self.refresh_bets() 
     
     def initialize_ui(self):
         self.runs_frame = ttk.LabelFrame(self.root, style='Card', text="Runs on Selections")
@@ -950,7 +938,6 @@ class BetRuns:
                     try:
                         conn, cursor = get_database()
                         if conn is not None and cursor is not None:
-                            print(f"Successfully connected to the database on attempt {attempt + 1}")
                             break
                     except Exception as e:
                         print(f"Attempt {attempt + 1}: Failed to connect to the database. Error: {e}")
@@ -968,7 +955,7 @@ class BetRuns:
                 for attempt in range(retry_attempts):
                     try:
                         current_date = datetime.now().strftime('%d/%m/%Y')
-                        cursor.execute("SELECT * FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
+                        cursor.execute("SELECT id, selections FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
                         database_data = cursor.fetchall()
 
                         if not database_data:
@@ -981,7 +968,7 @@ class BetRuns:
                             bet_id = bet[0] 
                             if ':' in bet_id:
                                 continue 
-                            selections = bet[10] 
+                            selections = bet[1] 
                             if selections:
                                 try:
                                     selections = json.loads(selections) 
@@ -1007,7 +994,6 @@ class BetRuns:
                 if conn:
                     conn.close()
                 self.bet_runs_lock.release()
-
         threading.Thread(target=fetch_and_process_bets, daemon=True).start()
 
     def update_ui_with_message(self, message):
@@ -1019,12 +1005,6 @@ class BetRuns:
     def update_ui_with_selections(self, sorted_selections, num_run_bets, cursor):
         vip_clients, newreg_clients, todays_oddsmonkey_selections, reporting_data = access_data()
         enhanced_places = reporting_data.get('enhanced_places', [])
-        
-        self.runs_text.tag_configure("risk", foreground="#ad0202")
-        self.runs_text.tag_configure("watchlist", foreground="#e35f00")
-        self.runs_text.tag_configure("vip", foreground="#009685")
-        self.runs_text.tag_configure("newreg", foreground="purple")
-        self.runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
         self.runs_text.config(state="normal")
         self.runs_text.delete('1.0', tk.END)
         
@@ -1044,10 +1024,13 @@ class BetRuns:
                     self.runs_text.insert(tk.END, f"{selection}\n")
         
                 for bet_number in bet_numbers:
-                    cursor.execute("SELECT * FROM database WHERE id = ?", (bet_number,))
+                    cursor.execute("SELECT time, customer_ref, risk_category, selections FROM database WHERE id = ?", (bet_number,))
                     bet_info = cursor.fetchone()
                     if bet_info:
-                        selections = bet_info[10]  
+                        bet_time = bet_info[0]
+                        customer_ref = bet_info[1]
+                        risk_category = bet_info[2]
+                        selections = bet_info[3]
                         if selections:
                             try:
                                 selections = json.loads(selections) 
@@ -1055,16 +1038,16 @@ class BetRuns:
                                 continue 
                             for sel in selections:
                                 if selection == sel[0]:
-                                    if bet_info[4] == 'M' or bet_info[4] == 'C':
-                                        self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "risk")
-                                    elif bet_info[4] == 'W':
-                                        self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "watchlist")
-                                    elif bet_info[3] in vip_clients:
-                                        self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "vip")
-                                    elif bet_info[3] in newreg_clients:
-                                        self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n", "newreg")
+                                    if risk_category == 'M' or risk_category == 'C':
+                                        self.runs_text.insert(tk.END, f" - {bet_time} - {bet_number} | {customer_ref} ({risk_category}) at {sel[1]}\n", "risk")
+                                    elif risk_category == 'W':
+                                        self.runs_text.insert(tk.END, f" - {bet_time} - {bet_number} | {customer_ref} ({risk_category}) at {sel[1]}\n", "watchlist")
+                                    elif customer_ref in vip_clients:
+                                        self.runs_text.insert(tk.END, f" - {bet_time} - {bet_number} | {customer_ref} ({risk_category}) at {sel[1]}\n", "vip")
+                                    elif customer_ref in newreg_clients:
+                                        self.runs_text.insert(tk.END, f" - {bet_time} - {bet_number} | {customer_ref} ({risk_category}) at {sel[1]}\n", "newreg")
                                     else:
-                                        self.runs_text.insert(tk.END, f" - {bet_info[2]} - {bet_number} | {bet_info[3]} ({bet_info[4]}) at {sel[1]}\n")
+                                        self.runs_text.insert(tk.END, f" - {bet_time} - {bet_number} | {customer_ref} ({risk_category}) at {sel[1]}\n")
         
                 meeting_time = ' '.join(selection.split(' ')[:2])
         
@@ -1072,8 +1055,15 @@ class BetRuns:
                     self.runs_text.insert(tk.END, 'Enhanced Place Race\n', "oddsmonkey")
                 
                 self.runs_text.insert(tk.END, f"\n")
-        
+
         self.runs_text.config(state=tk.DISABLED)
+
+    def initialize_text_tags(self):
+        self.runs_text.tag_configure("risk", foreground="#ad0202")
+        self.runs_text.tag_configure("watchlist", foreground="#e35f00")
+        self.runs_text.tag_configure("vip", foreground="#009685")
+        self.runs_text.tag_configure("newreg", foreground="purple")
+        self.runs_text.tag_configure("oddsmonkey", foreground="#ff00e6")
 
     def manual_refresh_bets(self):
         num_bets = self.num_recent_files
@@ -1187,7 +1177,6 @@ class RaceUpdaton:
         return self.courses
 
     def display_courses(self):
-        print("Displaying courses")
         update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
         
         with open(update_times_path, 'r') as f:
@@ -1332,44 +1321,87 @@ class RaceUpdaton:
             messagebox.showerror("Error", f"Failed to decode JSON from API response. You will be allocated 0.1 score for this update.")
             score = 0.1
             api_data = None
-            
+    
         try:
             if api_data:
+                today = now.strftime('%A')
+                print(today)
+                tomorrow = (now + timedelta(days=1)).strftime('%A')
                 morning_finished = False
-                for event in api_data:
-                    for meeting in event['meetings']:
-                        if search_course == meeting['meetinName']:
-                            all_results = all(race['status'] == 'Result' for race in meeting['events'])
-                            if all_results:
-                                morning_finished = True
-                            else:
-                                print(score)
-                                for race in meeting['events']:
-                                    if race['status'] == '':
-                                        score += 0.1 if course.endswith(" Dg") else 0.2
-                                if score == 0.0:
-                                    messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
-                                    score = 0.2
-                        if morning_finished:
-                            break
     
-                if morning_finished:
+                if course.endswith(" Dg"):
                     for event in api_data:
-                        for meeting in event['meetings']:
-                            if search_course + '1' == meeting['meetinName']:
-                                print(score)
-                                for race in meeting['events']:
-                                    if race['status'] == '':
-                                        score += 0.1 if course.endswith(" Dg") else 0.2
-                                if score == 0.0:
-                                    messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
-                                    score = 0.2
+                        if today in event['eventName']:
+                            for meeting in event['meetings']:
+                                if search_course == meeting['meetinName']:
+                                    all_results = all(race['status'] == 'Result' for race in meeting['events'])
+                                    if all_results:
+                                        morning_finished = True
+                                    else:
+                                        for race in meeting['events']:
+                                            if race['status'] == '':
+                                                score += 0.1
+                                        if score == 0.0:
+                                            messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
+                                            score = 0.2
+                                    break
+                            if morning_finished:
+                                break
+    
+                    if morning_finished:
+                        for event in api_data:
+                            if today in event['eventName']:
+                                for meeting in event['meetings']:
+                                    if search_course + '1' == meeting['meetinName']:
+                                        for race in meeting['events']:
+                                            if race['status'] == '':
+                                                score += 0.1
+                                        if score == 0.0:
+                                            messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
+                                            score = 0.2
+                                        break
+    
+                else:
+                    # Check today's races for horse racing
+                    print("Horse Race")
+                    for event in api_data:
+                        if today in event['eventName']:
+                            for meeting in event['meetings']:
+                                if search_course == meeting['meetinName']:
+                                    all_results = all(race['status'] == 'Result' for race in meeting['events'])
+                                    if all_results:
+                                        morning_finished = True
+                                    else:
+                                        for race in meeting['events']:
+                                            if race['status'] == '':
+                                                score += 0.2
+                                        if score == 0.0:
+                                            messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
+                                            score = 0.2
+                                    break
+                            if morning_finished:
+                                print("breaking")
+                                break
+    
+                    # Check tomorrow's races for horse racing if today's races are finished
+                    if morning_finished:
+                        for event in api_data:
+                            if tomorrow in event['eventName']:
+                                for meeting in event['meetings']:
+                                    if search_course == meeting['meetinName']:
+                                        for race in meeting['events']:
+                                            if race['status'] == '':
+                                                score += 0.2
+                                        if score == 0.0:
+                                            messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
+                                            score = 0.2
+                                        break
     
             surge_start = datetime.strptime('13:00', '%H:%M').time()
             surge_end = datetime.strptime('16:00', '%H:%M').time()
             if surge_start <= now.time() <= surge_end:
                 score += 0.1
-            
+    
             score = round(score, 2)
             print(f"Score: {score}")
     
@@ -3039,7 +3071,6 @@ class Notebook:
             self.progress_label.config(text=f"Finding potential W users...")
             cursor.execute("SELECT * FROM database WHERE date = ?", (current_date,))
             database_data = cursor.fetchall()
-            # print(f"Database data: {database_data}")
     
             for bet in database_data:
                 try:
@@ -3649,64 +3680,28 @@ class Next3Panel:
         _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
         self.horse_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o'
-        self.horse_url_indicator = ' ALL'
+        self.dogs_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g'
         self.initialize_ui()
         self.run_display_next_3()
     
     def run_display_next_3(self):
         threading.Thread(target=self.display_next_3, daemon=True).start()
         self.root.after(10000, self.run_display_next_3)
-
-    def toggle_horse_url(self, event=None):
-        current_time = time.time()
-
-        if current_time - self.last_click_time < 1.5:
-            print("Click too fast, ignoring.")
-            return
-        
-        self.last_click_time = current_time
-
-        if self.horse_url == 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o':
-            self.horse_url_indicator = 'UK/IR'
-            self.horse_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h'
-        else:
-            self.horse_url_indicator = ' ALL'
-            self.horse_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o'
-            
-        print("Horse URL changed to:", self.horse_url)
-        self.display_next_3()
-        self.update_horse_url_indicator()
     
     def initialize_ui(self):
         next_races_frame = ttk.Frame(self.root)
-        next_races_frame.place(x=5, y=927, width=890, height=55)
+        next_races_frame.place(x=5, y=925, width=890, height=55)
 
-        horses_frame = ttk.Frame(next_races_frame, style='Card', cursor="hand2")
-        horses_frame.place(relx=0, rely=0.05, relwidth=0.55, relheight=0.9)
-        horses_frame.bind("<Button-1>", self.toggle_horse_url)
-
-        horses_frame.columnconfigure(0, weight=1)
-        horses_frame.columnconfigure(1, weight=1)
-        horses_frame.columnconfigure(2, weight=1)
-        horses_frame.columnconfigure(3, weight=1) 
-        horses_frame.columnconfigure(4, weight=1)
-
-        horses_frame.rowconfigure(0, weight=1)
+        horses_frame = ttk.Frame(next_races_frame, style='Card')
+        horses_frame.place(relx=0, rely=0.05, relwidth=0.50, relheight=0.9)
 
         self.horse_labels = [ttk.Label(horses_frame, justify='center', font=("Helvetica", 8, "bold")) for _ in range(3)]
         for i, label in enumerate(self.horse_labels):
-            label.grid(row=0, column=i)  
-            label.bind("<Button-1>", self.toggle_horse_url) 
-
-        Separator = ttk.Separator(horses_frame, orient='vertical')
-        Separator.grid(row=0, column=3, sticky='ns')
-
-        self.horse_url_indicator_label = ttk.Label(horses_frame, text=self.horse_url_indicator, font=("Helvetica", 9, "bold"), width=3, cursor="hand2", justify='center')
-        self.horse_url_indicator_label.grid(row=0, column=4, sticky='ew', padx=1) 
-        self.horse_url_indicator_label.bind("<Button-1>", self.toggle_horse_url)
+            label.grid(row=0, column=i, padx=0, pady=5)
+            horses_frame.columnconfigure(i, weight=1)
 
         greyhounds_frame = ttk.Frame(next_races_frame, style='Card')
-        greyhounds_frame.place(relx=0.56, rely=0.05, relwidth=0.44, relheight=0.9)
+        greyhounds_frame.place(relx=0.51, rely=0.05, relwidth=0.49, relheight=0.9)
 
         self.greyhound_labels = [ttk.Label(greyhounds_frame, justify='center', font=("Helvetica", 8, "bold")) for _ in range(3)]
         for i, label in enumerate(self.greyhound_labels):
@@ -3722,9 +3717,12 @@ class Next3Panel:
             ptype = event.get('pType', '')
             minute = str(event.get('minute', '')).zfill(2) 
             time = f"{hour}:{minute}"
+            
+            if len(meeting_name) > 14:
+                meeting_name = meeting_name[:14] + "'"
+
             if not status:
                 status = '-'
-            
             if ptype == 'Board Price':
                 ptype = 'BP'
             elif ptype == 'Early Price':
@@ -3743,14 +3741,10 @@ class Next3Panel:
 
             labels[i].config(text=f"{race} ({ptype})\n{status}")
 
-
-    def update_horse_url_indicator(self):
-        self.horse_url_indicator_label.config(text=self.horse_url_indicator)
-
     def display_next_3(self):
         headers = {"User-Agent": "Mozilla/5.0 ..."}
         horse_response = requests.get(self.horse_url, headers=headers)
-        greyhound_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g', headers=headers)
+        greyhound_response = requests.get(self.dogs_url, headers=headers)
 
         if horse_response.status_code == 200 and greyhound_response.status_code == 200:
             horse_data = horse_response.json()
@@ -4499,7 +4493,6 @@ class BetViewerApp:
         user_login()
 
         threading.Thread(target=schedule_data_updates, daemon=True).start()
-
 
         self.race_updation = RaceUpdaton(root)
         self.next3_panel = Next3Panel(root)
