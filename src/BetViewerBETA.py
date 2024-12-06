@@ -37,24 +37,26 @@ from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta
 from PIL import Image, ImageTk
+from dotenv import load_dotenv
+
+load_dotenv()
+
+LOCAL_DATABASE_PATH = os.getenv('LOCAL_DATABASE_PATH')
+LOCK_FILE_PATH = os.getenv('LOCK_FILE_PATH')
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY')
+PIPEDRIVE_API_KEY = os.getenv('PIPEDRIVE_API_KEY')
+X_RAPIDAPI_KEY = os.getenv('X_RAPIDAPI_KEY')
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
 DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
 NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
-
-LOCAL_DATABASE_PATH = 'C:\\LocalCache\\wager_database.sqlite'  # Local cache path
-LOCK_FILE_PATH = 'C:\\LocalCache\\database.lock'  # Path for the lock file
-
-
-CACHE_UPDATE_INTERVAL = 100 * 1
-
-# LOCAL_DATABASE_PATH = './src/wager_database.sqlite'  # Local cache path
-# LOCK_FILE_PATH = './src/database.lock'  # Path for the lock file
-
 # UNCOMMENT FOR TESTING
 DATABASE_PATH = 'wager_database.sqlite'
 NETWORK_PATH_PREFIX = ''
+
+CACHE_UPDATE_INTERVAL = 100 * 1
+
 
 user = ""
 USER_NAMES = {
@@ -69,7 +71,6 @@ USER_NAMES = {
     'VO': 'Victor',
     'MF': 'Mark'
 }
-
 
 
 def user_login():
@@ -88,7 +89,6 @@ def user_login():
             messagebox.showerror("Error", "Maximum of 2 characters.")
 
 def log_notification(message, important=False, pinned=False):
-    # Get the current time
     time_str = datetime.now().strftime('%H:%M:%S')
     file_lock = fasteners.InterProcessLock(os.path.join(NETWORK_PATH_PREFIX, 'notifications.lock'))
     try:
@@ -99,22 +99,17 @@ def log_notification(message, important=False, pinned=False):
             except (FileNotFoundError, json.JSONDecodeError):
                 notifications = []
 
-            # If the notification is pinned, remove the existing pinned notification
             if pinned:
                 notifications = [notification for notification in notifications if not notification.get('pinned', False)]
             
-            # Insert the new notification at the beginning
             notifications.insert(0, {'time': time_str, 'message': message, 'important': important, 'pinned': pinned})
             
-            # Write to a temporary file first
             temp_filename = os.path.join(NETWORK_PATH_PREFIX, 'notifications_temp.json')
             with open(temp_filename, 'w') as f:
                 json.dump(notifications, f, indent=4)
             
-            # Small delay to ensure the file system is ready
             time.sleep(0.1)
             
-            # Rename the temporary file to the actual file
             os.replace(temp_filename, os.path.join(NETWORK_PATH_PREFIX, 'notifications.json'))
     except Exception as e:
         print(f"Error logging notification: {e}")
@@ -254,7 +249,6 @@ class DatabaseManager:
                 print(f"Error in periodic cache update: {e}")
             time.sleep(CACHE_UPDATE_INTERVAL)
 
-# Start the periodic cache update in a background thread
 database_manager = DatabaseManager()
 threading.Thread(target=database_manager.periodic_cache_update, daemon=True).start()
 
@@ -428,7 +422,6 @@ class BetFeed:
                 type_mapping = {'Bet': 'BET', 'Knockback': 'WAGER KNOCKBACK', 'SMS': 'SMS WAGER'}
                 type_value = type_mapping.get(type_filter)
     
-                # Get the selected date from the DateEntry widget
                 query = "SELECT * FROM database WHERE date = ?"
                 params = [selected_date]
     
@@ -477,7 +470,7 @@ class BetFeed:
                         bet_dict = dict(zip(column_names, bet))
     
                         if bet_dict['type'] != 'SMS WAGER' and bet_dict['selections'] is not None:
-                            bet_dict['selections'] = json.loads(bet_dict['selections'])  # Convert JSON string to dictionary
+                            bet_dict['selections'] = json.loads(bet_dict['selections']) 
     
                         text_segments = self.format_bet_text(bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients, reporting_data)
     
@@ -563,7 +556,6 @@ class BetFeed:
                         current_unique_norisk_clients
                     ) = cursor.fetchone()
     
-                    # Fetch the count of bets for each sport for the current day up to the current time or full day
                     cursor.execute(
                         "SELECT sports, COUNT(*) FROM database WHERE date = ? AND type = 'BET' " + ("AND time <= ? GROUP BY sports" if is_today else "GROUP BY sports"),
                         (current_date_str, current_time) if is_today else (current_date_str,)
@@ -1104,30 +1096,36 @@ class RaceUpdaton:
         api_data = []
         dogs_api_data = []
         others_api_data = []
-    
+
         try:
-            response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h')
+            url = os.getenv('GET_COURSES_HORSES_API_URL')
+            if not url:
+                raise ValueError("GET_COURSES_HORSES_API_URL environment variable is not set")
+            response = requests.get(url)
             response.raise_for_status()
             api_data = response.json()
         except requests.RequestException as e:
             print("Error fetching data from GB API for Courses.")
         except json.JSONDecodeError:
             print("Error decoding JSON from GB API response.")
-    
+
         if api_data:
             for event in api_data:
                 for meeting in event['meetings']:
                     self.courses.add(meeting['meetinName'])
-    
+
         try:
-            dogs_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=,g')
+            url = os.getenv('DOGS_API_URL')
+            if not url:
+                raise ValueError("DOGS_API_URL environment variable is not set")
+            dogs_response = requests.get(url)
             dogs_response.raise_for_status()
             dogs_api_data = dogs_response.json()
         except requests.RequestException as e:
             print("Error fetching data from GB API for Dogs.")
         except json.JSONDecodeError:
             print("Error decoding JSON from GB API response.")
-    
+
         if dogs_api_data:
             for event in dogs_api_data:
                 if ' AUS ' not in event['eventName']:
@@ -1136,26 +1134,29 @@ class RaceUpdaton:
                         if not meeting_name.endswith(' Dg'):
                             meeting_name += ' Dg'
                         self.dog_courses.add(meeting_name)
-    
+
         try:
-            others_response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=o')
+            url = os.getenv('OTHERS_API_URL')
+            if not url:
+                raise ValueError("OTHERS_API_URL environment variable is not set")
+            others_response = requests.get(url)
             others_response.raise_for_status()
             others_api_data = others_response.json()
         except requests.RequestException as e:
             print("Error fetching data from GB API for International Courses.")
         except json.JSONDecodeError:
             print("Error decoding JSON from GB API response.")
-    
+
         if others_api_data:
             for event in others_api_data:
                 for meeting in event['meetings']:
                     self.others_courses.add(meeting['meetinName'])
-    
+
         self.courses = list(self.courses)
         print("Courses:", self.courses)
-    
+
         update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-    
+
         try:
             with open(update_times_path, 'r') as f:
                 update_data = json.load(f)
@@ -1163,12 +1164,12 @@ class RaceUpdaton:
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
             with open(update_times_path, 'w') as f:
                 json.dump(update_data, f)
-    
+
         if update_data['date'] != today.strftime('%Y-%m-%d'):
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in self.courses}}
             with open(update_times_path, 'w') as f:
                 json.dump(update_data, f)
-    
+
         self.display_courses()
         return self.courses
 
@@ -1297,14 +1298,19 @@ class RaceUpdaton:
         date_string = now.strftime('%d-%m-%Y')
         log_file = os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', f'update_log_{date_string}.txt')
         score = 0.0
-    
+
         search_course = course.replace(' Dg', '')
-    
+
         try:
             if course.endswith(" Dg"):
-                response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=,g')
+                url = os.getenv('DOGS_API_URL')
             else:
-                response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h,o')
+                url = os.getenv('HORSES_API_URL')
+
+            if not url:
+                raise ValueError("API URL environment variable is not set")
+
+            response = requests.get(url)
             response.raise_for_status()
             api_data = response.json()
         except requests.RequestException as e:
@@ -1357,7 +1363,6 @@ class RaceUpdaton:
                                         break
     
                 else:
-                    # Check today's races for horse racing
                     print("Horse Race")
                     for event in api_data:
                         if today in event['eventName']:
@@ -1378,7 +1383,6 @@ class RaceUpdaton:
                                 print("breaking")
                                 break
     
-                    # Check tomorrow's races for horse racing if today's races are finished
                     if morning_finished:
                         for event in api_data:
                             if tomorrow in event['eventName']:
@@ -1479,7 +1483,7 @@ class RaceUpdaton:
             courses = [course for course in data['courses']]
     
             combobox['values'] = courses
-            combobox.set('')  # Clear the combobox selection
+            combobox.set('')
             loading_bar.stop()
             loading_bar.pack_forget()
             select_button.pack(pady=10)
@@ -1527,11 +1531,10 @@ class RaceUpdaton:
             with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'r') as f:
                 data = json.load(f)
     
-            # Use list comprehension to filter out courses already in update_times.json
             all_courses = [course for course in all_courses if course not in data['courses']]
     
             combobox['values'] = all_courses
-            combobox.set('')  # Clear the combobox selection
+            combobox.set('')
             loading_bar.stop()
             loading_bar.pack_forget()
             select_button.pack(pady=10)
@@ -1585,7 +1588,6 @@ class RaceUpdaton:
             self.display_courses()
 
 class Notebook:
-    ##Stupid class
     def __init__(self, root):
         self.root = root
         self.last_notification = None
@@ -1594,19 +1596,35 @@ class Notebook:
         _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
 
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        self.pipedrive_api_token = data['pipedrive_api_key']
-        self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
+        self.pipedrive_api_token = os.getenv('PIPEDRIVE_API_KEY')
+        self.pipedrive_api_url = os.getenv('PIPEDRIVE_API_URL')
+
+        if not self.pipedrive_api_url:
+            raise ValueError("PIPEDRIVE_API_URL environment variable is not set")
+
+        self.pipedrive_api_url = f'{self.pipedrive_api_url}?api_token={self.pipedrive_api_token}'
+
+        google_creds = {
+            "type": os.getenv('GOOGLE_SERVICE_ACCOUNT_TYPE'),
+            "project_id": os.getenv('GOOGLE_PROJECT_ID'),
+            "private_key_id": os.getenv('GOOGLE_PRIVATE_KEY_ID'),
+            "private_key": os.getenv('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+            "client_email": os.getenv('GOOGLE_CLIENT_EMAIL'),
+            "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+            "auth_uri": os.getenv('GOOGLE_AUTH_URI'),
+            "token_uri": os.getenv('GOOGLE_TOKEN_URI'),
+            "auth_provider_x509_cert_url": os.getenv('GOOGLE_AUTH_PROVIDER_X509_CERT_URL'),
+            "client_x509_cert_url": os.getenv('GOOGLE_CLIENT_X509_CERT_URL')
+        }
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/analytics.readonly']
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
         self.gc = gspread.authorize(credentials)
-        self.analytics_credentials = service_account.Credentials.from_service_account_info(data, scopes=scope)
+        self.analytics_credentials = service_account.Credentials.from_service_account_info(google_creds, scopes=scope)
 
         self.initialize_ui()
         self.initialize_text_tags()
         self.update_notifications()
-        self.start_live_users_thread()  # Start the periodic update
+        self.start_live_users_thread() 
         self.run_factoring_sheet_thread()
         self.run_freebet_sheet_thread()
         self.run_popup_sheet_thread()
@@ -1704,9 +1722,9 @@ class Notebook:
     
         self.client_id_frame = ttk.Frame(self.report_buttons_frame)
         self.client_id_label = ttk.Label(self.client_id_frame, text="Username:")
-        self.client_id_label.pack(side="top", padx=(5, 5))  # Change side to "top"
+        self.client_id_label.pack(side="top", padx=(5, 5))  
         self.client_id_entry = ttk.Entry(self.client_id_frame, width=15)
-        self.client_id_entry.pack(side="top", padx=(5, 5))  # Change side to "top"
+        self.client_id_entry.pack(side="top", padx=(5, 5)) 
         self.client_id_frame.pack(side="top", pady=(5, 10), padx=(5, 0))
         self.client_id_frame.pack_forget()  
 
@@ -1860,13 +1878,10 @@ class Notebook:
             current_date_str = time.strftime("%d/%m/%Y")
             formatted_time = time.strftime("%H:%M:%S")
 
-            # Convert current_date_str to yyyy-mm-dd format
             current_date_obj = datetime.strptime(current_date_str, "%d/%m/%Y")
             current_date_iso = current_date_obj.strftime("%Y-%m-%d")
-            # Calculate the start of the current week (Monday)
             start_of_current_week = current_date_obj - timedelta(days=current_date_obj.weekday())
             start_of_current_week_iso = start_of_current_week.strftime("%Y-%m-%d")
-            # Calculate the start of the previous week (Monday)
             start_of_previous_week = start_of_current_week - timedelta(days=7)
             start_of_previous_week_iso = start_of_previous_week.strftime("%Y-%m-%d")
             # total_deposits = reporting_data.get('total_deposits', 'N/A')
@@ -3213,8 +3228,14 @@ class Notebook:
         return results
     
     def get_results_json(self):
-        url = "https://globalapi.geoffbanks.bet/api/geoff/GetCachedRaceResults?sportcode=H,h,g,o"
+        url = os.getenv('RESULTS_API_URL')
+
+        # Ensure the API URL is loaded correctly
+        if not url:
+            raise ValueError("RESULTS_API_URL environment variable is not set")
+
         response = requests.get(url)
+        response.raise_for_status()  # Ensure we raise an error for bad responses
         data = response.json()
         return data
     
@@ -3280,8 +3301,14 @@ class Notebook:
     def popup_sheet(self):
         try:
             filter_id = 65
-            custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633' 
-            filter_url = f'https://api.pipedrive.com/v1/persons?filter_id={filter_id}&api_token={self.pipedrive_api_token}'
+            custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'
+            pipedrive_persons_api_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
+
+            # Ensure the API URL is loaded correctly
+            if not pipedrive_persons_api_url:
+                raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
+
+            filter_url = f'{pipedrive_persons_api_url}?filter_id={filter_id}&api_token={self.pipedrive_api_token}'
             response = requests.get(filter_url)
             if response.status_code == 200:
                 persons = response.json().get('data', [])
@@ -3388,7 +3415,11 @@ class Settings:
         self.password_result_label.grid(row=0, column=1, padx=(5, 5))
 
     def fetch_and_save_events(self):
-        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetAntepostEvents'
+        url = os.getenv('ALL_EVENTS_API_URL')
+
+        if not url:
+            raise ValueError("ALL_EVENTS_API_URL environment variable is not set")
+
         try:
             response = requests.get(url)
             response.raise_for_status() 
@@ -3400,7 +3431,7 @@ class Settings:
         if not data:
             messagebox.showerror("Error", "Couldn't get any events from API")
             return None
-        
+
         filename = os.path.join(NETWORK_PATH_PREFIX, 'events.json')
 
         if os.path.exists(filename):
@@ -3661,8 +3692,17 @@ class Next3Panel:
         self.last_click_time = 0 
         _, _, _, reporting_data = access_data()
         self.enhanced_places = reporting_data.get('enhanced_places', [])
-        self.horse_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=H,h,o'
-        self.dogs_url = 'https://globalapi.geoffbanks.bet/api/Geoff/NewLive?sportcode=g'
+
+        # Load API URLs from environment variables
+        self.horse_url = os.getenv('NEXT_3_HORSE_API_URL')
+        self.dogs_url = os.getenv('NEXT_3_DOGS_API_URL')
+
+        # Ensure the API URLs are loaded correctly
+        if not self.horse_url:
+            raise ValueError("NEXT_3_HORSE_API_URL environment variable is not set")
+        if not self.dogs_url:
+            raise ValueError("NEXT_3_DOGS_API_URL environment variable is not set")
+
         self.initialize_ui()
         self.run_display_next_3()
     
@@ -3750,22 +3790,34 @@ class ClientWizard:
         self.toplevel.geometry(f"+{screen_width - 1700}+700")
         self.username_entry = None
 
-        with open(os.path.join(NETWORK_PATH_PREFIX, 'src', 'creds.json')) as f:
-            data = json.load(f)
-        self.pipedrive_api_token = data['pipedrive_api_key']
-        self.pipedrive_api_url = f'https://api.pipedrive.com/v1/itemSearch?api_token={self.pipedrive_api_token}'
+        # Load environment variables
+        self.pipedrive_api_token = os.getenv('PIPEDRIVE_API_KEY')
+        self.pipedrive_api_url = os.getenv('PIPEDRIVE_API_URL')
+
+        # Ensure the API URL is loaded correctly
+        if not self.pipedrive_api_url:
+            raise ValueError("PIPEDRIVE_API_URL environment variable is not set")
+
+        self.pipedrive_api_url = f'{self.pipedrive_api_url}?api_token={self.pipedrive_api_token}'
+
+        # Load Google service account credentials from environment variables
+        google_creds = {
+            "type": os.getenv('GOOGLE_SERVICE_ACCOUNT_TYPE'),
+            "project_id": os.getenv('GOOGLE_PROJECT_ID'),
+            "private_key_id": os.getenv('GOOGLE_PRIVATE_KEY_ID'),
+            "private_key": os.getenv('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+            "client_email": os.getenv('GOOGLE_CLIENT_EMAIL'),
+            "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+            "auth_uri": os.getenv('GOOGLE_AUTH_URI'),
+            "token_uri": os.getenv('GOOGLE_TOKEN_URI'),
+            "auth_provider_x509_cert_url": os.getenv('GOOGLE_AUTH_PROVIDER_X509_CERT_URL'),
+            "client_x509_cert_url": os.getenv('GOOGLE_CLIENT_X509_CERT_URL')
+        }
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(data, scope)
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
         self.gc = gspread.authorize(credentials)
 
-        ## Closure Request BooleaVars
-        self.confirm_betty_update_bool = tk.BooleanVar()
-        self.confirm_betty_update_bool.set(False)
-        self.send_confirmation_email_bool = tk.BooleanVar()
-        self.send_confirmation_email_bool.set(True) 
-        self.archive_email_bool = tk.BooleanVar()
-        self.archive_email_bool.set(False)
-
+        # Initialize UI components
         self.initialize_ui()
 
     def initialize_ui(self):
@@ -3800,44 +3852,49 @@ class ClientWizard:
 
     def apply_rg_popup(self):
         custom_field_id = 'acb5651370e1c1efedd5209bda3ff5ceece09633'  # Your custom field ID
-    
+
         def handle_submit():
-            # Disable the submit button while processing
             submit_button.config(state=tk.DISABLED)
-    
+
             if not entry1.get():
                 progress_note.config(text="Error: Please make sure all fields are completed.", anchor='center', justify='center')
                 time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
                 progress_note.config(text="---", anchor='center', justify='center')
                 return
-            
-            # Get the provided username
+
             username = entry1.get().strip()
-            
-            # Search for the person using the provided username
-            search_url = f'https://api.pipedrive.com/v1/persons/search?api_token={self.pipedrive_api_token}'
+
+            search_url = os.getenv('PIPEDRIVE_PERSONS_SEARCH_API_URL')
+            if not search_url:
+                raise ValueError("PIPEDRIVE_PERSONS_SEARCH_API_URL environment variable is not set")
+
+            update_base_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
+            if not update_base_url:
+                raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
+
             params = {
                 'term': username,
                 'item_types': 'person',
                 'fields': 'custom_fields',
-                'exact_match': 'true'
+                'exact_match': 'true',
+                'api_token': self.pipedrive_api_token
             }
-    
+
             response = requests.get(search_url, params=params)
             if response.status_code == 200:
                 persons = response.json().get('data', {}).get('items', [])
-    
+
                 if not persons:
                     progress_note.config(text=f"No persons found for username: {username} in Pipedrive.", anchor='center', justify='center')
                     time.sleep(2)
                     submit_button.config(state=tk.NORMAL)
                     progress_note.config(text="---", anchor='center', justify='center')
                     return
-    
+
                 for person in persons:
                     person_id = person['item']['id']
-                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
+                    update_url = f'{update_base_url}/{person_id}?api_token={self.pipedrive_api_token}'
                     update_data = {
                         custom_field_id: date.today().strftime('%m/%d/%Y')
                     }
@@ -3858,16 +3915,16 @@ class ClientWizard:
                         progress_note.config(text="---", anchor='center', justify='center')
                         return
             else:
-                print(f'Error: {response.status_code}')         
+                print(f'Error: {response.status_code}')
                 progress_note.config(text=f"An error occurred.", anchor='center', justify='center')
                 time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
                 progress_note.config(text="---", anchor='center', justify='center')
                 return
-    
+
             # Re-enable the submit button
             submit_button.config(state=tk.NORMAL)
-    
+
         frame = ttk.Frame(self.wizard_notebook)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_columnconfigure(1, weight=1)
@@ -3901,7 +3958,7 @@ class ClientWizard:
 
         # Add the new tab to the notebook
         self.wizard_notebook.add(frame, text="RG Popup")
-    
+
         return frame
 
     def apply_factoring_tab(self):
@@ -3915,28 +3972,27 @@ class ClientWizard:
             current_date = datetime.now().strftime("%d/%m/%Y")
 
             if not entry1.get() or not entry3.get():
-                # messagebox.showerror("Error", "Please make sure all fields are completed.")
                 progress_note.config(text="Error: Please make sure all fields are completed.", anchor='center', justify='center')
                 time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
                 progress_note.config(text="---", anchor='center', justify='center')
                 return
-            
+
             try:
                 float(entry3.get())
             except ValueError:
-                # messagebox.showerror("Error", "Assessment rating should be a number.")
                 progress_note.config(text="Error: Assessment rating should be a number.", anchor='center', justify='center')
                 time.sleep(2)
                 submit_button.config(state=tk.NORMAL)
                 progress_note.config(text="---", anchor='center', justify='center')
                 return
-            
+
             params = {
                 'term': entry1.get(),
                 'item_types': 'person',
                 'fields': 'custom_fields',
                 'exact_match': 'true',
+                'api_token': self.pipedrive_api_token
             }
 
             copy_string = ""
@@ -3958,7 +4014,11 @@ class ClientWizard:
                 for person in persons:
                     person_id = person['item']['id']
 
-                    update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
+                    update_base_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
+                    if not update_base_url:
+                        raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
+
+                    update_url = f'{update_base_url}/{person_id}?api_token={self.pipedrive_api_token}'
                     update_data = {
                         'ab6b3b25303ffd7c12940b72125487171b555223': entry2.get()
                     }
@@ -3999,8 +4059,6 @@ class ClientWizard:
             if not matching_cells:
                 progress_note.config(text=f"Error: No persons found in factoring diary for client: {username}. Factoring logged, but not updated in diary.", anchor='center', justify='center')
                 time.sleep(1)
-                # submit_button.config(state=tk.NORMAL)
-                # progress_note.config(text="---", anchor='center', justify='center')
             else:
                 progress_note.config(text="Found user in factoring Diary.\nUpdating...\n", anchor='center', justify='center')
                 cell = matching_cells[0]
@@ -4008,7 +4066,7 @@ class ClientWizard:
                 worksheet3.update_cell(row, 9, entry2_value)  # Column I
                 worksheet3.update_cell(row, 10, entry3.get())  # Column J
                 worksheet3.update_cell(row, 12, current_date)  # Column L
-            # self.tree.insert("", "end", values=[current_date, current_time, entry1.get().upper(), entry2_value, entry3.get(), user])
+
             data = {
                 'Time': current_time,
                 'Username': entry1.get().upper(),
@@ -4064,7 +4122,7 @@ class ClientWizard:
         # Right section
         right_frame = ttk.Frame(frame)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-    
+
         report_freebet_title = ttk.Label(right_frame, text="Modify Client Terms", font=("Helvetica", 12, "bold"), anchor='center', justify='center')
         report_freebet_title.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
@@ -4367,6 +4425,7 @@ class ClientWizard:
             'item_types': 'person',
             'fields': 'custom_fields',
             'exact_match': 'true',
+            'api_token': self.pipedrive_api_token
         }
 
         try:
@@ -4374,27 +4433,25 @@ class ClientWizard:
             response.raise_for_status()
             print(response.status_code)
         except requests.exceptions.HTTPError as errh:
-            print ("Http Error:",errh)
+            print("Http Error:", errh)
             return
         except requests.exceptions.ConnectionError as errc:
-            print ("Error Connecting:",errc)
+            print("Error Connecting:", errc)
             return
         except requests.exceptions.Timeout as errt:
-            print ("Timeout Error:",errt)
+            print("Timeout Error:", errt)
             return
         except requests.exceptions.RequestException as err:
-            print ("Something went wrong",err)
+            print("Something went wrong", err)
             return
 
         persons = response.json()['data']['items']
         if not persons:
-            # messagebox.showerror("Error", f"No persons found for username: {username}. Please make sure the username is correct, or apply the exclusion manually.")
             self.progress_note.config(text=f"No persons found in Pipedrive for username: {username}. Please make sure the username is correct.", anchor='center', justify='center')
             time.sleep(2)
             self.progress_note.config(text="---", anchor='center', justify='center')
             return
 
-        ## This is Ridiculous
         number_mapping = {
             'One': '1',
             'Two': '2',
@@ -4408,9 +4465,13 @@ class ClientWizard:
             'Ten': '10'
         }
 
+        update_base_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
+        if not update_base_url:
+            raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
+
         for person in persons:
             person_id = person['item']['id']
-            update_url = f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={self.pipedrive_api_token}'
+            update_url = f'{update_base_url}/{person_id}?api_token={self.pipedrive_api_token}'
 
             if restriction == 'Account Deactivation':
                 update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': "Deactivated"}

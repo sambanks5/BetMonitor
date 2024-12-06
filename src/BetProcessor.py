@@ -40,7 +40,10 @@ from pytz import timezone
 from collections import defaultdict, Counter
 from bs4 import BeautifulSoup
 from tkinter import scrolledtext
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 ####################################################################################
 ## INITIALIZE GLOBAL VARIABLES & API CREDENTIALS
@@ -635,7 +638,11 @@ def check_closures_and_race_times():
             processed_closures.add(closure['email_id'])
 
     try:
-        response = requests.get('https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=H,h')
+        url = os.getenv('GET_COURSES_HORSES_API_URL')
+        if not url:
+            raise ValueError("GET_COURSES_HORSES_API_URL environment variable is not set")
+
+        response = requests.get(url)
         response.raise_for_status()
         api_data = response.json()
     except requests.RequestException as e:
@@ -655,17 +662,14 @@ def check_closures_and_race_times():
             for meeting in event['meetings']:
                 meeting_name = meeting['meetinName']
                 for race in meeting['events']:
-                    # meeting_name = race['meetinName']
                     time = race['time']
                     races_today.append(f'{meeting_name}, {time}')
-        else: 
+        else:
             for meeting in event['meetings']:
                 meeting_name = meeting['meetinName']
                 for race in meeting['events']:
-                    # meeting_name = race['meetinName']
                     time = race['time']
                     races_tomorrow.append(f'{meeting_name}, {time}')
-
 
     races_today.sort(key=lambda race: datetime.strptime(race.split(', ')[1], '%H:%M'))
     total_races_today = len(races_today)
@@ -678,15 +682,21 @@ def check_closures_and_race_times():
             else:
                 processed_races.add(race)
                 log_notification(f"{race} is past off time - {index}/{total_races_today}")
-    
+
 def fetch_and_print_new_events():
     global previously_seen_events
-    url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,E,b,A,Y,n,c,y,M'
+    url = os.getenv('ALL_EVENTS_API_URL')
+
+    # Ensure the API URL is loaded correctly
+    if not url:
+        raise ValueError("ALL_EVENTS_API_URL environment variable is not set")
+
     response = requests.get(url)
-    data = response.json() 
+    response.raise_for_status()
+    data = response.json()
 
     # Extract event names from the response
-    current_events = set(event['eventName'] for event in data)
+    current_events = set(event['EventName'] for event in data)
 
     if not previously_seen_events:
         previously_seen_events = current_events
@@ -1090,30 +1100,37 @@ class DataUpdater:
         self.file_lock = threading.Lock()
         self.data_file_path = 'src/data.json'
         self.executor = ThreadPoolExecutor(max_workers=5)
-        self.creds = self.get_google_api_tokens()
 
-        with open('src/creds.json') as f:
-            creds = json.load(f)
-        self.pipedrive_api_token = creds['pipedrive_api_key']
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
-        self.gc = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_dict(creds, scope))
+        # Load environment variables
+        self.pipedrive_api_token = os.getenv('PIPEDRIVE_API_KEY')
+        self.pipedrive_api_url = os.getenv('PIPEDRIVE_API_URL')
+
+        # Ensure the API URL is loaded correctly
+        if not self.pipedrive_api_url:
+            raise ValueError("PIPEDRIVE_API_URL environment variable is not set")
+
+        self.pipedrive_api_url = f'{self.pipedrive_api_url}?api_token={self.pipedrive_api_token}'
+
+        # Load Google service account credentials from environment variables
+        google_creds = {
+            "type": os.getenv('GOOGLE_SERVICE_ACCOUNT_TYPE'),
+            "project_id": os.getenv('GOOGLE_PROJECT_ID'),
+            "private_key_id": os.getenv('GOOGLE_PRIVATE_KEY_ID'),
+            "private_key": os.getenv('GOOGLE_PRIVATE_KEY').replace('\\n', '\n'),
+            "client_email": os.getenv('GOOGLE_CLIENT_EMAIL'),
+            "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+            "auth_uri": os.getenv('GOOGLE_AUTH_URI'),
+            "token_uri": os.getenv('GOOGLE_TOKEN_URI'),
+            "auth_provider_x509_cert_url": os.getenv('GOOGLE_AUTH_PROVIDER_X509_CERT_URL'),
+            "client_x509_cert_url": os.getenv('GOOGLE_CLIENT_X509_CERT_URL')
+        }
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/gmail.readonly']
+        self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
+        self.gc = gspread.authorize(self.credentials)
+        self.creds = self.get_google_api_tokens()
 
         self.run_get_data()
         self.start_periodic_update()
-
-    def start_periodic_update(self):
-        self.update_thread = threading.Thread(target=self.periodic_update)
-        self.update_thread.daemon = True
-        self.update_thread.start()
-
-    def periodic_update(self):
-        while True:
-            time.sleep(240) 
-            self.run_get_data()
-
-    def run_get_data(self):
-        self.executor.submit(self.update_data_file)
 
     def get_google_api_tokens(self):
         creds = None
@@ -1147,6 +1164,19 @@ class DataUpdater:
                 token.write(creds.to_json())
 
         return creds
+
+    def start_periodic_update(self):
+        self.update_thread = threading.Thread(target=self.periodic_update)
+        self.update_thread.daemon = True
+        self.update_thread.start()
+
+    def periodic_update(self):
+        while True:
+            time.sleep(240) 
+            self.run_get_data()
+
+    def run_get_data(self):
+        self.executor.submit(self.update_data_file)
 
     def log_message(self, message):
         self.app.log_message(message)
@@ -1283,9 +1313,13 @@ class DataUpdater:
         vip_clients = [row[0] for row in data if row[0]]
         
         return vip_clients
-
+    
     def get_new_registrations(self):
-        response = requests.get(f'https://api.pipedrive.com/v1/persons?api_token={self.pipedrive_api_token}&filter_id=60')
+        pipedrive_persons_api_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
+        if not pipedrive_persons_api_url:
+            raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
+
+        response = requests.get(f'{pipedrive_persons_api_url}?api_token={self.pipedrive_api_token}&filter_id=60')
 
         if response.status_code == 200:
             data = response.json()

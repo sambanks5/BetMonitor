@@ -40,3 +40,4 @@ wager_database.sqlite
 wager_database.sqlite
 wager_database.sqlite
 *.sqlite
+src/.env
