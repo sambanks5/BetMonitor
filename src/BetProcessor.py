@@ -631,7 +631,7 @@ def check_closures_and_race_times():
         if closure['email_id'] in processed_closures:
             continue
         if not closure.get('completed', False):
-            log_notification(f"{closure['Restriction']} request from {closure['Username'].strip()}", important=True)
+            log_notification(f"{closure['type']} request from {closure['username'].strip()}", important=True)
             processed_closures.add(closure['email_id'])
 
     try:
@@ -1069,8 +1069,20 @@ def clear_processed():
 
     file_lock = fasteners.InterProcessLock('notifications.lock')
     with file_lock:
-        with open('notifications.json', 'w') as f:
-            json.dump([], f)
+        try:
+            with open('notifications.json', 'w') as f:
+                json.dump([], f)
+        except IOError as e:
+            print(f"Error writing to notifications.json: {e}")
+
+    try:
+        with open('src/data.json', 'r') as f:
+            data = json.load(f)
+        data['todays_oddsmonkey_selections'] = {}
+        with open('src/data.json', 'w') as f:
+            json.dump(data, f, indent=4)
+    except IOError as e:
+        print(f"Error reading or writing to src/data.json: {e}")
 
 class DataUpdater:
     def __init__(self, app):
@@ -1084,21 +1096,21 @@ class DataUpdater:
             creds = json.load(f)
         self.pipedrive_api_token = creds['pipedrive_api_key']
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        # NO IDEA
         self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds, scope)
         self.gc = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_dict(creds, scope))
 
         self.run_get_data()
-        schedule.every(4).minutes.do(self.run_get_data)
+        self.start_periodic_update()
 
-        scheduler_thread = threading.Thread(target=self.run_scheduler)
-        scheduler_thread.daemon = True
-        scheduler_thread.start()
+    def start_periodic_update(self):
+        self.update_thread = threading.Thread(target=self.periodic_update)
+        self.update_thread.daemon = True
+        self.update_thread.start()
 
-    def run_scheduler(self):
+    def periodic_update(self):
         while True:
-            schedule.run_pending()
-            time.sleep(1)
+            time.sleep(240) 
+            self.run_get_data()
 
     def run_get_data(self):
         self.executor.submit(self.update_data_file)
@@ -1221,67 +1233,45 @@ class DataUpdater:
             results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
             messages = results.get('messages', [])
 
-            for message in messages:
-                msg = service.users().messages().get(userId='me', id=message['id']).execute()
+        for message in messages:
+            msg = service.users().messages().get(userId='me', id=message['id']).execute()
 
-                timestamp = int(msg['internalDate']) // 1000  
-                date_time = datetime.fromtimestamp(timestamp)
-                date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = int(msg['internalDate']) // 1000  
+            date_time = datetime.fromtimestamp(timestamp)
+            date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
 
-                payload = msg['payload']
-                email_id = message['id']
+            payload = msg['payload']
+            email_id = message['id']
 
-                parts = payload.get('parts')
-                if parts is not None:
-                    part = parts[0]
-                    data = part['body']['data']
-                else:
-                    data = payload['body']['data']
+            parts = payload.get('parts')
+            if parts is not None:
+                part = parts[0]
+                data = part['body']['data']
+            else:
+                data = payload['body']['data']
 
-                data = data.replace("-","+").replace("_","/")
-                decoded_data = base64.b64decode(data)
+            data = data.replace("-", "+").replace("_", "/")
+            decoded_data = base64.b64decode(data)
 
-                soup = BeautifulSoup(decoded_data , "lxml")
+            soup = BeautifulSoup(decoded_data, "lxml")
 
-                first_name_tag = soup.find('span', {'class': 'given-name'})
-                last_name_tag = soup.find('span', {'class': 'family-name'})
-                username_tag = soup.find('td', {'id': 'roField4'}).find('div')
+            name = soup.find('td', string='Name').find_next_sibling('td').text.strip()
+            username = soup.find('td', string='UserName').find_next_sibling('td').text.strip()
+            type_ = soup.find('td', string='Type').find_next_sibling('td').text.strip()
+            period = soup.find('td', string='Period').find_next_sibling('td').text.strip()
 
-                tr_tags = soup.find_all('tr', {'class': 'radio'})
-
-                restriction = None
-                length = None
-
-                for tr_tag in tr_tags:
-                    th_tag = tr_tag.find('th')
-                    div_tag = tr_tag.find('div')
-
-                    if th_tag and div_tag:
-                        th_text = th_tag.get_text().strip().replace('\n', '').replace('*', '').strip()
-                        div_text = div_tag.get_text().strip()
-
-                        if th_text in ['Restriction Required', 'Further Options']:
-                            restriction = div_text
-
-                        elif th_text in ['Take-A-Break Length', 'Self-Exclusion Length']:
-                            length = div_text
-
-                first_name = first_name_tag.get_text() if first_name_tag else None
-                last_name = last_name_tag.get_text() if last_name_tag else None
-                username = username_tag.get_text().upper() if username_tag else None
-
-                closure_data = {
-                    'email_id': email_id,
-                    'timestamp': date_time_str,
-                    'Label': label_name,
-                    'First name': first_name,
-                    'Last name': last_name,
-                    'Username': username,
-                    'Restriction': restriction,
-                    'Length': length,
-                    'completed': completed_status.get(email_id, False),
-                }
-                closures.append(closure_data)
+            closure = {
+                'email_id': email_id,
+                'timestamp': date_time_str,
+                'name': name,
+                'username': username,
+                'type': type_,
+                'period': period,
+                'completed': completed_status.get(email_id, False)
+            }
+            closures.append(closure)
+        
+        print(closures)
 
         return closures
 
@@ -1394,42 +1384,57 @@ class DataUpdater:
         try:
             today = date.today().strftime('%Y/%m/%d')
             new_selections = self.get_oddsmonkey_selections(query=f'after:{today}')
-
+    
             # Update existing selections with new selections and latest lay odds
-            for event, (selection, lay_odds) in new_selections.items():
+            for event, selections in new_selections.items():
                 if event in existing_selections:
-                    existing_selections[event] = (selection, lay_odds)
+                    existing_event_selections = {sel[0]: sel[1] for sel in existing_selections[event]}
+                    for sel, odds in selections:
+                        existing_event_selections[sel] = odds
+                    existing_selections[event] = [[sel, odds] for sel, odds in existing_event_selections.items()]
                 else:
-                    existing_selections[event] = (selection, lay_odds)
-
+                    existing_selections[event] = selections
+    
             return existing_selections
-
+    
         except Exception as e:
             self.log_message(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
             print(f"An error occurred while updating today's Oddsmonkey selections: {str(e)}")
             return existing_selections
-
+        
     def extract_oddsmonkey_selections(self, td_tags):
         selections = {}
-
+    
         # Convert BeautifulSoup elements to strings and strip whitespace
         td_tags = [str(td.text).strip() for td in td_tags]
-
+    
         # Check if the length of td_tags is a multiple of 11 (since each selection has 11 lines)
         if len(td_tags) % 11 != 0:
             print("Unexpected number of lines in td_tags")
             return selections
-
+    
         # Iterate over td_tags in steps of 11
         for i in range(0, len(td_tags), 11):
             event = td_tags[i+2]  # Line 3
             selection = td_tags[i+3]  # Line 4
             lay_odds = td_tags[i+10]  # Line 11
-
-            # Add the selection to the selections dictionary
-            selections[event] = (selection, lay_odds)
-
-        return selections
+    
+            # Check if the event name contains a time (e.g., "13:45")
+            if re.search(r'\d{2}:\d{2}', event):
+                # This is a horse racing or dog racing event
+                formatted_event = event
+                # Add the selection to the selections dictionary
+                if formatted_event not in selections:
+                    selections[formatted_event] = {}
+                selections[formatted_event][selection] = lay_odds
+            else:
+                # Skip non-racing events
+                print(f"Skipping non-racing event: {event}")
+    
+        # Convert the dictionary to the desired format
+        formatted_selections = {event: [[sel, odds] for sel, odds in sel_dict.items()] for event, sel_dict in selections.items()}
+    
+        return formatted_selections
 
     def calculate_deposit_summary(self):
         # Implement the logic to calculate deposit summary
@@ -1559,11 +1564,9 @@ def main(app):
     event_handler = FileHandler()
     observer = None
     observer_started = False
-    
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
     log_notification("Processor Started")
     data_updater = DataUpdater(app)
-
     schedule.every(50).seconds.do(check_closures_and_race_times)
 
     fetch_and_print_new_events()

@@ -71,86 +71,6 @@ USER_NAMES = {
 }
 
 
-def get_database():
-    global DATABASE_PATH, LOCAL_DATABASE_PATH, LOCK_FILE_PATH
-    
-    try:
-        if not os.path.exists(DATABASE_PATH):
-            DATABASE_PATH = prompt_for_database()
-
-        if not os.path.exists(LOCAL_DATABASE_PATH) or not is_cache_up_to_date():
-            update_local_cache()
-
-        lock_file_dir = os.path.dirname(LOCK_FILE_PATH)
-        if not os.path.exists(lock_file_dir):
-            os.makedirs(lock_file_dir)
-
-        with open(LOCK_FILE_PATH, 'w') as lock_file:
-            lock_file.write('locked')
-
-        conn = sqlite3.connect(LOCAL_DATABASE_PATH)
-        conn.execute('PRAGMA journal_mode=WAL;')
-        cursor = conn.cursor()
-        return conn, cursor
-    
-    except Exception as e:
-        print(f"Error accessing the database: {e}")
-        return None, None
-    finally:
-        if os.path.exists(LOCK_FILE_PATH):
-            os.remove(LOCK_FILE_PATH)
-
-def prompt_for_database():
-    try:
-        db_path = filedialog.askopenfilename(
-            title="Select the database file",
-            filetypes=[("SQLite Database", "*.sqlite"), ("All Files", "*.*")]
-        )
-
-        if not db_path:
-            raise FileNotFoundError("Database file not found and no file selected.")
-        
-        return db_path
-    except Exception as e:
-        print(f"Error prompting for database: {e}")
-        return None
-
-def update_local_cache():
-    while os.path.exists(LOCK_FILE_PATH):
-        print("Database is locked, waiting...")
-        time.sleep(1)
-
-    try:
-        global DATABASE_PATH, LOCAL_DATABASE_PATH
-        local_cache_dir = os.path.dirname(LOCAL_DATABASE_PATH)
-        if not os.path.exists(local_cache_dir):
-            os.makedirs(local_cache_dir)
-        shutil.copyfile(DATABASE_PATH, LOCAL_DATABASE_PATH)
-    except Exception as e:
-        print(f"Error updating local cache: {e}")
-
-def is_cache_up_to_date():
-    try:
-        if not os.path.exists(LOCAL_DATABASE_PATH):
-            return False
-        network_mtime = os.path.getmtime(DATABASE_PATH)
-        local_mtime = os.path.getmtime(LOCAL_DATABASE_PATH)
-        return local_mtime >= network_mtime
-    except Exception as e:
-        print(f"Error checking cache status: {e}")
-        return False
-
-def periodic_cache_update():
-    while True:
-        try:
-            print("Cache Updating...")
-            update_local_cache()
-        except Exception as e:
-            print(f"Error in periodic cache update: {e}")
-        time.sleep(CACHE_UPDATE_INTERVAL)
-
-## Ugly but works
-threading.Thread(target=periodic_cache_update, daemon=True).start()
 
 def user_login():
     global user, full_name
@@ -159,7 +79,7 @@ def user_login():
         if user and len(user) <= 2:
             user = user.upper()
             if user in USER_NAMES:
-                full_name = USER_NAMES[user]
+                full_name = USER_NAMES[user]                    
                 log_notification(f"{user} logged in")
                 break
             else:
@@ -288,6 +208,56 @@ def access_data():
     reporting_data = fetcher.get_reporting_data()
     return vip_clients, newreg_clients, today_oddsmonkey_selections, reporting_data
 
+class DatabaseManager:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.update_local_cache()
+
+    def get_connection(self):
+        conn = sqlite3.connect(LOCAL_DATABASE_PATH)
+        conn.execute('PRAGMA journal_mode=WAL;')
+        cursor = conn.cursor()
+        return conn, cursor
+
+    def update_local_cache(self):
+        while os.path.exists(LOCK_FILE_PATH):
+            print("Database is locked, waiting...")
+            time.sleep(1)
+
+        try:
+            if not os.path.exists(LOCAL_DATABASE_PATH) or not self.is_cache_up_to_date():
+                local_cache_dir = os.path.dirname(LOCAL_DATABASE_PATH)
+                if not os.path.exists(local_cache_dir):
+                    os.makedirs(local_cache_dir)
+                shutil.copyfile(DATABASE_PATH, LOCAL_DATABASE_PATH)
+                print("Local cache updated.")
+        except Exception as e:
+            print(f"Error updating local cache: {e}")
+
+    def is_cache_up_to_date(self):
+        try:
+            if not os.path.exists(LOCAL_DATABASE_PATH):
+                return False
+            network_mtime = os.path.getmtime(DATABASE_PATH)
+            local_mtime = os.path.getmtime(LOCAL_DATABASE_PATH)
+            return local_mtime >= network_mtime
+        except Exception as e:
+            print(f"Error checking cache status: {e}")
+            return False
+
+    def periodic_cache_update(self):
+        while True:
+            try:
+                print("Cache Updating...")
+                self.update_local_cache()
+            except Exception as e:
+                print(f"Error in periodic cache update: {e}")
+            time.sleep(CACHE_UPDATE_INTERVAL)
+
+# Start the periodic cache update in a background thread
+database_manager = DatabaseManager()
+threading.Thread(target=database_manager.periodic_cache_update, daemon=True).start()
+
 class BetFeed:
     def __init__(self, root):
         self.root = root
@@ -410,7 +380,7 @@ class BetFeed:
                 vip_clients, newreg_clients, todays_oddsmonkey_selections, reporting_data = access_data()
                 retry_attempts = 2
                 for attempt in range(retry_attempts):
-                    conn, cursor = get_database()
+                    conn, cursor = database_manager.get_connection()
                     if conn is not None:
                         break
                     elif attempt < retry_attempts - 1:
@@ -427,9 +397,9 @@ class BetFeed:
                 if self.previous_selected_date != selected_date:
                     self.last_update_time = None
                     self.previous_selected_date = selected_date
-
+    
                 self.update_activity_frame(reporting_data, cursor, selected_date)
-
+    
                 filters_active = any([
                     self.current_filters['username'],
                     self.current_filters['unit_stake'],
@@ -451,7 +421,7 @@ class BetFeed:
                 sport = self.current_filters['sport']
                 selection_search_term = self.current_filters['selection']
                 type_filter = self.current_filters['type']
-
+    
                 sport_mapping = {'Horses': 0, 'Dogs': 1, 'Other': 2}
                 sport_value = sport_mapping.get(sport)
     
@@ -488,7 +458,6 @@ class BetFeed:
     
                 cursor.execute(query, params)
                 filtered_bets = cursor.fetchall()
-                conn.close()
     
                 self.feed_text.config(state="normal")
                 self.feed_text.delete('1.0', tk.END)
@@ -548,28 +517,24 @@ class BetFeed:
                     self.last_update_time = max(bet[2] for bet in filtered_bets)
             finally:
                 self.feed_lock.release()
+                conn.close()
     
         threading.Thread(target=fetch_and_display_bets, daemon=True).start()
 
     def update_activity_frame(self, reporting_data, cursor, selected_date_str):
         try:
-            # Convert the selected date string to a datetime object
             current_date = datetime.strptime(selected_date_str, '%d/%m/%Y')
-            previous_date = current_date - timedelta(days=1)
+            previous_date = current_date - timedelta(days=7)
             current_time = datetime.now().strftime('%H:%M:%S')
             
-            # Convert the datetime objects back to strings in the format 'dd/mm/yyyy'
             current_date_str = current_date.strftime('%d/%m/%Y')
             previous_date_str = previous_date.strftime('%d/%m/%Y')
-            # Get today's date in the same format as selected_date_str
             today_date_str = datetime.today().strftime('%d/%m/%Y')
-            # Determine if the selected date is today
             is_today = selected_date_str == today_date_str
     
             retry_attempts = 3
             for attempt in range(retry_attempts):
                 try:
-                    # Fetch counts for the current and previous day in a single query
                     query = """
                         SELECT 
                             (SELECT COUNT(*) FROM database WHERE date = ? AND type = 'BET' AND (? IS NULL OR time <= ?)) AS current_bets,
@@ -651,7 +616,7 @@ class BetFeed:
             knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
     
             turnover_profit_line = (
-                f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})\n"
+                f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})"
                 if is_today else ''
             )
     
@@ -661,19 +626,32 @@ class BetFeed:
             self.activity_text.config(state='normal')
             self.activity_text.delete('1.0', tk.END)
     
+            # Line 1: Date and User
             self.activity_text.insert(tk.END, f"{current_day_name} {selected_date_str} {'  |  ' + full_name if user else ''}\n", 'bold')
+
+            # Line 2: Bets
             self.activity_text.insert(tk.END, f"Bets: {current_bets:,} ")
-            self.activity_text.insert(tk.END, f" {bet_change_indicator}{percentage_change_bets:.2f}% ", 'green' if percentage_change_bets > 0 else 'red')
+            self.activity_text.insert(tk.END, f"{bet_change_indicator}{percentage_change_bets:.2f}% ", 'green' if percentage_change_bets > 0 else 'red')
             self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_bets:,})\n")
+
+            # Line 3: Knockbacks
             self.activity_text.insert(tk.END, f"Knockbacks: {current_knockbacks:,} ")
-            self.activity_text.insert(tk.END, f" {knockback_change_indicator}{percentage_change_knockbacks:.2f}% ", 'red' if percentage_change_knockbacks > 0 else 'green')
+            self.activity_text.insert(tk.END, f"{knockback_change_indicator}{percentage_change_knockbacks:.2f}% ", 'red' if percentage_change_knockbacks > 0 else 'green')
             self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_knockbacks:,})\n")
-            self.activity_text.insert(tk.END, f"Knockback %: {knockback_percentage:.2f}%")
-            self.activity_text.insert(tk.END, f" ({previous_day_name}: {previous_knockback_percentage:.2f}%)\n")
-            self.activity_text.insert(tk.END, f"{turnover_profit_line}")
+
+            # Line 4: Knockback Percentage
+            self.activity_text.insert(tk.END, f"Knockback %: {knockback_percentage:.2f}% ")
+            self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_knockback_percentage:.2f}%)\n")
+
+            # Line 5: Turnover Profit Line
+            self.activity_text.insert(tk.END, f"{turnover_profit_line}\n")
+
+            # Line 6: Clients
             self.activity_text.insert(tk.END, f"Clients: {current_total_unique_clients:,} | M: {current_unique_m_clients:,} | W: {current_unique_w_clients:,} | --: {current_unique_norisk_clients:,}\n")
+
+            # Line 7: Bets by Type
             self.activity_text.insert(tk.END, f"Horses: {horse_bets:,} | Dogs: {dog_bets:,} | Other: {other_bets:,}")
-    
+
             self.activity_text.tag_add('center', '1.0', 'end')
     
             self.activity_text.config(state='disabled')
@@ -691,6 +669,26 @@ class BetFeed:
             self.activity_text.insert(tk.END, "An unexpected error occurred. Please try refreshing the feed.")
             self.activity_text.config(state='disabled')
 
+    def initialize_text_tags(self):
+        self.feed_text.tag_configure("risk", foreground="#ad0202")
+        self.feed_text.tag_configure("watchlist", foreground="#e35f00")
+        self.feed_text.tag_configure("newreg", foreground="purple")
+        self.feed_text.tag_configure("vip", foreground="#009685")
+        self.feed_text.tag_configure("sms", foreground="#6CCFF6")
+        self.feed_text.tag_configure("knockback", foreground="#FF006E")
+        self.feed_text.tag_configure('center', justify='center')
+        self.feed_text.tag_configure("oddsmonkey", foreground="#ff00e6", justify='center')
+        self.feed_text.tag_configure('bold', font=('Helvetica', 11, 'bold'), foreground='#d0cccc')
+        self.feed_text.tag_configure('customer_ref_vip', font=('Helvetica', 11, 'bold'), foreground='#009685')
+        self.feed_text.tag_configure('customer_ref_newreg', font=('Helvetica', 11, 'bold'), foreground='purple')
+        self.feed_text.tag_configure('customer_ref_risk', font=('Helvetica', 11, 'bold'), foreground='#ad0202')
+        self.feed_text.tag_configure('customer_ref_watchlist', font=('Helvetica', 11, 'bold'), foreground='#e35f00')
+        self.feed_text.tag_configure('customer_ref_default', font=('Helvetica', 11, 'bold'), foreground='#000000')
+        self.feed_text.tag_configure('black', foreground='#000000')
+        self.activity_text.tag_configure('red', foreground='#ad0202')
+        self.activity_text.tag_configure('green', foreground='#009685')
+        self.activity_text.tag_configure('center', justify='center')
+
     def format_bet_text(self, bet_dict, todays_oddsmonkey_selections, vip_clients, newreg_clients, reporting_data):
         enhanced_places = reporting_data.get('enhanced_places', [])
         text_segments = []
@@ -699,6 +697,12 @@ class BetFeed:
             wager_number = bet_dict.get('id', '')  
             customer_reference = bet_dict.get('customer_ref', '')  
             sms_wager_text = bet_dict.get('text_request', '') 
+
+            # Remove surrounding quotes and replace \n with actual newlines
+            if sms_wager_text.startswith('"') and sms_wager_text.endswith('"'):
+                sms_wager_text = sms_wager_text[1:-1]
+            sms_wager_text = sms_wager_text.replace('\\n', '\n')
+
             tag = f"customer_ref_{self.get_customer_tag(customer_reference, vip_clients, newreg_clients)}"
             text_segments.append((f"{customer_reference} {wager_number}", tag))
             text_segments.append((f" - SMS WAGER:", "sms"))
@@ -753,18 +757,27 @@ class BetFeed:
             text_segments.append((f" - {text}", "black"))
         
             for sel in parsed_selections:
-                for event_name, om_sel in todays_oddsmonkey_selections.items():
+                for event_name, om_selections in todays_oddsmonkey_selections.items():
                     if ' - ' in sel[0]:
                         selection_parts = sel[0].split(' - ')
-                        if len(selection_parts) > 1 and selection_parts[0].strip() == event_name.strip() and selection_parts[1].strip() == om_sel[0].strip():
-                            print(f"Comparing selections: {selection_parts[0]}, {selection_parts[1]} with {event_name}, {om_sel[0]}")
-                            if sel[1] == 'evs':
-                                sel[1] = '2.0'
-                            print(f"Comparing odds: {sel[1]} with {om_sel[1]}")
-                            if sel[1] != 'SP' and float(sel[1]) >= float(om_sel[1]):
-                                oddsmonkey_text = f"{sel[0]}  |  Lay Odds: {om_sel[1]}\n"
-                                text_segments.append((oddsmonkey_text, "oddsmonkey"))
-    
+                        if len(selection_parts) > 1:
+                            bet_event_name = selection_parts[0].strip()
+                            bet_selection_name = selection_parts[1].strip()
+                            om_event_name = event_name.strip()
+                            
+                            if ',' in bet_event_name:
+                                bet_event_name = bet_event_name.replace(', ', ' ', 1)
+                            
+                            
+                            if bet_event_name == om_event_name:
+                                for om_selection, lay_odds in om_selections:
+                                    if bet_selection_name == om_selection.strip():
+                                        if sel[1] == 'evs':
+                                            sel[1] = '2.0'
+                                        if sel[1] != 'SP' and float(sel[1]) >= float(lay_odds):
+                                            oddsmonkey_text = f"{sel[0]}  |  Lay Odds: {lay_odds}\n"
+                                            text_segments.append((oddsmonkey_text, "oddsmonkey"))
+            
                 parts = sel[0].split(' - ')
                 if len(parts) > 1:
                     meeting_info = parts[0].split(', ')
@@ -773,7 +786,7 @@ class BetFeed:
                         if f"{meeting_info[0]}, {meeting_time}" in enhanced_places:
                             enhanced_text = f"{sel[0]}  |  Enhanced Race\n"
                             text_segments.append((enhanced_text, "oddsmonkey"))
-    
+            
         return text_segments
     
     def get_customer_tag(self, customer_reference, vip_clients, newreg_clients, customer_risk_category=None):
@@ -787,26 +800,6 @@ class BetFeed:
             return "risk"
         else:
             return "default"
-    
-    def initialize_text_tags(self):
-        self.feed_text.tag_configure("risk", foreground="#ad0202")
-        self.feed_text.tag_configure("watchlist", foreground="#e35f00")
-        self.feed_text.tag_configure("newreg", foreground="purple")
-        self.feed_text.tag_configure("vip", foreground="#009685")
-        self.feed_text.tag_configure("sms", foreground="#6CCFF6")
-        self.feed_text.tag_configure("knockback", foreground="#FF006E")
-        self.feed_text.tag_configure('center', justify='center')
-        self.feed_text.tag_configure("oddsmonkey", foreground="#ff00e6", justify='center')
-        self.feed_text.tag_configure('bold', font=('Helvetica', 11, 'bold'), foreground='#d0cccc')
-        self.feed_text.tag_configure('customer_ref_vip', font=('Helvetica', 11, 'bold'), foreground='#009685')
-        self.feed_text.tag_configure('customer_ref_newreg', font=('Helvetica', 11, 'bold'), foreground='purple')
-        self.feed_text.tag_configure('customer_ref_risk', font=('Helvetica', 11, 'bold'), foreground='#ad0202')
-        self.feed_text.tag_configure('customer_ref_watchlist', font=('Helvetica', 11, 'bold'), foreground='#e35f00')
-        self.feed_text.tag_configure('customer_ref_default', font=('Helvetica', 11, 'bold'), foreground='#000000')
-        self.feed_text.tag_configure('black', foreground='#000000')
-        self.activity_text.tag_configure('red', foreground='#ad0202')
-        self.activity_text.tag_configure('green', foreground='#009685')
-        self.activity_text.tag_configure('center', justify='center')
     
     def apply_filters(self):
         self.current_filters['username'] = '' if self.username_filter_entry.get() == 'Client' else self.username_filter_entry.get()
@@ -936,7 +929,7 @@ class BetRuns:
 
                 for attempt in range(retry_attempts):
                     try:
-                        conn, cursor = get_database()
+                        conn, cursor = database_manager.get_connection()
                         if conn is not None and cursor is not None:
                             break
                     except Exception as e:
@@ -1013,9 +1006,12 @@ class BetRuns:
                 selection_name = selection.split(' - ')[1] if ' - ' in selection else selection
         
                 matched_odds = None
-                for om_sel in todays_oddsmonkey_selections.values():
-                    if selection_name == om_sel[0]:
-                        matched_odds = float(om_sel[1])
+                for om_event, om_selections in todays_oddsmonkey_selections.items():
+                    for om_sel in om_selections:
+                        if selection_name == om_sel[0]:
+                            matched_odds = float(om_sel[1])
+                            break
+                    if matched_odds is not None:
                         break
         
                 if matched_odds is not None:
@@ -1055,7 +1051,7 @@ class BetRuns:
                     self.runs_text.insert(tk.END, 'Enhanced Place Race\n', "oddsmonkey")
                 
                 self.runs_text.insert(tk.END, f"\n")
-
+    
         self.runs_text.config(state=tk.DISABLED)
 
     def initialize_text_tags(self):
@@ -1325,7 +1321,6 @@ class RaceUpdaton:
         try:
             if api_data:
                 today = now.strftime('%A')
-                print(today)
                 tomorrow = (now + timedelta(days=1)).strftime('%A')
                 morning_finished = False
     
@@ -1333,7 +1328,7 @@ class RaceUpdaton:
                     for event in api_data:
                         if today in event['eventName']:
                             for meeting in event['meetings']:
-                                if search_course == meeting['meetinName']:
+                                if search_course == meeting['meetinName'] or course == meeting['meetinName']:
                                     all_results = all(race['status'] == 'Result' for race in meeting['events'])
                                     if all_results:
                                         morning_finished = True
@@ -1858,7 +1853,7 @@ class Notebook:
 
     def create_daily_report(self):
         try:
-            conn, cursor = get_database()
+            conn, cursor = database_manager.get_connection()
             _, _, _, reporting_data = access_data()
 
             time = datetime.now()
@@ -2264,7 +2259,7 @@ class Notebook:
     
     def create_monthly_report(self):
         try:
-            conn, cursor = get_database()
+            conn, cursor = database_manager.get_connection()
             report_output = ""
         
             # Get today's date
@@ -2372,7 +2367,7 @@ class Notebook:
 
     def create_client_report(self, client_id):
         try:
-            conn, cursor = get_database()
+            conn, cursor = database_manager.get_connection()
             client_id = client_id.upper()
             
             # Get the current date in string format
@@ -2729,304 +2724,304 @@ class Notebook:
         self.progress_label.config(text=f"---")
         self.report_ticket.config(state="disabled")
 
-    def create_rg_report(self):
+    # def create_rg_report(self):
 
-        data = get_database()
-        user_scores = {}
-        virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
+    #     data = get_database()
+    #     user_scores = {}
+    #     virtual_events = ['Portman Park', 'Sprintvalley', 'Steepledowns', 'Millersfield', 'Brushwood']
 
-        self.progress["maximum"] = len(data)
-        self.progress["value"] = 0
+    #     self.progress["maximum"] = len(data)
+    #     self.progress["value"] = 0
 
-        for bet in data:
-            self.progress["value"] += 1
+    #     for bet in data:
+    #         self.progress["value"] += 1
 
-            wager_type = bet.get('type', '').lower()
-            if wager_type == 'bet':
-                details = bet.get('details', {})
-                bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
-                customer_reference = bet.get('customer_ref', '')
-                stake = float(details.get('unit_stake', '£0').replace('£', '').replace(',', ''))
+    #         wager_type = bet.get('type', '').lower()
+    #         if wager_type == 'bet':
+    #             details = bet.get('details', {})
+    #             bet_time = datetime.strptime(bet.get('time', ''), "%H:%M:%S")
+    #             customer_reference = bet.get('customer_ref', '')
+    #             stake = float(details.get('unit_stake', '£0').replace('£', '').replace(',', ''))
 
-                if customer_reference not in user_scores:
-                    user_scores[customer_reference] = {
-                        'bets': [],
-                        'odds': [],
-                        'total_bets': 0,
-                        'score': 0,
-                        'average_stake': 0,
-                        'max_stake': 0,
-                        'min_stake': float('inf'),
-                        'deposits': [],  # New field for storing deposits
-                        'min_deposit': None,  # Initialize to None
-                        'max_deposit': 0,
-                        'total_deposit': 0,
-                        'total_stake': 0,
-                        'virtual_bets': 0,
-                        'early_bets': 0,
-                        'scores': {
-                            'num_bets': 0,
-                            'long_period': 0,
-                            'stake_increase': 0,
-                            'high_total_stake': 0,
-                            'virtual_events': 0,
-                            'chasing_losses': 0,
-                            'early_hours': 0,
-                            'high_deposit_total': 0,
-                            'frequent_deposits': 0,
-                            'increasing_deposits': 0,
-                            'changed_payment_type': 0,
-                    }
-                }
+    #             if customer_reference not in user_scores:
+    #                 user_scores[customer_reference] = {
+    #                     'bets': [],
+    #                     'odds': [],
+    #                     'total_bets': 0,
+    #                     'score': 0,
+    #                     'average_stake': 0,
+    #                     'max_stake': 0,
+    #                     'min_stake': float('inf'),
+    #                     'deposits': [],  # New field for storing deposits
+    #                     'min_deposit': None,  # Initialize to None
+    #                     'max_deposit': 0,
+    #                     'total_deposit': 0,
+    #                     'total_stake': 0,
+    #                     'virtual_bets': 0,
+    #                     'early_bets': 0,
+    #                     'scores': {
+    #                         'num_bets': 0,
+    #                         'long_period': 0,
+    #                         'stake_increase': 0,
+    #                         'high_total_stake': 0,
+    #                         'virtual_events': 0,
+    #                         'chasing_losses': 0,
+    #                         'early_hours': 0,
+    #                         'high_deposit_total': 0,
+    #                         'frequent_deposits': 0,
+    #                         'increasing_deposits': 0,
+    #                         'changed_payment_type': 0,
+    #                 }
+    #             }
 
-                # Add the bet to the user's list of bets
-                user_scores[customer_reference]['bets'].append((bet_time.strftime("%H:%M:%S"), stake))
+    #             # Add the bet to the user's list of bets
+    #             user_scores[customer_reference]['bets'].append((bet_time.strftime("%H:%M:%S"), stake))
 
-                # Add the odds to the user's list of odds
-                selections = details.get('selections', [])
-                for selection in selections:
-                    odds = selection[1]
-                    if isinstance(odds, str):
-                        if odds.lower() == 'evs':
-                            odds = 2.0
-                        elif odds.lower() == 'sp':
-                            continue
-                        else:
-                            try:
-                                odds = float(odds)
-                            except ValueError:
-                                continue
-                    user_scores[customer_reference]['odds'].append(odds)
-                    if any(event in selection[0] for event in virtual_events):
-                        user_scores[customer_reference]['virtual_bets'] += 1
-                        break
+    #             # Add the odds to the user's list of odds
+    #             selections = details.get('selections', [])
+    #             for selection in selections:
+    #                 odds = selection[1]
+    #                 if isinstance(odds, str):
+    #                     if odds.lower() == 'evs':
+    #                         odds = 2.0
+    #                     elif odds.lower() == 'sp':
+    #                         continue
+    #                     else:
+    #                         try:
+    #                             odds = float(odds)
+    #                         except ValueError:
+    #                             continue
+    #                 user_scores[customer_reference]['odds'].append(odds)
+    #                 if any(event in selection[0] for event in virtual_events):
+    #                     user_scores[customer_reference]['virtual_bets'] += 1
+    #                     break
 
-                # Increase the total number of bets
-                user_scores[customer_reference]['total_bets'] += 1
+    #             # Increase the total number of bets
+    #             user_scores[customer_reference]['total_bets'] += 1
 
-                # Update the total stake
-                user_scores[customer_reference]['total_stake'] += stake
+    #             # Update the total stake
+    #             user_scores[customer_reference]['total_stake'] += stake
 
-                # Skip this iteration if the user has placed fewer than 6 bets
-                if len(user_scores[customer_reference]['bets']) < 6:
-                    continue
+    #             # Skip this iteration if the user has placed fewer than 6 bets
+    #             if len(user_scores[customer_reference]['bets']) < 6:
+    #                 continue
 
-                # Update the max and min stakes
-                user_scores[customer_reference]['max_stake'] = max(user_scores[customer_reference]['max_stake'], stake)
-                user_scores[customer_reference]['min_stake'] = min(user_scores[customer_reference]['min_stake'], stake)
+    #             # Update the max and min stakes
+    #             user_scores[customer_reference]['max_stake'] = max(user_scores[customer_reference]['max_stake'], stake)
+    #             user_scores[customer_reference]['min_stake'] = min(user_scores[customer_reference]['min_stake'], stake)
 
-                # Calculate the new average stake
-                total_stake = sum(stake for _, stake in user_scores[customer_reference]['bets'])
-                user_scores[customer_reference]['average_stake'] = total_stake / len(user_scores[customer_reference]['bets'])
+    #             # Calculate the new average stake
+    #             total_stake = sum(stake for _, stake in user_scores[customer_reference]['bets'])
+    #             user_scores[customer_reference]['average_stake'] = total_stake / len(user_scores[customer_reference]['bets'])
 
-                # Add a point if the user has placed more than 10 bets
-                if len(user_scores[customer_reference]['bets']) > 10 and user_scores[customer_reference]['scores']['num_bets'] == 0:
-                    user_scores[customer_reference]['scores']['num_bets'] = 1
+    #             # Add a point if the user has placed more than 10 bets
+    #             if len(user_scores[customer_reference]['bets']) > 10 and user_scores[customer_reference]['scores']['num_bets'] == 0:
+    #                 user_scores[customer_reference]['scores']['num_bets'] = 1
 
-                # Add a point if the user has been gambling for a long period of time
-                first_bet_time = datetime.strptime(user_scores[customer_reference]['bets'][0][0], "%H:%M:%S")
-                if (bet_time - first_bet_time).total_seconds() > 2 * 60 * 60 and user_scores[customer_reference]['scores']['long_period'] == 0:  # 2 hours
-                    user_scores[customer_reference]['scores']['long_period'] = 1
+    #             # Add a point if the user has been gambling for a long period of time
+    #             first_bet_time = datetime.strptime(user_scores[customer_reference]['bets'][0][0], "%H:%M:%S")
+    #             if (bet_time - first_bet_time).total_seconds() > 2 * 60 * 60 and user_scores[customer_reference]['scores']['long_period'] == 0:  # 2 hours
+    #                 user_scores[customer_reference]['scores']['long_period'] = 1
 
-                # Add a point if the user has increased their stake over the average
-                half = len(user_scores[customer_reference]['bets']) // 2
-                first_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][:half]]
-                second_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][half:]]
-                if len(first_half_stakes) > 0 and len(second_half_stakes) > 0:
-                    first_half_avg = sum(first_half_stakes) / len(first_half_stakes)
-                    second_half_avg = sum(second_half_stakes) / len(second_half_stakes)
-                    if second_half_avg > first_half_avg and user_scores[customer_reference]['scores']['stake_increase'] == 0:
-                        user_scores[customer_reference]['scores']['stake_increase'] = 1
+    #             # Add a point if the user has increased their stake over the average
+    #             half = len(user_scores[customer_reference]['bets']) // 2
+    #             first_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][:half]]
+    #             second_half_stakes = [stake for _, stake in user_scores[customer_reference]['bets'][half:]]
+    #             if len(first_half_stakes) > 0 and len(second_half_stakes) > 0:
+    #                 first_half_avg = sum(first_half_stakes) / len(first_half_stakes)
+    #                 second_half_avg = sum(second_half_stakes) / len(second_half_stakes)
+    #                 if second_half_avg > first_half_avg and user_scores[customer_reference]['scores']['stake_increase'] == 0:
+    #                     user_scores[customer_reference]['scores']['stake_increase'] = 1
 
-                # Add a point if the user's total stake is over £1000
-                if user_scores[customer_reference]['total_stake'] > 1000 and user_scores[customer_reference]['scores']['high_total_stake'] == 0:
-                    user_scores[customer_reference]['scores']['high_total_stake'] = 1
+    #             # Add a point if the user's total stake is over £1000
+    #             if user_scores[customer_reference]['total_stake'] > 1000 and user_scores[customer_reference]['scores']['high_total_stake'] == 0:
+    #                 user_scores[customer_reference]['scores']['high_total_stake'] = 1
 
-                # Add a point if the user has placed a bet on a virtual event
-                if user_scores[customer_reference]['virtual_bets'] > 0 and user_scores[customer_reference]['scores']['virtual_events'] == 0:
-                    user_scores[customer_reference]['scores']['virtual_events'] = 1
+    #             # Add a point if the user has placed a bet on a virtual event
+    #             if user_scores[customer_reference]['virtual_bets'] > 0 and user_scores[customer_reference]['scores']['virtual_events'] == 0:
+    #                 user_scores[customer_reference]['scores']['virtual_events'] = 1
 
-                # Check if the bet is placed during early hours
-                if 0 <= bet_time.hour < 7:
-                    user_scores[customer_reference]['early_bets'] += 1
+    #             # Check if the bet is placed during early hours
+    #             if 0 <= bet_time.hour < 7:
+    #                 user_scores[customer_reference]['early_bets'] += 1
 
 
-        now_local = datetime.now(timezone('Europe/London'))
-        today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
+    #     now_local = datetime.now(timezone('Europe/London'))
+    #     today_filename = f'logs/depositlogs/deposits_{now_local.strftime("%Y-%m-%d")}.json'
 
-        # Load the existing messages from the JSON file for today's date
-        if os.path.exists(today_filename):
-            with open(today_filename, 'r') as f:
-                deposits = json.load(f)
+    #     # Load the existing messages from the JSON file for today's date
+    #     if os.path.exists(today_filename):
+    #         with open(today_filename, 'r') as f:
+    #             deposits = json.load(f)
             
-        # Create a dictionary to store deposit information for each user
-        deposit_info = defaultdict(lambda: {'total': 0, 'times': [], 'amounts': [], 'types': set()})
+    #     # Create a dictionary to store deposit information for each user
+    #     deposit_info = defaultdict(lambda: {'total': 0, 'times': [], 'amounts': [], 'types': set()})
 
-        # Iterate over the deposits
-        for deposit in deposits:
-            username = deposit['Username'].upper()
-            amount = float(deposit['Amount'])
-            time = datetime.strptime(deposit['Time'], "%Y-%m-%d %H:%M:%S")
-            type_ = deposit['Type']
+    #     # Iterate over the deposits
+    #     for deposit in deposits:
+    #         username = deposit['Username'].upper()
+    #         amount = float(deposit['Amount'])
+    #         time = datetime.strptime(deposit['Time'], "%Y-%m-%d %H:%M:%S")
+    #         type_ = deposit['Type']
 
-            # Check if the user exists in the user_scores dictionary
-            if username not in user_scores:
-                user_scores[username] = {
-                    'bets': [],
-                    'odds': [],
-                    'total_bets': 0,
-                    'score': 0,
-                    'average_stake': 0,
-                    'max_stake': 0,
-                    'min_stake': float('inf'),
-                    'deposits': [],  # New field for storing deposits
-                    'min_deposit': None,  # Initialize to None
-                    'max_deposit': 0,
-                    'total_deposit': 0,
-                    'total_stake': 0,
-                    'virtual_bets': 0,
-                    'early_bets': 0,
-                    'scores': {
-                        'num_bets': 0,
-                        'long_period': 0,
-                        'stake_increase': 0,
-                        'high_total_stake': 0,
-                        'virtual_events': 0,
-                        'chasing_losses': 0,
-                        'early_hours': 0,
-                        'high_deposit_total': 0,
-                        'frequent_deposits': 0,
-                        'increasing_deposits': 0,
-                        'changed_payment_type': 0,
-                    }
-                }
+    #         # Check if the user exists in the user_scores dictionary
+    #         if username not in user_scores:
+    #             user_scores[username] = {
+    #                 'bets': [],
+    #                 'odds': [],
+    #                 'total_bets': 0,
+    #                 'score': 0,
+    #                 'average_stake': 0,
+    #                 'max_stake': 0,
+    #                 'min_stake': float('inf'),
+    #                 'deposits': [],  # New field for storing deposits
+    #                 'min_deposit': None,  # Initialize to None
+    #                 'max_deposit': 0,
+    #                 'total_deposit': 0,
+    #                 'total_stake': 0,
+    #                 'virtual_bets': 0,
+    #                 'early_bets': 0,
+    #                 'scores': {
+    #                     'num_bets': 0,
+    #                     'long_period': 0,
+    #                     'stake_increase': 0,
+    #                     'high_total_stake': 0,
+    #                     'virtual_events': 0,
+    #                     'chasing_losses': 0,
+    #                     'early_hours': 0,
+    #                     'high_deposit_total': 0,
+    #                     'frequent_deposits': 0,
+    #                     'increasing_deposits': 0,
+    #                     'changed_payment_type': 0,
+    #                 }
+    #             }
 
-            # Update the user's deposit information
-            deposit_info[username]['total'] += amount
-            deposit_info[username]['times'].append(time)
-            deposit_info[username]['amounts'].append(amount)
-            deposit_info[username]['types'].add(type_)
+    #         # Update the user's deposit information
+    #         deposit_info[username]['total'] += amount
+    #         deposit_info[username]['times'].append(time)
+    #         deposit_info[username]['amounts'].append(amount)
+    #         deposit_info[username]['types'].add(type_)
 
-            user_scores[username]['deposits'].append(amount)
+    #         user_scores[username]['deposits'].append(amount)
 
-            # Check if the user's total deposit amount is over £500
-            if deposit_info[username]['total'] > 500:
-                if username not in user_scores:
-                    user_scores[username] = {
-                        'scores': {
-                            'high_deposit_total': 0,
-                            # Initialize other fields as needed
-                        }
-                    }
-                user_scores[username]['scores']['high_deposit_total'] = 1
+    #         # Check if the user's total deposit amount is over £500
+    #         if deposit_info[username]['total'] > 500:
+    #             if username not in user_scores:
+    #                 user_scores[username] = {
+    #                     'scores': {
+    #                         'high_deposit_total': 0,
+    #                         # Initialize other fields as needed
+    #                     }
+    #                 }
+    #             user_scores[username]['scores']['high_deposit_total'] = 1
 
-            # Check if the user has deposited more than 4 times in an hour
-            deposit_info[username]['times'].sort()
-            for i in range(4, len(deposit_info[username]['times'])):
-                if (deposit_info[username]['times'][i] - deposit_info[username]['times'][i-4]).total_seconds() <= 3600:
-                    if username not in user_scores:
-                        user_scores[username] = {'scores': {'frequent_deposits': 0}}
-                    user_scores[username]['scores']['frequent_deposits'] = 1
-                    break
+    #         # Check if the user has deposited more than 4 times in an hour
+    #         deposit_info[username]['times'].sort()
+    #         for i in range(4, len(deposit_info[username]['times'])):
+    #             if (deposit_info[username]['times'][i] - deposit_info[username]['times'][i-4]).total_seconds() <= 3600:
+    #                 if username not in user_scores:
+    #                     user_scores[username] = {'scores': {'frequent_deposits': 0}}
+    #                 user_scores[username]['scores']['frequent_deposits'] = 1
+    #                 break
 
-            # Check if the user's deposits have increased more than twice
-            increases = 0
-            for i in range(2, len(deposit_info[username]['amounts'])):
-                if deposit_info[username]['amounts'][i] > deposit_info[username]['amounts'][i-1] > deposit_info[username]['amounts'][i-2]:
-                    increases += 1
-            if increases >= 2:
-                if username not in user_scores:
-                    user_scores[username] = {'scores': {'increasing_deposits': 0}}
-                user_scores[username]['scores']['increasing_deposits'] = 1
+    #         # Check if the user's deposits have increased more than twice
+    #         increases = 0
+    #         for i in range(2, len(deposit_info[username]['amounts'])):
+    #             if deposit_info[username]['amounts'][i] > deposit_info[username]['amounts'][i-1] > deposit_info[username]['amounts'][i-2]:
+    #                 increases += 1
+    #         if increases >= 2:
+    #             if username not in user_scores:
+    #                 user_scores[username] = {'scores': {'increasing_deposits': 0}}
+    #             user_scores[username]['scores']['increasing_deposits'] = 1
 
-            # Check if the user has changed payment type
-            if len(deposit_info[username]['types']) > 1:
-                if username not in user_scores:
-                    user_scores[username] = {'scores': {'changed_payment_type': 0}}
-                user_scores[username]['scores']['changed_payment_type'] = 1
+    #         # Check if the user has changed payment type
+    #         if len(deposit_info[username]['types']) > 1:
+    #             if username not in user_scores:
+    #                 user_scores[username] = {'scores': {'changed_payment_type': 0}}
+    #             user_scores[username]['scores']['changed_payment_type'] = 1
 
-        for username, info in user_scores.items():
-            if info['deposits']:  # Check if the list is not empty
-                info['min_deposit'] = min(info['deposits'])
-                info['max_deposit'] = max(info['deposits'])
-            else:
-                info['min_deposit'] = 0
-                info['max_deposit'] = 0
-            info['total_deposit'] = deposit_info[username]['total']
-
-
-        # After processing all bets, calculate the early hours score
-        for user, scores in user_scores.items():
-            if scores['early_bets'] > 3:
-                scores['scores']['early_hours'] = 1
-
-        # After processing all bets, calculate the chasing losses score
-        for user, scores in user_scores.items():
-            num_bets = len(scores['bets'])
-            if num_bets >= 5:  # Only calculate if the user has placed at least 5 bets
-                split_index = int(num_bets * 0.7)  # Calculate the index to split at 70%
-                early_odds = scores['odds'][:split_index]
-                late_odds = scores['odds'][split_index:]
-                if early_odds and late_odds:  # Check that both lists are not empty
-                    early_avg = sum(early_odds) / len(early_odds)
-                    late_avg = sum(late_odds) / len(late_odds)
-                    if late_avg - early_avg > 4:  # Set the threshold as needed
-                        scores['scores']['chasing_losses'] = 1
+    #     for username, info in user_scores.items():
+    #         if info['deposits']:  # Check if the list is not empty
+    #             info['min_deposit'] = min(info['deposits'])
+    #             info['max_deposit'] = max(info['deposits'])
+    #         else:
+    #             info['min_deposit'] = 0
+    #             info['max_deposit'] = 0
+    #         info['total_deposit'] = deposit_info[username]['total']
 
 
-        # Update the total score
-        for user, scores in user_scores.items():
-            scores['score'] = sum(scores['scores'].values())
+    #     # After processing all bets, calculate the early hours score
+    #     for user, scores in user_scores.items():
+    #         if scores['early_bets'] > 3:
+    #             scores['scores']['early_hours'] = 1
+
+    #     # After processing all bets, calculate the chasing losses score
+    #     for user, scores in user_scores.items():
+    #         num_bets = len(scores['bets'])
+    #         if num_bets >= 5:  # Only calculate if the user has placed at least 5 bets
+    #             split_index = int(num_bets * 0.7)  # Calculate the index to split at 70%
+    #             early_odds = scores['odds'][:split_index]
+    #             late_odds = scores['odds'][split_index:]
+    #             if early_odds and late_odds:  # Check that both lists are not empty
+    #                 early_avg = sum(early_odds) / len(early_odds)
+    #                 late_avg = sum(late_odds) / len(late_odds)
+    #                 if late_avg - early_avg > 4:  # Set the threshold as needed
+    #                     scores['scores']['chasing_losses'] = 1
+
+
+    #     # Update the total score
+    #     for user, scores in user_scores.items():
+    #         scores['score'] = sum(scores['scores'].values())
                 
-        # Filter out the users who have a score of 0
-        user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
+    #     # Filter out the users who have a score of 0
+    #     user_scores = {user: score for user, score in user_scores.items() if score['score'] > 0}
 
-        return user_scores
+    #     return user_scores
     
-    def update_rg_report(self):
-        print("Updating RG Report")
-        user_scores = self.create_rg_report()
-        print("RG Report Updated")
-        user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
-        key_descriptions = {
-            'num_bets': 'High Number of Bets',
-            'stake_increase': 'Stakes Increasing',
-            'virtual_events': 'Bets on Virtual events',
-            'chasing_losses': 'Odds Increasing, Possibly Chasing Losses',
-            'high_total_stake': 'High Total Stake',
-            'early_hours': 'Active in the Early Hours',
-            'high_deposit_total': 'Total Deposits Over £500',
-            'frequent_deposits': 'More than 4 Deposits in an Hour',
-            'increasing_deposits': 'Deposits Increasing',
-            'changed_payment_type': 'Changed Payment Type'
-        }
+    # def update_rg_report(self):
+    #     print("Updating RG Report")
+    #     user_scores = self.create_rg_report()
+    #     print("RG Report Updated")
+    #     user_scores = dict(sorted(user_scores.items(), key=lambda item: item[1]['score'], reverse=True))
+    #     key_descriptions = {
+    #         'num_bets': 'High Number of Bets',
+    #         'stake_increase': 'Stakes Increasing',
+    #         'virtual_events': 'Bets on Virtual events',
+    #         'chasing_losses': 'Odds Increasing, Possibly Chasing Losses',
+    #         'high_total_stake': 'High Total Stake',
+    #         'early_hours': 'Active in the Early Hours',
+    #         'high_deposit_total': 'Total Deposits Over £500',
+    #         'frequent_deposits': 'More than 4 Deposits in an Hour',
+    #         'increasing_deposits': 'Deposits Increasing',
+    #         'changed_payment_type': 'Changed Payment Type'
+    #     }
 
-        report_output = ""
-        report_output += f"\tRG SCREENER\n\n"
+    #     report_output = ""
+    #     report_output += f"\tRG SCREENER\n\n"
 
-        for user, scores in user_scores.items():
-            if scores['score'] > 1:
-                report_output += f"\n{user} - Risk Score: {scores['score']}\n"
-                report_output += f"This score is due to:\n"
-                for key, value in scores['scores'].items():
-                    if value == 1:
-                        report_output += f"- {key_descriptions.get(key, key)}\n"
-                report_output += f"\nBets: {scores['total_bets']}  |  "
-                report_output += f"Total Stake: £{scores['total_stake']:.2f}\n"
-                report_output += f"Avg Stake: £{scores['average_stake']:.2f}  |  "
-                report_output += f"Max: £{scores['max_stake']:.2f}  |  "
-                report_output += f"Min: £{scores['min_stake']:.2f}\n"
-                report_output += f"Virtual Bets: {scores['virtual_bets']}  |  "
-                report_output += f"Early Hours Bets: {scores['early_bets']}\n"
-                report_output += f"Deposits: £{scores['total_deposit']:.2f}  |  "
-                report_output += f"Max: £{scores['max_deposit']:.2f}  |  "
-                report_output += f"Min: £{scores['min_deposit']:.2f}\n"
-                report_output += "\n"
+    #     for user, scores in user_scores.items():
+    #         if scores['score'] > 1:
+    #             report_output += f"\n{user} - Risk Score: {scores['score']}\n"
+    #             report_output += f"This score is due to:\n"
+    #             for key, value in scores['scores'].items():
+    #                 if value == 1:
+    #                     report_output += f"- {key_descriptions.get(key, key)}\n"
+    #             report_output += f"\nBets: {scores['total_bets']}  |  "
+    #             report_output += f"Total Stake: £{scores['total_stake']:.2f}\n"
+    #             report_output += f"Avg Stake: £{scores['average_stake']:.2f}  |  "
+    #             report_output += f"Max: £{scores['max_stake']:.2f}  |  "
+    #             report_output += f"Min: £{scores['min_stake']:.2f}\n"
+    #             report_output += f"Virtual Bets: {scores['virtual_bets']}  |  "
+    #             report_output += f"Early Hours Bets: {scores['early_bets']}\n"
+    #             report_output += f"Deposits: £{scores['total_deposit']:.2f}  |  "
+    #             report_output += f"Max: £{scores['max_deposit']:.2f}  |  "
+    #             report_output += f"Min: £{scores['min_deposit']:.2f}\n"
+    #             report_output += "\n"
 
-        self.report_ticket.config(state='normal')
-        self.report_ticket.delete('1.0', tk.END)
-        self.report_ticket.insert(tk.END, report_output)
-        self.report_ticket.config(state='disabled')
+    #     self.report_ticket.config(state='normal')
+    #     self.report_ticket.delete('1.0', tk.END)
+    #     self.report_ticket.insert(tk.END, report_output)
+    #     self.report_ticket.config(state='disabled')
 
     def create_traders_report(self):
         self.progress_label.config(text="Retrieving database")
@@ -3037,7 +3032,7 @@ class Notebook:
         try:
             retry_attempts = 2
             for attempt in range(retry_attempts):
-                conn, cursor = get_database()
+                conn, cursor = database_manager.get_connection()
                 if conn is not None:
                     break
                 elif attempt < retry_attempts - 1:
@@ -3393,8 +3388,7 @@ class Settings:
         self.password_result_label.grid(row=0, column=1, padx=(5, 5))
 
     def fetch_and_save_events(self):
-        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetSportApiData?sportcode=f,s,N,t,m,G,C,K,v,R,r,l,I,D,j,S,q,a,p,T,e,k,K,E,b,A,Y,n,c,y,M,F'
-        
+        url = 'https://globalapi.geoffbanks.bet/api/Geoff/GetAntepostEvents'
         try:
             response = requests.get(url)
             response.raise_for_status() 
@@ -3416,10 +3410,10 @@ class Settings:
             messagebox.showerror("Error", "Events file not found.")
             return None
 
-        existing_data_map = {event['eventName']: event for event in existing_data}
+        existing_data_map = {event['EventName']: event for event in existing_data}
 
         for event in data:
-            existing_event = existing_data_map.get(event['eventName'])
+            existing_event = existing_data_map.get(event['EventName'])
             if existing_event:
                 event['lastUpdate'] = existing_event.get('lastUpdate', '-')
                 event['user'] = existing_event.get('user', '-')
@@ -3458,17 +3452,17 @@ class Settings:
             tree.pack(fill=tk.BOTH, expand=True)
             tree_scroll.config(command=tree.yview)
     
-            tree["columns"] = ("eventFile", "numChildren", "eventDate", "lastUpdate", "user")
+            tree["columns"] = ("EventCode", "numChildren", "EventDate", "lastUpdate", "user")
             tree.column("#0", width=200, minwidth=200)
-            tree.column("eventFile", width=50, minwidth=50)
+            tree.column("EventCode", width=50, minwidth=50)
             tree.column("numChildren", width=50, minwidth=50)
-            tree.column("eventDate", width=50, minwidth=50)
+            tree.column("EventDate", width=50, minwidth=50)
             tree.column("lastUpdate", width=120, minwidth=120)
             tree.column("user", width=10, minwidth=10)
             tree.heading("#0", text="Event Name", anchor=tk.W)
-            tree.heading("eventFile", text="Event File", anchor=tk.W)
+            tree.heading("EventCode", text="Event File", anchor=tk.W)
             tree.heading("numChildren", text="Markets", anchor=tk.W)
-            tree.heading("eventDate", text="Event Date", anchor=tk.W)
+            tree.heading("EventDate", text="Event Date", anchor=tk.W)
             tree.heading("lastUpdate", text="Last Update", anchor=tk.W)
             tree.heading("user", text="User", anchor=tk.W)
     
@@ -3481,8 +3475,8 @@ class Settings:
                     item = tree.item(item_id)
                     event_name = item['text']
                     for event in data:
-                        if event['eventName'] == event_name:
-                            markets = len(event["meetings"])
+                        if event['EventName'] == event_name:
+                            markets = len(event["Meetings"])
                             original_last_update = event.get('lastUpdate', None)
                             if original_last_update and original_last_update != '-':
                                 try:
@@ -3493,7 +3487,7 @@ class Settings:
                                 original_last_update = None
                             event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                             event['user'] = user
-                            if event['meetings'][0]['eventFile'][3:5].lower() == 'ap':
+                            if event['Meetings'][0]['EventCode'][3:5].lower() == 'ap':
                                 antepost = True
                             else:
                                 antepost = False
@@ -3509,24 +3503,12 @@ class Settings:
             action_button.pack(pady=10)
             update_events_label = ttk.Label(live_events_frame, text="Select an event (or multiple) and click 'Update Event' to log latest refresh.", wraplength=600)
             update_events_label.pack(pady=5)
-            not_included_events_label = ttk.Label(live_events_frame, text="Not included: AUS Soccer, Bowls, GAA, US Motorsport, Numbers (49s), Special/Other, Virtuals.", wraplength=600)
-            not_included_events_label.pack(pady=2)
-    
-            ## Run populate_tree every 5 seconds to keep the info live
-            def periodic_update():
-                data = self.fetch_and_save_events()
-                print("refreshing the events tree")
-                if data:
-                    sorted_data = self.sort_events(data)
-                    self.populate_tree(tree, sorted_data)
-                live_events_window.after(20000, periodic_update)
-            
-            periodic_update()
-    
+
         else:
             messagebox.showerror("Error", "Failed to fetch events. Please tell Sam.")
 
     def log_update(self, event_name, markets, antepost, last_update_time, user):
+
         if last_update_time:
             log_time = last_update_time.strftime('%H:%M')
         else:
@@ -3604,17 +3586,17 @@ class Settings:
         tree.tag_configure('separator', background='lightblue')
     
         # Separate antepost and non-antepost events
-        antepost_events = [event for event in sorted_data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
-        non_antepost_events = [event for event in sorted_data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+        antepost_events = [event for event in sorted_data if len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in sorted_data if not (len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap')]
     
         # Insert separator for antepost events
         tree.insert("", "end", text="-- Antepost --", values=("", "", "", "", ""), tags=('separator',))
     
         # Insert antepost events
         for event in antepost_events:
-            event_name = event["eventName"]
-            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
-            num_children = len(event["meetings"])
+            event_name = event["EventName"]
+            event_file = event["Meetings"][0]["EventCode"] if event["Meetings"] else ""
+            num_children = len(event["Meetings"])
             last_update = event.get("lastUpdate", "-")
             user = event.get("user", "-")
     
@@ -3625,9 +3607,9 @@ class Settings:
                 tag = ''
     
             parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user), tags=(tag,))
-            for meeting in event["meetings"]:
-                meeting_name = meeting["meetinName"]
-                event_date = meeting["eventDate"]
+            for meeting in event["Meetings"]:
+                meeting_name = meeting["EventName"]
+                event_date = meeting["EventDate"]
                 tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
     
         # Insert separator for non-antepost events
@@ -3635,9 +3617,9 @@ class Settings:
     
         # Insert non-antepost events
         for event in non_antepost_events:
-            event_name = event["eventName"]
-            event_file = event["meetings"][0]["eventFile"] if event["meetings"] else ""
-            num_children = len(event["meetings"])
+            event_name = event["EventName"]
+            event_file = event["Meetings"][0]["EventCode"] if event["Meetings"] else ""
+            num_children = len(event["Meetings"])
             last_update = event.get("lastUpdate", "-")
             user = event.get("user", "-")
     
@@ -3648,14 +3630,14 @@ class Settings:
                 tag = ''
     
             parent_id = tree.insert("", "end", text=event_name, values=(event_file, num_children, "", last_update, user), tags=(tag,))
-            for meeting in event["meetings"]:
-                meeting_name = meeting["meetinName"]
-                event_date = meeting["eventDate"]
+            for meeting in event["Meetings"]:
+                meeting_name = meeting["EventName"]
+                event_date = meeting["EventDate"]
                 tree.insert(parent_id, "end", text=meeting_name, values=("", "", event_date, "", ""))
 
     def sort_events(self, data):
-        antepost_events = [event for event in data if len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap']
-        non_antepost_events = [event for event in data if not (len(event["meetings"]) > 0 and event["meetings"][0]["eventFile"][3:5].lower() == 'ap')]
+        antepost_events = [event for event in data if len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap']
+        non_antepost_events = [event for event in data if not (len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap')]
         return antepost_events + non_antepost_events
     
     def generate_random_string(self):
@@ -4329,14 +4311,14 @@ class ClientWizard:
                 ttk.Label(self.left_frame, text="No exclusion/deactivation requests.", anchor='center', justify='center', width=34).grid(row=0, column=1, padx=10, pady=2)
     
             for i, request in enumerate(requests):
-                restriction = restriction_mapping.get(request['Restriction'], request['Restriction'])
+                restriction = restriction_mapping.get(request['type'], request['type'])
     
-                length = request['Length'] if request['Length'] not in [None, 'Null'] else ''
+                length = request['period'] if request['period'] not in [None, 'Null'] else ''
     
                 tick_button = ttk.Button(self.left_frame, text="✔", command=lambda request=request: handle_request(request), width=2, cursor="hand2")
                 tick_button.grid(row=i, column=0, padx=3, pady=2)
     
-                request_label = ttk.Label(self.left_frame, text=f"{restriction} | {request['Username']} | {length}")
+                request_label = ttk.Label(self.left_frame, text=f"{restriction} | {request['username']} | {length}")
                 request_label.grid(row=i, column=1, padx=10, pady=2, sticky="w")
     
         frame = ttk.Frame(self.wizard_notebook)
@@ -4528,6 +4510,7 @@ class BetViewerApp:
         options_menu.add_command(label="Set User Initials", command=self.user_login, foreground="#000000", background="#ffffff")
         # options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
         options_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
+        options_menu.add_command(label="Apply Bonus Points", command=self.apply_bonus_points, foreground="#000000", background="#ffffff")
         options_menu.add_separator(background="#ffffff")
         options_menu.add_command(label="Exit", command=self.root.quit, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Options", menu=options_menu)
@@ -4585,6 +4568,98 @@ class BetViewerApp:
         settings_frame = ttk.Frame(settings_window, style='Card')
         settings_frame.place(x=5, y=5, width=260, height=360)
         
+    def apply_bonus_points(self):
+        if user != 'SB' and user != 'DF':
+            print(user)
+            messagebox.showerror("Error", "You do not have permission to apply bonus points.")
+            return
+    
+        def submit_bonus():
+            selected_full_name = users_combobox.get()
+            points = points_entry.get()
+            if not selected_full_name or not points:
+                messagebox.showerror("Error", "Please select a user and enter the points.")
+                return
+    
+            try:
+                points = float(points)
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid number for points.")
+                return
+    
+            selected_user = None
+            for key, value in USER_NAMES.items():
+                if value == selected_full_name:
+                    selected_user = key
+                    break
+    
+            if not selected_user:
+                messagebox.showerror("Error", "Selected user not found.")
+                return
+    
+            now = datetime.now()
+            date_string = now.strftime('%d-%m-%Y')
+            time_string = now.strftime('%H:%M')
+            log_file = os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', f'update_log_{date_string}.txt')
+    
+            update = f"{time_string} - {selected_user} - {points:.2f}\n"
+            log_notification(f"{selected_user} received a bonus of {points:.2f} points from {user}", True)
+    
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r') as f:
+                        data = f.readlines()
+                except IOError as e:
+                    print(f"Error reading log file: {e}")
+                    data = []
+            else:
+                data = []
+    
+            bonus_index = None
+            for i, line in enumerate(data):
+                if line.strip() == "Bonus:":
+                    bonus_index = i
+                    break
+    
+            if bonus_index is not None:
+                # Insert the update under the existing "Bonus:" header
+                data.insert(bonus_index + 1, update)
+            else:
+                # Add a new "Bonus:" header and the update
+                data.append(f"\nBonus:\n")
+                data.append(update)
+    
+            try:
+                with open(log_file, 'w') as f:
+                    f.writelines(data)
+                print(f"Bonus points logged for {selected_user}")
+                messagebox.showinfo("Success", f"Bonus points logged for {selected_user}")
+                bonus_window.destroy()
+            except IOError as e:
+                print(f"Error writing to log file: {e}")
+                messagebox.showerror("Error", "Failed to log bonus points.")
+    
+        bonus_window = tk.Toplevel(root)
+        bonus_window.geometry("270x270")
+        bonus_window.title("Apply Bonus")
+        bonus_window.iconbitmap('src/splash.ico')
+        screen_width = bonus_window.winfo_screenwidth()
+        bonus_window.geometry(f"+{screen_width - 350}+50")
+        bonus_frame = ttk.Frame(bonus_window, style='Card')
+        bonus_frame.place(x=5, y=5, width=260, height=260)
+    
+        user_label = ttk.Label(bonus_frame, text="Select User:")
+        user_label.pack(pady=5)
+        users_combobox = ttk.Combobox(bonus_frame, values=list(USER_NAMES.values()), state="readonly")
+        users_combobox.pack(pady=10)
+    
+        points_label = ttk.Label(bonus_frame, text="Enter Points:")
+        points_label.pack(pady=5)
+        points_entry = ttk.Entry(bonus_frame)
+        points_entry.pack(pady=5)
+    
+        submit_button = ttk.Button(bonus_frame, text="Submit", command=submit_bonus)
+        submit_button.pack(pady=20)
     def user_notification(self):
         user_notification()
 
