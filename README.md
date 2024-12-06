@@ -1,6 +1,6 @@
 # Bet Monitor
 Live bet monitor & feed built for online gambling operator.
-The source code is not available to the public for security purposes, however potential employers are welcome to enquire and I can give live demonstrations.
+Potential employers are welcome to enquire and I can give live demonstrations.
 
 
 - Previous monitoring program outdated, errored and unhelpful.
