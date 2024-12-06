@@ -34,7 +34,7 @@ The solution was to create an updated version of this that would:
 # Bet Viewer
 # Not displaying real data - in test mode to show function of the UI.  
 
-![image](https://github.com/user-attachments/assets/175dce39-d699-4ac0-95f2-5830f81cacc5)
+![image](https://github.com/user-attachments/assets/a5d99c6c-2f35-492f-8c39-cd6a0fba2b84)
 
 
 # Bet Feed
@@ -42,7 +42,6 @@ The solution was to create an updated version of this that would:
 - Colours to signify client 'Risk', as well as to make it easier to get 'at a glance' a snapshot of activity.
 - If users are backing certain selections that are current plays on Matched Betting sites, it will signify this next to the wager. 
 - Filtering options also available as to alter the live feed output, and to assist with clients' queries wanting clarity on their recent activity.
-![image](https://github.com/user-attachments/assets/434b87a7-69b9-4bf6-b097-aac3ed799557)
 
 # Activity Status
 - Shows current bets/knockbacks/knockback%. Displays comparrison to the values at the same time the previous day (can be altered to compare to previous week)
@@ -53,52 +52,35 @@ The solution was to create an updated version of this that would:
 - Selections taking lots of wagers in a short period can be telling, and means action to alter the price must be taken.
 - Uses same colourscheme as in the Bet Feed for outlining clients by risk.
   
-![image](https://github.com/user-attachments/assets/ffc2e1d0-35f9-4245-96a3-6b00d8e258bb)
-
 # Race Updation
 - Small module to help traders keep on top of manual checks on liabilities for racing.
   
-![image](https://github.com/user-attachments/assets/0b0483eb-0ebe-4938-bfb0-73aef35a3abb)
-
 # Staff Feed
 - Staff Feed is a live feed of staff activity, assisting communication and efficiency.
 - It will occasionally kick out news information on sporting events from API's, as well as company notices or reminders that are important to tend to.
 - A points system is in place, whereby staff are awarded a score for work done, and a fun ceremony at the end of each month to award the best traders.
   
-![image](https://github.com/user-attachments/assets/40d881d0-4225-496d-a9fe-eda631f99148)
-
 # Reporting
 - Reporting module that can output Daily, Monthly reports on betting activity.
 - 'Screeners' to find trading activity, as well as outline any users showing signs of irresponsible gambling for compliance teams.
 - A Staff Report to show who's been working the hardest, as well as some other fun info on staff activity.
   
-![image](https://github.com/user-attachments/assets/7f92949d-ba57-4af5-a496-f8edc0e0018a)
-![image](https://github.com/user-attachments/assets/c8969b76-63ce-480f-9800-72c838e8a837)
-
 # Factoring Log, Freebet Log, Popup Log
 - Apply and log changes to client account terms, apply and log Freebets, and display responsible gambling popups to certain clients from the tool.
   
-![image](https://github.com/user-attachments/assets/096bcaf1-86f6-4dbf-aea9-abacce2fccc4)
-
 # Client Reporting & Modifications
 - Center for making changes to client account terms, applying freebets and showing responsible gambling popups to certain clients.
 - All links to various API for processing and notifying clients via email.
   
-![image](https://github.com/user-attachments/assets/0dfee5a9-0d8e-4126-9505-0b977a769744)
-
 
 # Live Events
 - Displays all current live events and their last manual check on liabilities for tracking.
   
-![image](https://github.com/user-attachments/assets/875f5755-23e8-4e4b-b5ce-49e3abb84eb1)
-
 # Next 3 Races
 - Shows next 3 Horses and Greyhound races that are due to go off, and their current status.
 - Helps to track what's coming up, and assist customer service taking phone bets.
 - Can switch between UK/IRISH Racing and ALL (inc. international)
   
-![image](https://github.com/user-attachments/assets/bebb3522-7bf1-4412-9304-f605a06c70ba)
-
 # Bet Processor
 
 Bet Processor UI:
@@ -108,8 +90,4 @@ User data and any other sensitive data has been blanked out, hence gaps.
 ![image](https://github.com/user-attachments/assets/b8e3def8-de9b-47f7-85d8-9bf8c389ca13)
   
   A simple UI containing a scroll text widget outputting processed bets, button to set the folder containing bet files and 'reprocess' button to delete and re-process all bet files from the folder in case of error.
-
-
-Data sources (updated 06/04/2024)
-![External Sources](https://github.com/user-attachments/assets/169e8616-2c45-4b9c-8192-5a95c1ebf7df)
 
