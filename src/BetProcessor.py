@@ -61,6 +61,7 @@ USER_NAMES = {
     'MF': 'Mark'
 }
 
+ARCHIVE_DATABASE_PATH = 'archive_database.sqlite'
 LOCK_FILE_PATH = 'database.lock'
 last_processed_time = datetime.now()
 executor = ThreadPoolExecutor(max_workers=5)
@@ -501,7 +502,6 @@ def parse_sms_details(bet_text):
     sms_wager_text = sms_wager_text_match.group(1).strip() if sms_wager_text_match else None
 
     return wager_number, customer_reference, mobile_number, sms_wager_text
-
 
 
 ####################################################################################
@@ -1172,7 +1172,7 @@ class DataUpdater:
 
     def periodic_update(self):
         while True:
-            time.sleep(240) 
+            time.sleep(120) 
             self.run_get_data()
 
     def run_get_data(self):
@@ -1238,71 +1238,83 @@ class DataUpdater:
     def get_closures(self):
         closures = []
         label_ids = {}
-
+    
         with open(self.data_file_path, 'r') as f:
             existing_closures = json.load(f).get('closures', [])
-
+    
         completed_status = {closure['email_id']: closure.get('completed', False) for closure in existing_closures}
-
+    
         service = build('gmail', 'v1', credentials=self.creds)
-
+    
         results = service.users().labels().list(userId='me').execute()
         labels = results.get('labels', [])
-
+    
+        print("Available labels:", [label['name'] for label in labels])
+    
         for label_name in ['REPORTING/ACCOUNT DEACTIVATION', 'REPORTING/SELF EXCLUSION', 'REPORTING/TAKE A BREAK']:
             for label in labels:
                 if label['name'] == label_name:
                     label_ids[label_name] = label['id']
                     break
-
+            else:
+                label_ids[label_name] = None
+    
+        print("Label IDs:", label_ids)
+    
         for label_name, label_id in label_ids.items():
             if label_id is None:
                 print(f"Label '{label_name}' not found")
                 continue
-
+    
+            print(f"Fetching messages for label '{label_name}' with ID '{label_id}'")
             results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
             messages = results.get('messages', [])
-
-        for message in messages:
-            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-
-            timestamp = int(msg['internalDate']) // 1000  
-            date_time = datetime.fromtimestamp(timestamp)
-            date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
-
-            payload = msg['payload']
-            email_id = message['id']
-
-            parts = payload.get('parts')
-            if parts is not None:
-                part = parts[0]
-                data = part['body']['data']
-            else:
-                data = payload['body']['data']
-
-            data = data.replace("-", "+").replace("_", "/")
-            decoded_data = base64.b64decode(data)
-
-            soup = BeautifulSoup(decoded_data, "lxml")
-
-            name = soup.find('td', string='Name').find_next_sibling('td').text.strip()
-            username = soup.find('td', string='UserName').find_next_sibling('td').text.strip()
-            type_ = soup.find('td', string='Type').find_next_sibling('td').text.strip()
-            period = soup.find('td', string='Period').find_next_sibling('td').text.strip()
-
-            closure = {
-                'email_id': email_id,
-                'timestamp': date_time_str,
-                'name': name,
-                'username': username,
-                'type': type_,
-                'period': period,
-                'completed': completed_status.get(email_id, False)
-            }
-            closures.append(closure)
-        
-        print(closures)
-
+    
+            print(f"Found {len(messages)} messages for label '{label_name}'")
+    
+            for message in messages:
+                try:
+                    msg = service.users().messages().get(userId='me', id=message['id']).execute()
+    
+                    timestamp = int(msg['internalDate']) // 1000  
+                    date_time = datetime.fromtimestamp(timestamp)
+                    date_time_str = date_time.strftime('%Y-%m-%d %H:%M:%S')
+    
+                    payload = msg['payload']
+                    email_id = message['id']
+    
+                    parts = payload.get('parts')
+                    if parts is not None:
+                        part = parts[0]
+                        data = part['body']['data']
+                    else:
+                        data = payload['body']['data']
+    
+                    data = data.replace("-", "+").replace("_", "/")
+                    decoded_data = base64.b64decode(data)
+    
+                    soup = BeautifulSoup(decoded_data, "lxml")
+    
+                    name = soup.find('td', string='Name').find_next_sibling('td').text.strip()
+                    username = soup.find('td', string='UserName').find_next_sibling('td').text.strip()
+                    type_ = soup.find('td', string='Type').find_next_sibling('td').text.strip()
+                    period = soup.find('td', string='Period').find_next_sibling('td').text.strip()
+    
+                    closure = {
+                        'email_id': email_id,
+                        'timestamp': date_time_str,
+                        'name': name,
+                        'username': username,
+                        'type': type_,
+                        'period': period,
+                        'completed': completed_status.get(email_id, False)
+                    }
+                    closures.append(closure)
+                except Exception as e:
+                    print(f"Error processing message {message['id']}: {e}")
+    
+        print("Closures:", closures)
+    
         return closures
 
     def get_vip_clients(self):
@@ -1516,8 +1528,11 @@ class Application(tk.Tk):
         self.reprocess_button = ttk.Button(self, text="Reprocess Bets", command=self.open_reprocess_window, style='TButton', width=20)
         self.reprocess_button.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
 
+        self.archive_button = ttk.Button(self, text="Archive", command=self.open_archive_window, style='TButton', width=20)
+        self.archive_button.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
+
         self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
-        self.set_path_button.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
+        self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='ew')
 
         self.bind('<Destroy>', self.on_destroy)
 
@@ -1530,6 +1545,96 @@ class Application(tk.Tk):
         new_folder_path = filedialog.askdirectory()
         if new_folder_path:
             path = new_folder_path
+
+    def open_archive_window(self):
+        self.archive_window = Toplevel(self)
+        self.archive_window.title("Archive")
+        self.archive_window.geometry("300x150")
+
+        ttk.Label(self.archive_window, text="Archive anything over 2 months old.").pack(pady=10)
+        
+
+        reprocess_button = ttk.Button(self.archive_window, text="Archive", command=self.archive_old_data)
+        reprocess_button.pack(pady=10)
+
+    def create_archive_database(self):
+        if not os.path.exists(ARCHIVE_DATABASE_PATH):
+            conn = sqlite3.connect(ARCHIVE_DATABASE_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS database (
+                    id TEXT PRIMARY KEY,
+                    time TEXT,
+                    type TEXT,
+                    customer_ref TEXT,
+                    text_request TEXT,
+                    error_message TEXT,
+                    requested_type TEXT,
+                    requested_stake REAL,
+                    selections TEXT,
+                    risk_category TEXT,
+                    bet_details TEXT,
+                    unit_stake REAL,
+                    total_stake REAL,
+                    bet_type TEXT,
+                    date TEXT,
+                    sports TEXT
+                )
+            """)
+            conn.commit()
+            conn.close()
+            print(f"Archive database created at {ARCHIVE_DATABASE_PATH}")
+
+    def archive_old_data(self):
+        try:
+            # Create the archive database if it does not exist
+            self.create_archive_database()
+
+            # Connect to the main and archive databases
+            main_conn = sqlite3.connect('wager_database.sqlite')
+            archive_conn = sqlite3.connect(ARCHIVE_DATABASE_PATH)
+            main_cursor = main_conn.cursor()
+            archive_cursor = archive_conn.cursor()
+
+            # Calculate the cutoff date (2 months ago)
+            cutoff_date = datetime.now() - timedelta(days=60)
+            cutoff_date_str = cutoff_date.strftime('%Y-%m-%d')
+
+            # Select data older than the cutoff date from the main database
+            main_cursor.execute("""
+                SELECT id, time, type, customer_ref, text_request, error_message, requested_type, requested_stake, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports
+                FROM database
+                WHERE DATE(substr(date, 7, 4) || '-' || substr(date, 4, 2) || '-' || substr(date, 1, 2)) < ?
+            """, (cutoff_date_str,))
+            old_data = main_cursor.fetchall()
+
+            # Insert the old data into the archive database
+            archive_cursor.executemany("""
+                INSERT INTO database (id, time, type, customer_ref, text_request, error_message, requested_type, requested_stake, selections, risk_category, bet_details, unit_stake, total_stake, bet_type, date, sports)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, old_data)
+            archive_conn.commit()
+
+            # Delete the old data from the main database
+            main_cursor.execute("""
+                DELETE FROM database
+                WHERE DATE(substr(date, 7, 4) || '-' || substr(date, 4, 2) || '-' || substr(date, 1, 2)) < ?
+            """, (cutoff_date_str,))
+            main_conn.commit()
+
+            # Reclaim unused space in the main database
+            main_cursor.execute("VACUUM")
+            main_conn.commit()
+
+            print(f"Archived {len(old_data)} records to {ARCHIVE_DATABASE_PATH}")
+
+        except Exception as e:
+            print(f"Error archiving old data: {e}")
+        finally:
+            self.archive_window.destroy()
+            main_conn.close()
+            archive_conn.close()
+
 
     def open_reprocess_window(self):
         top = Toplevel(self)
@@ -1544,6 +1649,7 @@ class Application(tk.Tk):
 
         reprocess_button = ttk.Button(top, text="Reprocess", command=lambda: self.start_reprocess(int(days_spinbox.get()), top))
         reprocess_button.grid(column=0, row=2, columnspan=2, padx=10, pady=10)
+
 
     def start_reprocess(self, days_back, window):
         process_thread = threading.Thread(target=reprocess_bets, args=(days_back, path, self))

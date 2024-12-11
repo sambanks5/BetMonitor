@@ -11,7 +11,6 @@ import os
 import threading
 import pyperclip
 import fasteners
-import subprocess
 import json
 import sqlite3
 import requests
@@ -25,14 +24,9 @@ from collections import defaultdict, Counter
 from dateutil.relativedelta import relativedelta
 from google.oauth2 import service_account
 from oauth2client.service_account import ServiceAccountCredentials
-from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from tkinter import messagebox, simpledialog, IntVar, font, filedialog
+from tkinter import messagebox, simpledialog, IntVar, font
 from tkcalendar import DateEntry
 from googleapiclient.discovery import build
-from pytz import timezone
 from tkinter import ttk
 from tkinter.ttk import *
 from datetime import date, datetime, timedelta
@@ -48,15 +42,14 @@ PIPEDRIVE_API_KEY = os.getenv('PIPEDRIVE_API_KEY')
 X_RAPIDAPI_KEY = os.getenv('X_RAPIDAPI_KEY')
 
 # Global variable for the database path F:\\GB Bet Monitor\\. CHANGE TO C:// FOR MANAGER TERMINAL
-DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
-NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
+DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
+NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
 
 # UNCOMMENT FOR TESTING
-DATABASE_PATH = 'wager_database.sqlite'
-NETWORK_PATH_PREFIX = ''
+# DATABASE_PATH = 'wager_database.sqlite'
+# NETWORK_PATH_PREFIX = ''
 
-CACHE_UPDATE_INTERVAL = 100 * 1
-
+CACHE_UPDATE_INTERVAL = 80 * 1
 
 user = ""
 USER_NAMES = {
@@ -71,7 +64,6 @@ USER_NAMES = {
     'VO': 'Victor',
     'MF': 'Mark'
 }
-
 
 def user_login():
     global user, full_name
@@ -259,6 +251,7 @@ class BetFeed:
         self.feed_lock = threading.Lock()
         self.last_update_time = None
         self.previous_selected_date = None 
+        self.filters_visible = False  # Track the visibility of the filter frame, set to False to hide by default
         self.initialize_ui()
         self.initialize_text_tags()
         self.start_feed_update()
@@ -281,7 +274,7 @@ class BetFeed:
         self.feed_text.configure(yscrollcommand=self.feed_scroll.set)
 
         self.filter_frame = ttk.Frame(self.feed_frame)
-        self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(3, 0), padx=(11, 0))
+        self.filter_frame.grid(row=1, column=0, sticky='ew', pady=(2, 0), padx=(11, 0))
 
         self.filter_frame.grid_rowconfigure(0, weight=1)
         self.filter_frame.grid_rowconfigure(1, weight=1)
@@ -296,10 +289,6 @@ class BetFeed:
         self.filter_frame.grid_columnconfigure(7, weight=1)
         self.filter_frame.grid_columnconfigure(8, weight=1)
         self.filter_frame.grid_columnconfigure(9, weight=1)
-
-        self.date_entry = DateEntry(self.filter_frame, width=8, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
-        self.date_entry.grid(row=1, column=7, pady=(2, 4), padx=4, sticky='ew', columnspan=2)
-        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
 
         self.username_filter_entry = ttk.Entry(self.filter_frame, width=8)
         self.username_filter_entry.grid(row=0, column=0, pady=(0, 2), padx=4, sticky='ew')
@@ -341,18 +330,36 @@ class BetFeed:
         large_font = font.Font(size=13)
         style.configure('Large.TButton', font=large_font)
 
-        self.refresh_button = ttk.Button(self.filter_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
-        self.refresh_button.grid(row=0, column=7, padx=2, pady=2)
-
-        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:200]", variable=self.limit_bets_var)
-        self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e')
+        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:150]", variable=self.limit_bets_var)
+        self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e', rowspan=2)
 
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
         self.activity_frame.place(x=530, y=5, width=365, height=150)
         
         self.activity_text = tk.Text(self.activity_frame, font=("Helvetica", 10, "bold"), wrap='word', padx=5, pady=5, bd=0, fg="#000000")
         self.activity_text.config(state='disabled')
-        self.activity_text.pack(fill='both', expand=True)        
+        self.activity_text.pack(fill='both', expand=True)
+
+        self.show_hide_button = ttk.Button(self.feed_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton')
+        self.show_hide_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='w')
+
+        self.refresh_button = ttk.Button(self.feed_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
+        self.refresh_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='e')
+        
+        self.date_entry = DateEntry(self.feed_frame, width=15, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
+        self.date_entry.grid(row=2, column=0, pady=(2, 2), padx=4, sticky='n')
+        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
+        # Hide the filter frame by default
+        self.filter_frame.grid_remove()
+
+    def toggle_filters(self):
+        if self.filters_visible:
+            self.filter_frame.grid_remove()
+            self.show_hide_button.config(text='≡')
+        else:
+            self.filter_frame.grid()
+            self.show_hide_button.config(text='≡')
+        self.filters_visible = not self.filters_visible
 
     def start_feed_update(self):
         scroll_pos = self.feed_text.yview()[0]
@@ -461,7 +468,7 @@ class BetFeed:
                     self.feed_text.insert('end', "No bets found with the current filters or date.", 'center')
                 else:
                     if self.limit_bets_var.get():
-                        filtered_bets = filtered_bets[:200]
+                        filtered_bets = filtered_bets[:150]
     
                     text_to_insert = []
                     tags_to_apply = []
@@ -608,12 +615,12 @@ class BetFeed:
             knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
     
             turnover_profit_line = (
-                f"Turnover: {daily_turnover} | Profit: {daily_profit} ({daily_profit_percentage})"
+                f"Turnover: {daily_turnover} | Profit: {daily_profit}"
                 if is_today else ''
             )
     
             current_day_name = current_date.strftime('%A')
-            previous_day_name = previous_date.strftime('%a')
+            previous_day_short = previous_date.strftime('%d/%m')
     
             self.activity_text.config(state='normal')
             self.activity_text.delete('1.0', tk.END)
@@ -624,16 +631,16 @@ class BetFeed:
             # Line 2: Bets
             self.activity_text.insert(tk.END, f"Bets: {current_bets:,} ")
             self.activity_text.insert(tk.END, f"{bet_change_indicator}{percentage_change_bets:.2f}% ", 'green' if percentage_change_bets > 0 else 'red')
-            self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_bets:,})\n")
+            self.activity_text.insert(tk.END, f"({previous_day_short}: {previous_bets:,})\n")
 
             # Line 3: Knockbacks
-            self.activity_text.insert(tk.END, f"Knockbacks: {current_knockbacks:,} ")
+            self.activity_text.insert(tk.END, f"Knbk: {current_knockbacks:,} ")
             self.activity_text.insert(tk.END, f"{knockback_change_indicator}{percentage_change_knockbacks:.2f}% ", 'red' if percentage_change_knockbacks > 0 else 'green')
-            self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_knockbacks:,})\n")
+            self.activity_text.insert(tk.END, f"({previous_day_short}: {previous_knockbacks:,})\n")
 
             # Line 4: Knockback Percentage
-            self.activity_text.insert(tk.END, f"Knockback %: {knockback_percentage:.2f}% ")
-            self.activity_text.insert(tk.END, f"({previous_day_name}: {previous_knockback_percentage:.2f}%)\n")
+            self.activity_text.insert(tk.END, f"Knbk %: {knockback_percentage:.2f}% ")
+            self.activity_text.insert(tk.END, f"({previous_day_short}: {previous_knockback_percentage:.2f}%)\n")
 
             # Line 5: Turnover Profit Line
             self.activity_text.insert(tk.END, f"{turnover_profit_line}\n")
@@ -851,8 +858,10 @@ class BetRuns:
         self.combobox_var = tk.IntVar(value=50)
         self.num_run_bets = 2
         self.num_recent_files = 50
+        self.previous_selected_date = None
         self.root = root
         self.bet_runs_lock = threading.Lock()
+        self.filters_visible = False  # Track the visibility of the filter frame, set to False to hide by default
         self.initialize_ui()
         self.initialize_text_tags()
         self.refresh_bets() 
@@ -869,7 +878,7 @@ class BetRuns:
         self.runs_text.grid(row=0, column=0, sticky='nsew')
 
         self.spinbox_frame = ttk.Frame(self.runs_frame)
-        self.spinbox_frame.grid(row=1, column=0, sticky='ew', pady=(5, 0))
+        self.spinbox_frame.grid(row=1, column=0, sticky='ew', pady=(2, 0))
 
         self.spinbox_frame.grid(row=1, column=0, sticky='ew')
         self.spinbox_frame.grid_columnconfigure(0, weight=1)
@@ -890,12 +899,30 @@ class BetRuns:
         large_font = font.Font(size=13)
         style.configure('Large.TButton', font=large_font)
 
-        self.refresh_button = ttk.Button(self.spinbox_frame, text='⟳', command=self.manual_refresh_bets, width=2, style='Large.TButton')
-        self.refresh_button.grid(row=0, column=2, pady=(0, 3))
-
         self.runs_scroll = ttk.Scrollbar(self.runs_frame, orient='vertical', command=self.runs_text.yview, cursor="hand2")
         self.runs_scroll.grid(row=0, column=1, sticky='ns')
         self.runs_text.configure(yscrollcommand=self.runs_scroll.set)
+
+        self.show_hide_button = ttk.Button(self.runs_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton')
+        self.show_hide_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='w')
+
+        self.refresh_button = ttk.Button(self.runs_frame, text='⟳', command=self.manual_refresh_bets, width=2, style='Large.TButton')
+        self.refresh_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='e')
+
+        self.date_entry = DateEntry(self.runs_frame, width=15, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
+        self.date_entry.grid(row=2, column=0, pady=(2, 2), padx=4, sticky='n')
+        self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.manual_refresh_bets())
+
+        self.spinbox_frame.grid_remove()
+
+    def toggle_filters(self):
+        if self.filters_visible:
+            self.spinbox_frame.grid_remove()
+            self.show_hide_button.config(text='≡')
+        else:
+            self.spinbox_frame.grid()
+            self.show_hide_button.config(text='≡')
+        self.filters_visible = not self.filters_visible
 
     def set_recent_bets(self, *args):
         self.num_recent_files = self.combobox_var.get()
@@ -913,6 +940,11 @@ class BetRuns:
             if not self.bet_runs_lock.acquire(blocking=False):
                 print("Bet runs update already in progress. Skipping this update.")
                 return
+            
+            selected_date = self.date_entry.get_date().strftime('%d/%m/%Y')
+            if self.previous_selected_date != selected_date:
+                self.last_update_time = None
+                self.previous_selected_date = selected_date
 
             try:
                 retry_attempts = 3
@@ -939,8 +971,8 @@ class BetRuns:
 
                 for attempt in range(retry_attempts):
                     try:
-                        current_date = datetime.now().strftime('%d/%m/%Y')
-                        cursor.execute("SELECT id, selections FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (current_date, num_bets,))
+                        # current_date = datetime.now().strftime('%d/%m/%Y')
+                        cursor.execute("SELECT id, selections FROM database WHERE date = ? ORDER BY time DESC LIMIT ?", (selected_date, num_bets,))
                         database_data = cursor.fetchall()
 
                         if not database_data:
@@ -1077,8 +1109,8 @@ class RaceUpdaton:
         self.current_page = 0
         self.courses_per_page = 6
         self.initialize_ui()
-        self.get_courses()
         self.display_courses_periodic()
+        threading.Thread(target=self.get_courses, daemon=True).start()
     
     def initialize_ui(self):
         self.race_updation_frame = ttk.LabelFrame(root, style='Card', text="Race Updation")
@@ -3389,7 +3421,7 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v11.5", font=("Helvetica", 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v12.0", font=("Helvetica", 10))
         self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
@@ -3409,7 +3441,7 @@ class Settings:
 
         self.copy_frame = ttk.Frame(self.settings_frame)
         self.copy_frame.pack(pady=(15, 0))
-        self.copy_button = ttk.Button(self.copy_frame, text="↻", command=self.copy_to_clipboard, cursor="hand2", width=2)
+        self.copy_button = ttk.Button(self.copy_frame, text="⟳", command=self.copy_to_clipboard, cursor="hand2", width=2, style='Large.TButton')
         self.copy_button.grid(row=0, column=0)
         self.password_result_label = ttk.Label(self.copy_frame, text="GB000000", font=("Helvetica", 10), wraplength=200)
         self.password_result_label.grid(row=0, column=1, padx=(5, 5))
@@ -3616,9 +3648,11 @@ class Settings:
         tree.tag_configure('outdated', background='lightcoral')
         tree.tag_configure('separator', background='lightblue')
     
+        ignored_events = ['TRP', 'SIS', 'Racing.', 'AUS']
+        
         # Separate antepost and non-antepost events
         antepost_events = [event for event in sorted_data if len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap']
-        non_antepost_events = [event for event in sorted_data if not (len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() == 'ap')]
+        non_antepost_events = [event for event in sorted_data if len(event["Meetings"]) > 0 and event["Meetings"][0]["EventCode"][3:5].lower() != 'ap' and not any(ignored in event["EventName"] for ignored in ignored_events)]
     
         # Insert separator for antepost events
         tree.insert("", "end", text="-- Antepost --", values=("", "", "", "", ""), tags=('separator',))
@@ -3799,7 +3833,6 @@ class ClientWizard:
             raise ValueError("PIPEDRIVE_API_URL environment variable is not set")
 
         self.pipedrive_api_url = f'{self.pipedrive_api_url}?api_token={self.pipedrive_api_token}'
-
         # Load Google service account credentials from environment variables
         google_creds = {
             "type": os.getenv('GOOGLE_SERVICE_ACCOUNT_TYPE'),
@@ -3816,6 +3849,11 @@ class ClientWizard:
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
         self.gc = gspread.authorize(credentials)
+
+        self.confirm_betty_update_bool = tk.BooleanVar()
+        self.confirm_betty_update_bool.set(False)
+        self.send_confirmation_email_bool = tk.BooleanVar()
+        self.send_confirmation_email_bool.set(True) 
 
         # Initialize UI components
         self.initialize_ui()
@@ -4261,9 +4299,9 @@ class ClientWizard:
             for widget in self.left_frame.winfo_children():
                 widget.destroy()
     
-            log_notification(f"{user} Handling {request['Restriction']} request for {request['Username']} ")
+            log_notification(f"{user} Handling {request['type']} request for {request['username']} ")
     
-            request['Restriction'] = restriction_mapping.get(request['Restriction'], request['Restriction'])
+            request['type'] = restriction_mapping.get(request['type'], request['type'])
     
             current_date = datetime.now()
     
@@ -4281,19 +4319,19 @@ class ClientWizard:
                 'Five Years': relativedelta(years=5),
             }
     
-            length_in_time = length_mapping.get(request['Length'], timedelta(days=0))
+            length_in_time = length_mapping.get(request['period'], timedelta(days=0))
     
             reopen_date = current_date + length_in_time
     
-            copy_string = f"{request['Restriction']}"
+            copy_string = f"{request['type']}"
     
-            if request['Length'] not in [None, 'None', 'Null']:
-                copy_string += f" {request['Length']}"
+            if request['period'] not in [None, 'None', 'Null']:
+                copy_string += f" {request['period']}"
     
             copy_string += f" {current_date.strftime('%d/%m/%Y')}"
             copy_string = copy_string.upper()
     
-            if request['Restriction'] in ['Take-A-Break', 'Self Exclusion']:
+            if request['type'] in ['Take-A-Break', 'Self Exclusion']:
                 copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
     
             copy_string += f" {user}"
@@ -4309,15 +4347,15 @@ class ClientWizard:
                 if self.confirm_betty_update_bool.get():
                     try:
                         if self.send_confirmation_email_bool.get():
-                            threading.Thread(target=self.send_email, args=(username, request['Restriction'], request['Length'])).start()
-                            print(f"Email sent to {username} for {request['Restriction']} request.")
+                            threading.Thread(target=self.send_email, args=(username, request['type'], request['period'])).start()
+                            print(f"Email sent to {username} for {request['type']} request.")
                     except Exception as e:
                         print(f"Error sending email: {e}")
-                        # self.progress_note.config(text="Error sending email.", anchor='center', justify='center')
+                        self.progress_note.config(text="Error sending email.", anchor='center', justify='center')
     
                     try:
-                        threading.Thread(target=self.report_closure_requests, args=(request['Restriction'], username, request['Length'])).start()
-                        print(f"Reported {request['Restriction']} request for {username}.")
+                        threading.Thread(target=self.report_closure_requests, args=(request['type'], username, request['period'])).start()
+                        print(f"Reported {request['type']} request for {username}.")
                     except Exception as e:
                         print(f"Error reporting closure requests: {e}")
                         self.progress_note.config(text="Error reporting closure requests.", anchor='center', justify='center')
@@ -4326,15 +4364,15 @@ class ClientWizard:
     
                     data = load_data()
                     for req in data.get('closures', []):
-                        if req['Username'] == request['Username']:
+                        if req['username'] == request['username']:
                             req['completed'] = True
-                            print(f"Marked {request['Restriction']} request for {username} as completed.")
+                            print(f"Marked {request['type']} request for {username} as completed.")
                             break
                     save_data(data)
     
                     if request['completed']:
                         refresh_closure_requests()
-                        self.progress_note.config(text=f"{request['Restriction']} request for {username} has been processed.", anchor='center', justify='center')
+                        self.progress_note.config(text=f"{request['type']} request for {username} has been processed.", anchor='center', justify='center')
     
                 else:
                     # messagebox.showerror("Error", "Please confirm that the client has been updated in Betty.")
@@ -4344,11 +4382,11 @@ class ClientWizard:
             # Editable username entry
             ttk.Label(self.left_frame, text="Client Username").grid(row=0, column=0, padx=5, pady=5, sticky="w")
             self.username_entry = ttk.Entry(self.left_frame, width=13)
-            self.username_entry.insert(0, request['Username'])
+            self.username_entry.insert(0, request['username'])
             self.username_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
     
-            ttk.Label(self.left_frame, text=f"Restriction: {request['Restriction']}").grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
-            ttk.Label(self.left_frame, text=f"Length: {request['Length'] if request['Length'] not in [None, 'Null'] else '-'}").grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+            ttk.Label(self.left_frame, text=f"Restriction: {request['type']}").grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+            ttk.Label(self.left_frame, text=f"Length: {request['period'] if request['period'] not in [None, 'Null'] else '-'}").grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
     
             confirm_betty_update = ttk.Checkbutton(self.left_frame, text='Confirm Closed on Betty', variable=self.confirm_betty_update_bool, onvalue=True, offvalue=False, cursor="hand2")
             confirm_betty_update.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="w")
@@ -4427,7 +4465,7 @@ class ClientWizard:
             'exact_match': 'true',
             'api_token': self.pipedrive_api_token
         }
-
+    
         try:
             response = requests.get(self.pipedrive_api_url, params=params)
             response.raise_for_status()
@@ -4444,56 +4482,35 @@ class ClientWizard:
         except requests.exceptions.RequestException as err:
             print("Something went wrong", err)
             return
-
+    
         persons = response.json()['data']['items']
         if not persons:
             self.progress_note.config(text=f"No persons found in Pipedrive for username: {username}. Please make sure the username is correct.", anchor='center', justify='center')
             time.sleep(2)
             self.progress_note.config(text="---", anchor='center', justify='center')
             return
-
-        number_mapping = {
-            'One': '1',
-            'Two': '2',
-            'Three': '3',
-            'Four': '4',
-            'Five': '5',
-            'Six': '6',
-            'Seven': '7',
-            'Eight': '8',
-            'Nine': '9',
-            'Ten': '10'
-        }
-
+    
         update_base_url = os.getenv('PIPEDRIVE_PERSONS_API_URL')
         if not update_base_url:
             raise ValueError("PIPEDRIVE_PERSONS_API_URL environment variable is not set")
-
+    
         for person in persons:
             person_id = person['item']['id']
             update_url = f'{update_base_url}/{person_id}?api_token={self.pipedrive_api_token}'
-
+    
             if restriction == 'Account Deactivation':
                 update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': "Deactivated"}
                 self.update_person(update_url, update_data, person_id)
-
+    
             elif restriction == 'Self Exclusion':
-                if length.split()[0] in number_mapping:
-                    digit_length = length.replace(length.split()[0], number_mapping[length.split()[0]])
-                    update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'SE {digit_length}'}
-                    self.update_person(update_url, update_data, person_id)
-                else:
-                    print("Error: Invalid length")
-                    messagebox.showerror("Error", "Unknown error. Please tell Sam.")
-
+                digit_length = length
+                update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'SE {digit_length}'}
+                self.update_person(update_url, update_data, person_id)
+    
             elif restriction == 'Take-A-Break':
-                if length.split()[0] in number_mapping:
-                    digit_length = length.replace(length.split()[0], number_mapping[length.split()[0]])
-                    update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'TAB {digit_length}'}
-                    self.update_person(update_url, update_data, person_id)
-                else:
-                    print("Error: Invalid length")
-                    messagebox.showerror("Error", "Unknown error. Please tell Sam.")
+                digit_length = length
+                update_data = {'6f5cec1b7cfd6b594a2ab443520a8c4837e9a0e5': f'TAB {digit_length}'}
+                self.update_person(update_url, update_data, person_id)
         
     def report_closure_requests(self, restriction, username, length):
         current_date = datetime.now().strftime("%d/%m/%Y")  
@@ -4530,12 +4547,9 @@ class ClientWizard:
 class BetViewerApp:
     def __init__(self, root):
         self.root = root
-
-        # Initialize Google Sheets API client
+        threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
         user_login()
-
-        threading.Thread(target=schedule_data_updates, daemon=True).start()
 
         self.race_updation = RaceUpdaton(root)
         self.next3_panel = Next3Panel(root)
@@ -4550,12 +4564,12 @@ class BetViewerApp:
         self.root.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
         ttk.Style().theme_use('forest-light')
         width = 900
-        height = 1005
+        height = 1007
         screenwidth = self.root.winfo_screenwidth()
         screenheight = self.root.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width - 10), 0)
         self.root.geometry(alignstr)
-        # self.root.resizable(False, False)
+        self.root.resizable(False, False)
         self.import_logo()
         self.setup_menu_bar()
 
@@ -4569,16 +4583,13 @@ class BetViewerApp:
         menu_bar = tk.Menu(self.root)
         options_menu = tk.Menu(menu_bar, tearoff=0)
         options_menu.add_command(label="Set User Initials", command=self.user_login, foreground="#000000", background="#ffffff")
-        # options_menu.add_command(label="Settings", command=self.open_settings, foreground="#000000", background="#ffffff")
         options_menu.add_command(label="Report Monitor Issue", command=self.report_monitor_issue, foreground="#000000", background="#ffffff")
         options_menu.add_command(label="Apply Bonus Points", command=self.apply_bonus_points, foreground="#000000", background="#ffffff")
         options_menu.add_separator(background="#ffffff")
         options_menu.add_command(label="Exit", command=self.root.quit, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Options", menu=options_menu)
-        menu_bar.add_command(label="Client Options", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
+        menu_bar.add_command(label="Client", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
-
-        # Add Client Wizard menu item
 
         self.root.config(menu=menu_bar)
 
