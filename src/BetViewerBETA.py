@@ -46,8 +46,8 @@ DATABASE_PATH = 'F:\\GB Bet Monitor\\wager_database.sqlite'
 NETWORK_PATH_PREFIX = 'F:\\GB Bet Monitor\\'
 
 # UNCOMMENT FOR TESTING
-# DATABASE_PATH = 'wager_database.sqlite'
-# NETWORK_PATH_PREFIX = ''
+DATABASE_PATH = 'wager_database.sqlite'
+NETWORK_PATH_PREFIX = ''
 
 CACHE_UPDATE_INTERVAL = 80 * 1
 
@@ -72,7 +72,7 @@ def user_login():
         if user and len(user) <= 2:
             user = user.upper()
             if user in USER_NAMES:
-                full_name = USER_NAMES[user]                    
+                full_name = USER_NAMES[user]         
                 log_notification(f"{user} logged in")
                 break
             else:
@@ -257,6 +257,10 @@ class BetFeed:
         self.start_feed_update()
 
     def initialize_ui(self):
+        style = ttk.Style()
+        large_font = font.Font(size=13)
+        style.configure('Large.TButton', font=large_font)
+
         self.feed_frame = ttk.LabelFrame(self.root, style='Card', text="Bet Feed")
         self.feed_frame.place(x=5, y=5, width=520, height=640)
         self.feed_frame.grid_columnconfigure(0, weight=1)
@@ -317,21 +321,17 @@ class BetFeed:
         self.sport_combobox_entry.grid(row=1, column=3, pady=(0, 2), padx=4, sticky='ew')
         self.set_placeholder(self.sport_combobox_entry, 'Sport')
 
-        self.tick_button = ttk.Button(self.filter_frame, text='✔', command=self.apply_filters, width=2)
+        self.tick_button = ttk.Button(self.filter_frame, text='✔', command=self.apply_filters, width=2, cursor='hand2')
         self.tick_button.grid(row=0, column=5, sticky='ew', padx=2, pady=(0, 3))
         
-        self.reset_button = ttk.Button(self.filter_frame, text='✖', command=self.reset_filters, width=2)
+        self.reset_button = ttk.Button(self.filter_frame, text='✖', command=self.reset_filters, width=2, cursor='hand2')
         self.reset_button.grid(row=1, column=5, sticky='ew', padx=2, pady=(0, 3)) 
 
-        self.separator = ttk.Separator(self.filter_frame, orient='vertical')
-        self.separator.grid(row=0, column=6, rowspan=2, sticky='ns', pady=1, padx=(12, 5))
+        separator = ttk.Separator(self.filter_frame, orient='vertical')
+        separator.grid(row=0, column=6, rowspan=2, sticky='ns', pady=1, padx=(12, 5))
 
-        style = ttk.Style()
-        large_font = font.Font(size=13)
-        style.configure('Large.TButton', font=large_font)
-
-        self.limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:150]", variable=self.limit_bets_var)
-        self.limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e', rowspan=2)
+        limit_bets_checkbox = ttk.Checkbutton(self.filter_frame, text="[:150]", variable=self.limit_bets_var, cursor='hand2')
+        limit_bets_checkbox.grid(row=0, column=8, pady=(2, 4), padx=4, sticky='e', rowspan=2)
 
         self.activity_frame = ttk.LabelFrame(self.root, style='Card', text="Status")
         self.activity_frame.place(x=530, y=5, width=365, height=150)
@@ -340,16 +340,15 @@ class BetFeed:
         self.activity_text.config(state='disabled')
         self.activity_text.pack(fill='both', expand=True)
 
-        self.show_hide_button = ttk.Button(self.feed_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton')
+        self.show_hide_button = ttk.Button(self.feed_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton', cursor='hand2')
         self.show_hide_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='w')
 
-        self.refresh_button = ttk.Button(self.feed_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton')
+        self.refresh_button = ttk.Button(self.feed_frame, text='⟳', command=self.bet_feed, width=2, style='Large.TButton', cursor='hand2')
         self.refresh_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='e')
         
         self.date_entry = DateEntry(self.feed_frame, width=15, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
         self.date_entry.grid(row=2, column=0, pady=(2, 2), padx=4, sticky='n')
         self.date_entry.bind("<<DateEntrySelected>>", lambda event: self.bet_feed())
-        # Hide the filter frame by default
         self.filter_frame.grid_remove()
 
     def toggle_filters(self):
@@ -903,10 +902,10 @@ class BetRuns:
         self.runs_scroll.grid(row=0, column=1, sticky='ns')
         self.runs_text.configure(yscrollcommand=self.runs_scroll.set)
 
-        self.show_hide_button = ttk.Button(self.runs_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton')
+        self.show_hide_button = ttk.Button(self.runs_frame, text='≡', command=self.toggle_filters, width=2, style='Large.TButton', cursor='hand2')
         self.show_hide_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='w')
 
-        self.refresh_button = ttk.Button(self.runs_frame, text='⟳', command=self.manual_refresh_bets, width=2, style='Large.TButton')
+        self.refresh_button = ttk.Button(self.runs_frame, text='⟳', command=self.manual_refresh_bets, width=2, style='Large.TButton', cursor='hand2')
         self.refresh_button.grid(row=2, column=0, pady=(2, 2), padx=5, sticky='e')
 
         self.date_entry = DateEntry(self.runs_frame, width=15, background='#fecd45', foreground='white', borderwidth=1, date_pattern='dd/mm/yyyy')
@@ -1281,6 +1280,7 @@ class RaceUpdaton:
         
         other_courses = [course for i, course in enumerate(courses) if i < start or i >= end]
         courses_needing_update = [course for course in other_courses if self.course_needs_update(course, data)]
+        
         if courses_needing_update:
             update_indicator.config(text=str(len(courses_needing_update)))
             update_indicator.pack()
@@ -3580,7 +3580,16 @@ class Settings:
         now = datetime.now()
         date_string = now.strftime('%d-%m-%Y')
         
-        big_events = ['Flat Racing Futures', 'National Hunt Futures', 'Cheltenham Festival Futures', 'International Racing Futures', 'Greyhound Futures', 'Football Futures', 'Tennis Futures', 'Golf Futures']
+        big_events = [
+            'Flat Racing Futures', 
+            'National Hunt Futures', 
+            'Cheltenham Festival Futures', 
+            'International Racing Futures', 
+            'Greyhound Futures', 
+            'Football Futures', 
+            'Tennis Futures', 
+            'Golf Futures'
+        ]
     
         log_file = os.path.join(NETWORK_PATH_PREFIX, f'logs/updatelogs/update_log_{date_string}.txt')
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -3605,7 +3614,7 @@ class Settings:
             score = round(0.3 * markets, 2)
             if event_name in big_events:
                 score += 3
-            elif event_name == 'MMA Futures' or event_name == 'Boxing Futures' or event_name == 'Mma Futures':
+            elif event_name.lower() == 'mma Futures' or event_name == 'boxing Futures':
                 score = round(0.08 * markets, 2)
             else:
                 score += 1
@@ -4547,17 +4556,10 @@ class ClientWizard:
 class BetViewerApp:
     def __init__(self, root):
         self.root = root
-        threading.Thread(target=schedule_data_updates, daemon=True).start()
         self.initialize_ui()
         user_login()
-
-        self.race_updation = RaceUpdaton(root)
-        self.next3_panel = Next3Panel(root)
-        self.notebook = Notebook(root)
-        self.bet_feed = BetFeed(root)
-        self.bet_runs = BetRuns(root)
-        self.settings = Settings(root)
-
+        self.start_background_tasks()
+        self.initialize_modules()
 
     def initialize_ui(self):
         self.root.title("Bet Viewer")
@@ -4592,6 +4594,17 @@ class BetViewerApp:
         menu_bar.add_command(label="About", command=self.about, foreground="#000000", background="#ffffff")
 
         self.root.config(menu=menu_bar)
+
+    def start_background_tasks(self):
+        threading.Thread(target=schedule_data_updates, daemon=True).start()
+
+    def initialize_modules(self):
+        self.bet_feed = BetFeed(self.root)
+        self.race_updation = RaceUpdaton(self.root)
+        self.next3_panel = Next3Panel(self.root)
+        self.bet_runs = BetRuns(self.root)
+        self.notebook = Notebook(self.root)
+        self.settings = Settings(self.root)
 
     def open_client_wizard(self, default_tab="Factoring"):
         ClientWizard(self.root, default_tab)
@@ -4630,7 +4643,7 @@ class BetViewerApp:
         submit_button.pack(pady=10)
 
     def open_settings(self):
-        settings_window = tk.Toplevel(root)
+        settings_window = tk.Toplevel(self.root)
         settings_window.geometry("270x370")
         settings_window.title("Settings")
         settings_window.iconbitmap('src/splash.ico')
@@ -4711,7 +4724,7 @@ class BetViewerApp:
                 print(f"Error writing to log file: {e}")
                 messagebox.showerror("Error", "Failed to log bonus points.")
     
-        bonus_window = tk.Toplevel(root)
+        bonus_window = tk.Toplevel(self.root)
         bonus_window.geometry("270x270")
         bonus_window.title("Apply Bonus")
         bonus_window.iconbitmap('src/splash.ico')
@@ -4732,6 +4745,7 @@ class BetViewerApp:
     
         submit_button = ttk.Button(bonus_frame, text="Submit", command=submit_bonus)
         submit_button.pack(pady=20)
+
     def user_notification(self):
         user_notification()
 
