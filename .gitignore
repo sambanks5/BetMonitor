@@ -41,3 +41,11 @@ wager_database.sqlite
 wager_database.sqlite
 *.sqlite
 src/.env
+Monitor/gmailcreds.json
+enhancedRaces.py
+Monitor/creds.json
+/Monitor/Forest-ttk-theme-master
+/Monitor/ui/__pycache__
+/Monitor/utils/__pycache__
+/Monitor/__pycache__
+.env

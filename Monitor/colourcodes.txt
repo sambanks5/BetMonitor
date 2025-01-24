@@ -1,0 +1,7 @@
+#575756 grey bg
+#fecd45 light yellow
+#bc8515 dark yellow
+#acbac0 dark gray
+#ced0d7 gray
+#eae8ed light gray 
+
