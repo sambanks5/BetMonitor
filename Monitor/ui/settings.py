@@ -9,7 +9,7 @@ from datetime import datetime
 from PIL import Image, ImageTk
 import pyperclip
 from config import NETWORK_PATH_PREFIX
-from utils import notification, user
+from utils import notification, user, resource_path
 
 
 class Settings:
@@ -21,7 +21,7 @@ class Settings:
         self.settings_frame = ttk.Frame(self.root, style='Card')
         self.settings_frame.place(x=714, y=655, width=180, height=265)
 
-        logo_image = Image.open('Monitor/splash.ico')
+        logo_image = Image.open(resource_path.get_resource_path('splash.ico'))
         logo_image = logo_image.resize((60, 60))
         self.company_logo = ImageTk.PhotoImage(logo_image)
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
@@ -103,7 +103,7 @@ class Settings:
             live_events_window = tk.Toplevel(self.root)
             live_events_window.geometry("650x700")
             live_events_window.title("Live Events")
-            live_events_window.iconbitmap('Monitor/splash.ico')
+            live_events_window.iconbitmap(resource_path.get_resource_path('splash.ico'))
             screen_width = live_events_window.winfo_screenwidth()
             live_events_window.geometry(f"+{screen_width - 800}+50")
             live_events_window.resizable(False, False)

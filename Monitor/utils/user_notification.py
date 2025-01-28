@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from utils import user, login
-from utils import notification
+from utils import user, login, notification, resource_path
 
 def user_notification(root):
     if not user.get_user():
@@ -15,7 +14,7 @@ def user_notification(root):
 
     window = tk.Toplevel(root)
     window.title("Enter Notification")
-    window.iconbitmap('Monitor/splash.ico')
+    window.iconbitmap(resource_path.get_resource_path('splash.ico'))
     window.geometry("300x170")
     screen_width = window.winfo_screenwidth()
     window.geometry(f"+{screen_width - 350}+50")

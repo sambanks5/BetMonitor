@@ -5,3 +5,4 @@ from .notification import log_notification
 from .login import user_login
 from .import_reporting import import_reporting
 from .google_auth import get_google_auth
+from .resource_path import get_resource_path

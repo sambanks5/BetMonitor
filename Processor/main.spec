@@ -7,7 +7,7 @@ a = Analysis(
     pathex=['C:/Users/Sam/Documents/GitHub/BetMonitor/Processor'],
     binaries=[],
     datas=[
-        ('config.py', '.'),  # Include config.py
+        ('config.py', '.'),
         ('utils/*.py', 'utils')  # Include all Python files in the utils directory
     ],
     hiddenimports=[
@@ -41,7 +41,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,  # Set to False if you want to hide the console window
+    console=False,
 )
 
 coll = COLLECT(

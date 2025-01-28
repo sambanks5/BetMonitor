@@ -15,8 +15,11 @@ API_URL = os.getenv('ALL_API_URL')
 
 name_changes_file = os.path.join(NETWORK_PATH_PREFIX, 'name_changes.json')
 
-with open(name_changes_file, 'r') as f:
-    name_changes = json.load(f)
+try:
+    with open(name_changes_file, 'r') as f:
+        name_changes = json.load(f)
+except FileNotFoundError:
+    name_changes = {}
 
 def get_next_weekday_name():
 

@@ -6,7 +6,7 @@ import tkinter as tk
 from datetime import date, datetime, timedelta
 from tkinter import messagebox
 from tkinter import ttk
-from utils import notification, login, user
+from utils import notification, login, user, resource_path
 from config import NETWORK_PATH_PREFIX
 
 class RaceUpdaton:
@@ -14,6 +14,7 @@ class RaceUpdaton:
         self.root = root
         self.current_page = 0
         self.courses_per_page = 6
+        self.update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
         self.initialize_ui()
         self.display_courses_periodic()
         threading.Thread(target=self.get_courses, daemon=True).start()
@@ -21,6 +22,25 @@ class RaceUpdaton:
     def initialize_ui(self):
         self.race_updation_frame = ttk.LabelFrame(self.root, style='Card', text="Race Updation")
         self.race_updation_frame.place(x=5, y=647, width=227, height=273)
+
+    def load_log_file(self):
+        if os.path.exists(self.log_file):
+            try:
+                with open(self.log_file, 'r') as f:
+                    return f.readlines()
+            except IOError as e:
+                print(f"Error reading log file: {e}")
+                return []
+        else:
+            return []
+
+    def save_log_file(self):
+        try:
+            with open(self.log_file, 'w') as f:
+                f.writelines(self.data)
+            print(f"Log updated")
+        except IOError as e:
+            print(f"Error writing to log file: {e}")
 
     def display_courses_periodic(self):
         self.display_courses()
@@ -93,29 +113,31 @@ class RaceUpdaton:
         self.courses = list(self.courses)
         print("Courses:", self.courses)
 
-        update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-
         try:
-            with open(update_times_path, 'r') as f:
+            with open(self.update_times_path, 'r') as f:
                 update_data = json.load(f)
         except FileNotFoundError:
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
-            with open(update_times_path, 'w') as f:
+            with open(self.update_times_path, 'w') as f:
                 json.dump(update_data, f)
 
         if update_data['date'] != today.strftime('%Y-%m-%d'):
             update_data = {'date': today.strftime('%Y-%m-%d'), 'courses': {course: "" for course in self.courses}}
-            with open(update_times_path, 'w') as f:
+            with open(self.update_times_path, 'w') as f:
                 json.dump(update_data, f)
 
         self.display_courses()
         return self.courses
 
     def display_courses(self):
-        update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-        
-        with open(update_times_path, 'r') as f:
-            data = json.load(f)
+        today = date.today()
+        try:
+            with open(self.update_times_path, 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            data = {'date': today.strftime('%Y-%m-%d'), 'courses': {}}
+            with open(self.update_times_path, 'w') as f:
+                json.dump(data, f)
     
         courses = list(data['courses'].keys())
         courses.sort(key=lambda x: (x.endswith(" Dg"), x))
@@ -204,14 +226,12 @@ class RaceUpdaton:
         else:
             forward_button.config(state='normal')
 
-    def reset_update_times(self):
-        update_times_path = os.path.join(NETWORK_PATH_PREFIX, 'update_times.json')
-        
-        if os.path.exists(update_times_path):
-            os.remove(update_times_path)
+    def reset_update_times(self):        
+        if os.path.exists(self.update_times_path):
+            os.remove(self.update_times_path)
 
         update_data = {'date': '', 'courses': {}}
-        with open(update_times_path, 'w') as f:
+        with open(self.update_times_path, 'w') as f:
             json.dump(update_data, f)
         
         self.display_courses()
@@ -445,7 +465,7 @@ class RaceUpdaton:
         top = tk.Toplevel(self.root)
         top.title("Remove Course")
         top.geometry("300x120")
-        top.iconbitmap('Monitor/splash.ico')
+        top.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = top.winfo_screenwidth()
         top.geometry(f"+{screen_width - 400}+200")
 
@@ -496,7 +516,7 @@ class RaceUpdaton:
         top = tk.Toplevel(self.root)
         top.title("Add Course")
         top.geometry("300x120")
-        top.iconbitmap('Monitor/splash.ico')
+        top.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = top.winfo_screenwidth()
         top.geometry(f"+{screen_width - 400}+200")
     

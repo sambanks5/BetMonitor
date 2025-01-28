@@ -11,7 +11,7 @@ from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import ttk, messagebox
-from utils import notification, login, user
+from utils import notification, login, user, resource_path
 from config import NETWORK_PATH_PREFIX
 
 class ClientWizard:
@@ -22,7 +22,7 @@ class ClientWizard:
         self.toplevel = tk.Toplevel(self.root)
         self.toplevel.title("Client Reporting and Modifications")
         self.toplevel.geometry("600x300")
-        self.toplevel.iconbitmap('Monitor/splash.ico')
+        self.toplevel.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = self.toplevel.winfo_screenwidth()
         self.toplevel.geometry(f"+{screen_width - 1700}+700")
         self.username_entry = None

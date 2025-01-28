@@ -6,19 +6,10 @@ from tkinter import ttk, messagebox
 from datetime import datetime
 from PIL import Image, ImageTk
 from ui import BetFeed, RaceUpdaton, Next3Panel, BetRuns, Notebook, Settings, ClientWizard
-from utils import schedule_data_updates, notification, user_notification, import_reporting, user, login
+from utils import schedule_data_updates, notification, user_notification, import_reporting, user, login, resource_path
 from config import NETWORK_PATH_PREFIX
 from utils.db_manager import DatabaseManager
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
 
 class BetViewerApp:
     def __init__(self, root, database_manager):
@@ -30,8 +21,9 @@ class BetViewerApp:
         self.initialize_modules()
 
     def initialize_ui(self):
+        self.import_logo()
         self.root.title("Bet Viewer")
-        self.root.tk.call('source', resource_path('Monitor\\Forest-ttk-theme-master\\forest-light.tcl'))
+        self.root.tk.call('source', resource_path.get_resource_path('Forest-ttk-theme-master/forest-light.tcl'))
         ttk.Style().theme_use('forest-light')
         width = 900
         height = 1007
@@ -40,14 +32,14 @@ class BetViewerApp:
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width - 10), 0)
         self.root.geometry(alignstr)
         self.root.resizable(False, False)
-        self.import_logo()
         self.setup_menu_bar()
 
     def import_logo(self):
-        logo_image = Image.open(resource_path('Monitor/splash.ico'))
+        logo_image = Image.open(resource_path.get_resource_path('splash.ico'))
         logo_image.thumbnail((70, 70))
         self.company_logo = ImageTk.PhotoImage(logo_image)
-        self.root.iconbitmap(resource_path('Monitor/splash.ico'))
+        self.root.iconbitmap(resource_path.get_resource_path('splash.ico'))
+        return self.company_logo
 
     def setup_menu_bar(self):
         menu_bar = tk.Menu(self.root)
@@ -90,7 +82,7 @@ class BetViewerApp:
         import_reporting_window = tk.Toplevel(self.root)
         import_reporting_window.geometry("290x310")
         import_reporting_window.title("Import Reporting")
-        import_reporting_window.iconbitmap(resource_path('Monitor/splash.ico'))
+        import_reporting_window.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = import_reporting_window.winfo_screenwidth()
         import_reporting_window.geometry(f"+{screen_width - 350}+50")
     
@@ -163,7 +155,7 @@ class BetViewerApp:
         settings_window = tk.Toplevel(self.root)
         settings_window.geometry("270x370")
         settings_window.title("Settings")
-        settings_window.iconbitmap(resource_path('splash.ico'))
+        settings_window.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = settings_window.winfo_screenwidth()
         settings_window.geometry(f"+{screen_width - 350}+50")
         
@@ -243,7 +235,7 @@ class BetViewerApp:
         bonus_window = tk.Toplevel(self.root)
         bonus_window.geometry("270x270")
         bonus_window.title("Apply Bonus")
-        bonus_window.iconbitmap(resource_path('Monitor/splash.ico'))
+        bonus_window.iconbitmap(resource_path.get_resource_path('splash.ico'))
         screen_width = bonus_window.winfo_screenwidth()
         bonus_window.geometry(f"+{screen_width - 350}+50")
         bonus_frame = ttk.Frame(bonus_window, style='Card')
