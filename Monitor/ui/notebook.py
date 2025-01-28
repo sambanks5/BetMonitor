@@ -14,7 +14,7 @@ from google.oauth2 import service_account
 from config import NETWORK_PATH_PREFIX
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
-from utils import access_data, user_notification
+from utils import access_data, user_notification, user
 from ui.client_wizard import ClientWizard
 
 
@@ -960,9 +960,7 @@ class Notebook:
     
         self.report_ticket.config(state="disabled")
     
-    def create_staff_report(self):
-        global USER_NAMES
-    
+    def create_staff_report(self):    
         course_updates = Counter()
         staff_updates = Counter()
         staff_updates_today = Counter()
@@ -976,200 +974,211 @@ class Notebook:
         current_date = datetime.now().date()
         month_ago = current_date.replace(day=1)
         days_in_month = (current_date - month_ago).days + 1
-    
-        log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs'))
-        log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', file)))
-        # Read all the log files from the past month
-        for i, log_file in enumerate(log_files):
-            file_date = datetime.fromtimestamp(os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', log_file))).date()
-            if month_ago <= file_date <= current_date:
-                with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', log_file), 'r') as file:
+
+        try:
+            log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs'))
+            log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', file)))
+            # Read all the log files from the past month
+            for i, log_file in enumerate(log_files):
+                file_date = datetime.fromtimestamp(os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', log_file))).date()
+                if month_ago <= file_date <= current_date:
+                    with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'updatelogs', log_file), 'r') as file:
+                        lines = file.readlines()
+        
+                    update_counts = {}
+        
+                    for line in lines:
+                        if line.strip() == '':
+                            continue
+        
+                        parts = line.strip().split(' - ')
+        
+                        if len(parts) == 1 and parts[0].endswith(':'):
+                            course = parts[0].replace(':', '')
+                            continue
+        
+                        if len(parts) == 3:
+                            time, staff_initials, score = parts
+                            score = float(score)
+                            staff_name = user.USER_NAMES.get(staff_initials, staff_initials)
+                            course_updates[course] += score
+                            staff_updates[staff_name] += score
+                            daily_updates[(staff_name, file_date)] += score
+        
+                            # Track individual update scores
+                            individual_update_scores.append((staff_name, score))
+        
+                            if file_date == today:
+                                current_time = datetime.strptime(time, '%H:%M')
+                                if course not in update_counts:
+                                    update_counts[course] = {}
+                                if staff_name not in update_counts[course]:
+                                    update_counts[course][staff_name] = Counter()
+                                update_counts[course][staff_name][current_time] += 1
+        
+                                if update_counts[course][staff_name][current_time] > 1:
+                                    offenders[staff_name] += 1
+        
+                                staff_updates_today[staff_name] += score
+                                staff_updates_count_today[staff_name] += 1  # Increment the count for today's updates
+        
+                            # Increment the count for the month's updates
+                            staff_updates_count_month[staff_name] += 1
+        
+            # Filter out non-staff members from staff_updates_today and staff_updates
+            staff_updates_today = Counter({staff: count for staff, count in staff_updates_today.items() if staff in user.USER_NAMES.values()})
+            staff_updates = Counter({staff: count for staff, count in staff_updates.items() if staff in user.USER_NAMES.values()})
+        
+            # Calculate average updates per day for each staff member
+            average_updates_per_day = Counter()
+            for (staff, date), count in daily_updates.items():
+                if staff in user.USER_NAMES.values():
+                    average_updates_per_day[staff] += count
+        
+            for staff in average_updates_per_day:
+                average_updates_per_day[staff] /= days_in_month
+        
+            factoring_log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs'))
+            factoring_log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', file)))
+        
+            for log_file in factoring_log_files:
+                with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', log_file), 'r') as file:
                     lines = file.readlines()
-    
-                update_counts = {}
-    
+        
                 for line in lines:
                     if line.strip() == '':
                         continue
-    
-                    parts = line.strip().split(' - ')
-    
-                    if len(parts) == 1 and parts[0].endswith(':'):
-                        course = parts[0].replace(':', '')
-                        continue
-    
-                    if len(parts) == 3:
-                        time, staff_initials, score = parts
-                        score = float(score)
-                        staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                        course_updates[course] += score
-                        staff_updates[staff_name] += score
-                        daily_updates[(staff_name, file_date)] += score
-    
-                        # Track individual update scores
-                        individual_update_scores.append((staff_name, score))
-    
-                        if file_date == today:
-                            current_time = datetime.strptime(time, '%H:%M')
-                            if course not in update_counts:
-                                update_counts[course] = {}
-                            if staff_name not in update_counts[course]:
-                                update_counts[course][staff_name] = Counter()
-                            update_counts[course][staff_name][current_time] += 1
-    
-                            if update_counts[course][staff_name][current_time] > 1:
-                                offenders[staff_name] += 1
-    
-                            staff_updates_today[staff_name] += score
-                            staff_updates_count_today[staff_name] += 1  # Increment the count for today's updates
-    
-                        # Increment the count for the month's updates
-                        staff_updates_count_month[staff_name] += 1
-    
-        # Filter out non-staff members from staff_updates_today and staff_updates
-        staff_updates_today = Counter({staff: count for staff, count in staff_updates_today.items() if staff in USER_NAMES.values()})
-        staff_updates = Counter({staff: count for staff, count in staff_updates.items() if staff in USER_NAMES.values()})
-    
-        # Calculate average updates per day for each staff member
-        average_updates_per_day = Counter()
-        for (staff, date), count in daily_updates.items():
-            if staff in USER_NAMES.values():
-                average_updates_per_day[staff] += count
-    
-        for staff in average_updates_per_day:
-            average_updates_per_day[staff] /= days_in_month
-    
-        factoring_log_files = os.listdir(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs'))
-        factoring_log_files.sort(key=lambda file: os.path.getmtime(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', file)))
-    
-        for log_file in factoring_log_files:
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', log_file), 'r') as file:
-                lines = file.readlines()
-    
-            for line in lines:
-                if line.strip() == '':
-                    continue
-    
-                data = json.loads(line)
-                staff_initials = data['Staff']
-                staff_name = USER_NAMES.get(staff_initials, staff_initials)
-                factoring_updates[staff_name] += 1
-    
-        # Calculate the ratio of score to updates for each user for the current month
-        score_to_updates_ratio = {}
-        for staff in staff_updates_count_month:
-            if staff_updates_count_month[staff] > 0:
-                ratio = staff_updates[staff] / staff_updates_count_month[staff]
-                score_to_updates_ratio[staff] = ratio
-    
-        # Find the user with the lowest ratio (busiest idiot)
-        busiest_idiot = min(score_to_updates_ratio, key=score_to_updates_ratio.get)
-    
-        # Find the user with the highest ratio (playing the system)
-        playing_the_system = max(score_to_updates_ratio, key=score_to_updates_ratio.get)
-    
-        # Find the user with the highest single update score
-        highest_single_update_score = max(individual_update_scores, key=lambda item: item[1])
-    
-        # Find the user with the lowest single update score
-        lowest_single_update_score = min(individual_update_scores, key=lambda item: item[1])
-    
-        # Find the top 3 highest daily total scores
-        top_daily_total_scores = sorted(daily_updates.items(), key=lambda item: item[1], reverse=True)[:3]
-    
-        # Find the day with the most points claimed
-        daily_total_scores = Counter()
-        for (staff, date), score in daily_updates.items():
-            daily_total_scores[date] += score
-    
-        day_with_most_points = daily_total_scores.most_common(1)[0]
-        day_with_most_points_date = day_with_most_points[0]
-        day_with_most_points_score = day_with_most_points[1]
-    
-        # Calculate the percentage share of points for each user on the day with the most points
-        points_share = {}
-        for (staff, date), score in daily_updates.items():
-            if date == day_with_most_points_date:
-                points_share[staff] = (score / day_with_most_points_score) * 100
-    
-        separator = "-" * 69
-    
-        self.report_ticket.config(state="normal")
-        self.report_ticket.delete('1.0', tk.END)
-    
-        self.report_ticket.insert(tk.END, "STAFF REPORT\n", 'center')
-        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
-    
-        employee_of_the_month, _ = staff_updates.most_common(1)[0]
-        self.report_ticket.insert(tk.END, f"Employee Of The Month:\n", 'center')
-        self.report_ticket.insert(tk.END, f"{employee_of_the_month}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
-        self.report_ticket.insert(tk.END, "Current Day", 'center')    
-        self.report_ticket.insert(tk.END, "\nToday's Staff Scores:\n", 'center')
-        for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
-        for staff, count in sorted(staff_updates_count_today.items(), key=lambda item: item[1], reverse=True):  # Use the new counter
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
         
-        if offenders:
-            self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
-            for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
+                    data = json.loads(line)
+                    staff_initials = data['Staff']
+                    staff_name = user.USER_NAMES.get(staff_initials, staff_initials)
+                    factoring_updates[staff_name] += 1
+        
+            # Calculate the ratio of score to updates for each user for the current month
+            score_to_updates_ratio = {}
+            for staff in staff_updates_count_month:
+                if staff_updates_count_month[staff] > 0:
+                    ratio = staff_updates[staff] / staff_updates_count_month[staff]
+                    score_to_updates_ratio[staff] = ratio
+        
+            # Find the user with the lowest ratio (busiest idiot)
+            busiest_idiot = min(score_to_updates_ratio, key=score_to_updates_ratio.get)
+        
+            # Find the user with the highest ratio (playing the system)
+            playing_the_system = max(score_to_updates_ratio, key=score_to_updates_ratio.get)
+        
+            # Find the user with the highest single update score
+            highest_single_update_score = max(individual_update_scores, key=lambda item: item[1])
+        
+            # Find the user with the lowest single update score
+            lowest_single_update_score = min(individual_update_scores, key=lambda item: item[1])
+        
+            # Find the top 3 highest daily total scores
+            top_daily_total_scores = sorted(daily_updates.items(), key=lambda item: item[1], reverse=True)[:3]
+        
+            # Find the day with the most points claimed
+            daily_total_scores = Counter()
+            for (staff, date), score in daily_updates.items():
+                daily_total_scores[date] += score
+        
+            day_with_most_points = daily_total_scores.most_common(1)[0]
+            day_with_most_points_date = day_with_most_points[0]
+            day_with_most_points_score = day_with_most_points[1]
+        
+            # Calculate the percentage share of points for each user on the day with the most points
+            points_share = {}
+            for (staff, date), score in daily_updates.items():
+                if date == day_with_most_points_date:
+                    points_share[staff] = (score / day_with_most_points_score) * 100
+        
+            separator = "-" * 69
+        
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+        
+            self.report_ticket.insert(tk.END, "STAFF REPORT\n", 'center')
+            self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+        
+            employee_of_the_month, _ = staff_updates.most_common(1)[0]
+            self.report_ticket.insert(tk.END, f"Employee Of The Month:\n", 'center')
+            self.report_ticket.insert(tk.END, f"{employee_of_the_month}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+            self.report_ticket.insert(tk.END, "Current Day", 'center')    
+            self.report_ticket.insert(tk.END, "\nToday's Staff Scores:\n", 'center')
+            for staff, count in sorted(staff_updates_today.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "\nToday's Staff Updates:\n", 'center')
+            for staff, count in sorted(staff_updates_count_today.items(), key=lambda item: item[1], reverse=True):  # Use the new counter
                 self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "Current Month", 'center')    
-        self.report_ticket.insert(tk.END, f"\nScores:\n", 'center')
-        for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, f"\nUpdates:\n", 'center')  # New section for total updates
-        for staff, count in sorted(staff_updates_count_month.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, f"\nAverage Daily Score:\n", 'center')
-        for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
+            
+            if offenders:
+                self.report_ticket.insert(tk.END, "\nUpdation Offenders Today:\n", 'center')
+                for staff, count in sorted(offenders.items(), key=lambda item: item[1], reverse=True):
+                    self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
         
-        self.report_ticket.insert(tk.END, "\nTop 3 Highest Daily Total Scores:\n", 'center')
-        for (staff, date), score in top_daily_total_scores:
-            formatted_date = date.strftime('%d/%m')
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {formatted_date}  |  {score:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nDay with Most Points Claimed:\n", 'center')
-        formatted_date = day_with_most_points_date.strftime('%d/%m')
-        self.report_ticket.insert(tk.END, f"\t{formatted_date}  |  {day_with_most_points_score:.2f}\n", 'c')
-        self.report_ticket.insert(tk.END, "Points Share:\n", 'c')
-        for staff, share in sorted(points_share.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {share:.2f}%\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nBusiest Idiot:\n", 'center')
-        self.report_ticket.insert(tk.END, f"\t{busiest_idiot}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "Playing the System:\n", 'center')
-        self.report_ticket.insert(tk.END, f"\t{playing_the_system}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nHighest Single Update Score:\n", 'center')
-        self.report_ticket.insert(tk.END, f"\t{highest_single_update_score[0]}  |  {highest_single_update_score[1]:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "Lowest Single Update Score:\n", 'center')
-        self.report_ticket.insert(tk.END, f"\t{lowest_single_update_score[0]}  |  {lowest_single_update_score[1]:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "\nScores Per Event:\n", 'center')
-        for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
-            self.report_ticket.insert(tk.END, f"\t{course}  |  {count:.2f}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
-    
-        self.report_ticket.insert(tk.END, "All Time Staff Factoring:\n", 'center')
-        for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
-            self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
-    
-        self.progress_label.config(text=f"---")
-        self.report_ticket.config(state="disabled")
+            self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "Current Month", 'center')    
+            self.report_ticket.insert(tk.END, f"\nScores:\n", 'center')
+            for staff, count in sorted(staff_updates.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {count:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, f"\nUpdates:\n", 'center')  # New section for total updates
+            for staff, count in sorted(staff_updates_count_month.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, f"\nAverage Daily Score:\n", 'center')
+            for staff, avg_count in sorted(average_updates_per_day.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {avg_count:.2f}\n", 'c')
+            
+            self.report_ticket.insert(tk.END, "\nTop 3 Highest Daily Total Scores:\n", 'center')
+            for (staff, date), score in top_daily_total_scores:
+                formatted_date = date.strftime('%d/%m')
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {formatted_date}  |  {score:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "\nDay with Most Points Claimed:\n", 'center')
+            formatted_date = day_with_most_points_date.strftime('%d/%m')
+            self.report_ticket.insert(tk.END, f"\t{formatted_date}  |  {day_with_most_points_score:.2f}\n", 'c')
+            self.report_ticket.insert(tk.END, "Points Share:\n", 'c')
+            for staff, share in sorted(points_share.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {share:.2f}%\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "\nBusiest Idiot:\n", 'center')
+            self.report_ticket.insert(tk.END, f"\t{busiest_idiot}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "Playing the System:\n", 'center')
+            self.report_ticket.insert(tk.END, f"\t{playing_the_system}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "\nHighest Single Update Score:\n", 'center')
+            self.report_ticket.insert(tk.END, f"\t{highest_single_update_score[0]}  |  {highest_single_update_score[1]:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "Lowest Single Update Score:\n", 'center')
+            self.report_ticket.insert(tk.END, f"\t{lowest_single_update_score[0]}  |  {lowest_single_update_score[1]:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "\nScores Per Event:\n", 'center')
+            for course, count in sorted(course_updates.items(), key=lambda item: item[1], reverse=True)[:10]:
+                self.report_ticket.insert(tk.END, f"\t{course}  |  {count:.2f}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, f"{separator}\n", 'c')
+        
+            self.report_ticket.insert(tk.END, "All Time Staff Factoring:\n", 'center')
+            for staff, count in sorted(factoring_updates.items(), key=lambda item: item[1], reverse=True):
+                self.report_ticket.insert(tk.END, f"\t{staff}  |  {count}\n", 'c')
+        
+            self.progress_label.config(text=f"---")
+            self.report_ticket.config(state="disabled")
+
+        except Exception as e:
+            self.report_ticket.config(state="normal")
+            self.report_ticket.delete('1.0', tk.END)
+            self.report_ticket.insert('1.0', "An error occurred while generating the report.\nPlease try again.")
+            self.progress_label.config(text="Error with Staff Report")
+            self.report_ticket.tag_configure("center", justify='center')
+            self.report_ticket.tag_add("center", "1.0", "end")
+            self.report_ticket.config(state="disabled")
+            return
 
     # def create_rg_report(self):
 

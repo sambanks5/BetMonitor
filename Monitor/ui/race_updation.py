@@ -6,9 +6,8 @@ import tkinter as tk
 from datetime import date, datetime, timedelta
 from tkinter import messagebox
 from tkinter import ttk
-from utils.log_notification import log_notification
-from utils.user_login import user_login
-from config import NETWORK_PATH_PREFIX, get_user
+from utils import notification, login, user
+from config import NETWORK_PATH_PREFIX
 
 class RaceUpdaton:
     def __init__(self, root):
@@ -363,7 +362,7 @@ class RaceUpdaton:
                     score *= 0.7
     
             update = f"{time} - {_user} - {score:.2f}\n"
-            log_notification(f"{_user} updated {course} ({score:.2f})")
+            notification.log_notification(f"{_user} updated {course} ({score:.2f})")
     
             course_index = None
             for i, line in enumerate(data):
@@ -388,8 +387,8 @@ class RaceUpdaton:
             print(f"An unexpected error occurred: {e}")
 
     def update_course(self, course):
-        if not get_user():
-            user_login()
+        if not user.get_user():
+            login.user_login()
     
         now = datetime.now()
         time_string = now.strftime('%H:%M')
@@ -407,11 +406,11 @@ class RaceUpdaton:
         else:
             last_update_time = None
     
-        data['courses'][course] = f"{time_string} - {get_user()}"
+        data['courses'][course] = f"{time_string} - {user.get_user()}"
         with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
             json.dump(data, f)
     
-        threading.Thread(target=self.log_update, args=(course, time_string, get_user(), last_update_time), daemon=True).start()
+        threading.Thread(target=self.log_update, args=(course, time_string, user.get_user(), last_update_time), daemon=True).start()
         self.display_courses()
 
     def remove_course(self):
@@ -438,7 +437,7 @@ class RaceUpdaton:
                 with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
                     json.dump(data, f)
     
-                log_notification(f"'{selected_course}' removed by {get_user()}")
+                notification.log_notification(f"'{selected_course}' removed by {user.get_user()}")
     
                 self.display_courses()
                 top.destroy()
@@ -489,7 +488,7 @@ class RaceUpdaton:
                 with open(os.path.join(NETWORK_PATH_PREFIX, 'update_times.json'), 'w') as f:
                     json.dump(data, f)
     
-                log_notification(f"'{selected_course}' added by {get_user()}")
+                notification.log_notification(f"'{selected_course}' added by {user.get_user()}")
     
                 self.display_courses()
                 top.destroy()

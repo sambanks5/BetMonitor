@@ -41,6 +41,7 @@ from collections import defaultdict, Counter
 from bs4 import BeautifulSoup
 from tkinter import scrolledtext
 from dotenv import load_dotenv
+from utils import flashscore_scraper, notification
 
 # Load environment variables from .env file
 load_dotenv()
@@ -507,27 +508,6 @@ def parse_sms_details(bet_text):
 ####################################################################################
 ## LOG NOTIFICATION FOR RG OR STAFF 
 ####################################################################################
-def log_notification(message, important=False):
-    # Get the current time
-    time = datetime.now().strftime('%H:%M:%S')
-
-    file_lock = fasteners.InterProcessLock('notifications.lock')
-
-    try:
-        with file_lock:
-            with open('notifications.json', 'r') as f:
-                notifications = json.load(f)
-    except FileNotFoundError:
-        notifications = []
-    except json.JSONDecodeError:
-        notifications = []
-        
-    notifications.insert(0, {'time': time, 'message': message, 'important': important})
-
-    with file_lock:
-        with open('notifications.json', 'w') as f:
-            json.dump(notifications, f, indent=4)
-
 def staff_report_notification():
     global USER_NAMES
 
@@ -578,7 +558,7 @@ def staff_report_notification():
         highest_score = staff_scores_today[highest_scorer]
         message = user_messages.get(highest_scorer, "What a legend!")
         try:
-            log_notification(f"{message} {highest_scorer} leading with {highest_score:.2f} score.", True)
+            notification.log_notification(f"{message} {highest_scorer} leading with {highest_score:.2f} score.", True)
         except Exception as e:
             print(f"Error sending notification for {highest_scorer}: {e}")
 
@@ -603,7 +583,7 @@ def activity_report_notification():
 
     for threshold, data in thresholds.items():
         if data['count'] == threshold and not globals().get(data['flag'], False):
-            log_notification(f"{data['count']} {data['message']}", True)
+            notification.log_notification(f"{data['count']} {data['message']}", True)
             globals()[data['flag']] = True
 
     conn.close()
@@ -634,7 +614,7 @@ def check_closures_and_race_times():
         if closure['email_id'] in processed_closures:
             continue
         if not closure.get('completed', False):
-            log_notification(f"{closure['type']} request from {closure['username'].strip()}", important=True)
+            notification.log_notification(f"{closure['type']} request from {closure['username'].strip()}", important=True)
             processed_closures.add(closure['email_id'])
 
     try:
@@ -678,10 +658,10 @@ def check_closures_and_race_times():
         if current_time == race_time and race not in processed_races:
             if race in enhanced_places:
                 processed_races.add(race)
-                log_notification(f"{race} (enhanced) is past off time - {index}/{total_races_today}", important=True)
+                notification.log_notification(f"{race} (enhanced) is past off time - {index}/{total_races_today}", important=True)
             else:
                 processed_races.add(race)
-                log_notification(f"{race} is past off time - {index}/{total_races_today}")
+                notification.log_notification(f"{race} is past off time - {index}/{total_races_today}")
 
 def fetch_and_print_new_events():
     global previously_seen_events
@@ -703,7 +683,7 @@ def fetch_and_print_new_events():
     else:
         new_events = current_events - previously_seen_events
         for event in new_events:
-            log_notification(f"New event live: {event}", True)
+            notification.log_notification(f"New event live: {event}", True)
 
         previously_seen_events.update(new_events)
 
@@ -881,7 +861,7 @@ def calculate_deposit_summary():
 
 def log_deposit_summary():
     deposit_summary = calculate_deposit_summary()
-    log_notification(f"Most Deposits: {deposit_summary['most_deposits_user']} Highest Total: {deposit_summary['most_sum_user']}", True)
+    notification.log_notification(f"Most Deposits: {deposit_summary['most_deposits_user']} Highest Total: {deposit_summary['most_sum_user']}", True)
 
 def reprocess_deposits(app):
     creds = None
@@ -1089,6 +1069,7 @@ def clear_processed():
         with open('./Monitor/data.json', 'r') as f:
             data = json.load(f)
         data['todays_oddsmonkey_selections'] = {}
+        data['flashscore_data'] = []
         with open('./Monitor/data.json', 'w') as f:
             json.dump(data, f, indent=4)
     except IOError as e:
@@ -1141,19 +1122,19 @@ class DataUpdater:
                 creds = Credentials.from_authorized_user_file(token_path, SCOPES)
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+                    notification.log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
                     creds.refresh(Request())
                 else:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         './Monitor/gmailcreds.json', SCOPES)
-                    log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+                    notification.log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
                     creds = flow.run_local_server(port=0)
                 # Save the credentials for the next run
                 with open(token_path, 'w') as token:
                     token.write(creds.to_json())
         except google.auth.exceptions.RefreshError:
             print("Token has been expired or revoked. Deleting the token file and re-authenticating.")
-            log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
+            notification.log_notification("Google API Token Expired. Please check BetProcessor PC for Google login.", True)
             if os.path.exists(token_path):
                 os.remove(token_path)
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -1188,7 +1169,7 @@ class DataUpdater:
     def save_data(self, data):
         with open(self.data_file_path, 'w') as f:
             json.dump(data, f, indent=4)
-  
+    
     def update_data_file(self):
         with self.file_lock:
             try:
@@ -1203,7 +1184,8 @@ class DataUpdater:
                         executor.submit(self.get_new_registrations): 'new_registrations',
                         executor.submit(self.get_reporting_data): 'reporting_data',
                         executor.submit(self.update_todays_oddsmonkey_selections, data.get('todays_oddsmonkey_selections', {})): 'todays_oddsmonkey_selections',
-                        executor.submit(self.get_closures): 'closures'
+                        executor.submit(self.get_closures): 'closures',
+                        executor.submit(flashscore_scraper.get_data): 'flashscore_data'
                     }
     
                     for future in concurrent.futures.as_completed(futures, timeout=timeout):
@@ -1220,6 +1202,8 @@ class DataUpdater:
                                 data['todays_oddsmonkey_selections'] = result
                             elif func_name == 'closures':
                                 data['closures'] = result
+                            elif func_name == 'flashscore_data':
+                                data['flashscore_data'] = self.merge_flashscore_data(data.get('flashscore_data', []), result)
                         except concurrent.futures.TimeoutError:
                             self.log_message(f"Timeout occurred while executing {func_name}")
                             print(f"Timeout occurred while executing {func_name}")
@@ -1227,13 +1211,34 @@ class DataUpdater:
                             self.log_message(f"An error occurred while executing {func_name}: {e}")
                             print(f"An error occurred while executing {func_name}: {e}")
     
+                self.log_finished_games(data['flashscore_data'])
+    
                 self.save_data(data)
     
                 self.log_message(" --- Data file updated --- ")
     
             except Exception as e:
                 self.log_message(f"An error occurred while updating the data file: {e}")
-                log_notification(f"Processor Could not update data file.", True)
+                notification.log_notification(f"Processor Could not update data file.", True)
+    
+    def merge_flashscore_data(self, old_data, new_data):
+        old_data_dict = {f"{game['home_team']} vs {game['away_team']}": game for game in old_data}
+        for game in new_data:
+            key = f"{game['home_team']} vs {game['away_team']}"
+            if key in old_data_dict:
+                game['logged'] = old_data_dict[key].get('logged', False)
+        return new_data
+    
+    def log_finished_games(self, game_info_list):
+        if not game_info_list:
+            return
+        
+        print("Logging finished games...")
+        for game_info in game_info_list:
+            if game_info['status'] == 'Finished' and not game_info.get('logged', False):
+                print(f"{game_info['home_team']} v {game_info['away_team']} Finished {game_info['home_score']} - {game_info['away_score']}")
+                notification.log_notification(f"{game_info['home_team']} v {game_info['away_team']} Finished {game_info['home_score']} - {game_info['away_score']}", important=True)
+                game_info['logged'] = True
 
     def get_closures(self):
         closures = []
@@ -1249,8 +1254,6 @@ class DataUpdater:
         results = service.users().labels().list(userId='me').execute()
         labels = results.get('labels', [])
     
-        print("Available labels:", [label['name'] for label in labels])
-    
         for label_name in ['REPORTING/ACCOUNT DEACTIVATION', 'REPORTING/SELF EXCLUSION', 'REPORTING/TAKE A BREAK']:
             for label in labels:
                 if label['name'] == label_name:
@@ -1258,19 +1261,14 @@ class DataUpdater:
                     break
             else:
                 label_ids[label_name] = None
-    
-        print("Label IDs:", label_ids)
-    
+        
         for label_name, label_id in label_ids.items():
             if label_id is None:
                 print(f"Label '{label_name}' not found")
                 continue
     
-            print(f"Fetching messages for label '{label_name}' with ID '{label_id}'")
             results = service.users().messages().list(userId='me', labelIds=[label_id]).execute()
             messages = results.get('messages', [])
-    
-            print(f"Found {len(messages)} messages for label '{label_name}'")
     
             for message in messages:
                 try:
@@ -1312,9 +1310,7 @@ class DataUpdater:
                     closures.append(closure)
                 except Exception as e:
                     print(f"Error processing message {message['id']}: {e}")
-    
-        print("Closures:", closures)
-    
+        
         return closures
 
     def get_vip_clients(self):
@@ -1475,11 +1471,11 @@ class DataUpdater:
                 selections[formatted_event][selection] = lay_odds
             else:
                 # Skip non-racing events
-                print(f"Skipping non-racing event: {event}")
+                # print(f"Skipping non-racing event: {event}")
+                pass
     
         # Convert the dictionary to the desired format
         formatted_selections = {event: [[sel, odds] for sel, odds in sel_dict.items()] for event, sel_dict in selections.items()}
-    
         return formatted_selections
 
     def calculate_deposit_summary(self):
@@ -1705,7 +1701,7 @@ def main(app):
     observer = None
     observer_started = False
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
-    log_notification("Processor Started")
+    notification.log_notification("Processor Started")
     data_updater = DataUpdater(app)
     schedule.every(50).seconds.do(check_closures_and_race_times)
 
@@ -1752,7 +1748,7 @@ def main(app):
 
     if observer is not None:
         observer.stop()
-        log_notification("Processor Stopped")
+        notification.log_notification("Processor Stopped")
         observer.join()
 
 if __name__ == "__main__":

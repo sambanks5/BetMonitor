@@ -1,17 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
-from config import get_user
-from utils.user_login import user_login
-from utils.log_notification import log_notification
+from utils import user, login
+from utils import notification
 
 def user_notification(root):
-    if not get_user():
-        user_login()
+    if not user.get_user():
+        login.user_login()
 
     def submit():
         message = entry.get()
-        message = (get_user() + ": " + message)
-        log_notification(message, important=True, pinned=pin_message_var.get())
+        message = (user.get_user() + ": " + message)
+        notification.log_notification(message, important=True, pinned=pin_message_var.get())
         window.destroy()
 
     window = tk.Toplevel(root)

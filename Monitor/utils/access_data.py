@@ -15,7 +15,7 @@ class BetDataFetcher:
 
     def update_data(self):
         with self.lock:
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'Monitor', 'data.json'), 'r') as file:
+            with open(os.path.join(NETWORK_PATH_PREFIX, 'data.json'), 'r') as file:
                 self.data = json.load(file)
 
     def get_data(self):

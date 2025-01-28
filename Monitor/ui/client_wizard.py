@@ -11,8 +11,8 @@ from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 from oauth2client.service_account import ServiceAccountCredentials
 from tkinter import ttk, messagebox
-from utils import log_notification, user_login
-from config import NETWORK_PATH_PREFIX, get_user, set_user
+from utils import notification, login, user
+from config import NETWORK_PATH_PREFIX
 
 class ClientWizard:
     def __init__(self, root, default_tab="Factoring"):
@@ -141,7 +141,7 @@ class ClientWizard:
                     }
                     update_response = requests.put(update_url, json=update_data)
                     if update_response.status_code == 200:
-                        log_notification(f"{get_user()} applied RG Popup to {username.upper()}", True)
+                        notification.log_notification(f"{user.get_user()} applied RG Popup to {username.upper()}", True)
                         progress_note.config(text=f"Successfully updated {username} in Pipedrive.", anchor='center', justify='center')
                         time.sleep(2)
                         submit_button.config(state=tk.NORMAL)
@@ -204,8 +204,8 @@ class ClientWizard:
 
     def apply_factoring_tab(self):
         def handle_submit():
-            if not get_user():
-                user_login()
+            if not user.get_user():
+                login.user_login()
 
             submit_button.config(state=tk.DISABLED)
             current_time = datetime.now().strftime("%H:%M:%S")
@@ -237,10 +237,10 @@ class ClientWizard:
 
             copy_string = ""
             if entry2.get() in ["W - WATCHLIST", "M - BP ONLY NO OFFERS", "C - MAX £100 STAKE"]:
-                copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {get_user()}"
+                copy_string = f"{current_date} - {entry2.get().split(' - ')[1]} {user.get_user()}"
             pyperclip.copy(copy_string)
 
-            progress_note.config(text="Applying to get_user() on Pipedrive...\n\n", anchor='center', justify='center')
+            progress_note.config(text="Applying to user.get_user() on Pipedrive...\n\n", anchor='center', justify='center')
             response = requests.get(self.pipedrive_api_url, params=params)
             if response.status_code == 200:
                 persons = response.json()['data']['items']
@@ -288,7 +288,7 @@ class ClientWizard:
             worksheet.update_cell(next_row, 2, entry1.get().upper())
             worksheet.update_cell(next_row, 3, entry2_value)
             worksheet.update_cell(next_row, 4, entry3.get())
-            worksheet.update_cell(next_row, 5, get_user()) 
+            worksheet.update_cell(next_row, 5, user.get_user()) 
             worksheet.update_cell(next_row, 6, current_date)
 
             worksheet3 = spreadsheet.get_worksheet(3)
@@ -312,13 +312,13 @@ class ClientWizard:
                 'Username': entry1.get().upper(),
                 'Risk Category': entry2_value,
                 'Assessment Rating': entry3.get(),
-                'Staff': get_user()
+                'Staff': user.get_user()
             }
             with open(os.path.join(NETWORK_PATH_PREFIX, 'logs', 'factoringlogs', 'factoring.json'), 'a') as file:
                 file.write(json.dumps(data) + '\n')
 
             progress_note.config(text="Factoring Added Successfully.\n\n", anchor='center', justify='center')
-            log_notification(f"{get_user()} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
+            notification.log_notification(f"{user.get_user()} Factored {entry1.get().upper()} - {entry2_value} - {entry3.get()}")
             time.sleep(1)
             submit_button.config(state=tk.NORMAL)
                 
@@ -376,8 +376,8 @@ class ClientWizard:
 
     def apply_freebet_tab(self):
         current_month = datetime.now().strftime('%B')
-        if not get_user():
-            user_login()
+        if not user.get_user():
+            login.user_login()
     
         def handle_submit():
             # Disable the submit button while processing
@@ -423,10 +423,10 @@ class ClientWizard:
             worksheet.update_cell(next_row, 4, current_time)
             worksheet.update_cell(next_row, 5, entry1.get().upper())
             worksheet.update_cell(next_row, 6, entry3.get())
-            worksheet.update_cell(next_row, 11, get_user())
+            worksheet.update_cell(next_row, 11, user.get_user())
     
             progress_note.config(text=f"Free bet for {entry1.get().upper()} added successfully to reporting {current_month}\n", anchor='center', justify='center')
-            log_notification(f"{get_user()} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
+            notification.log_notification(f"{user.get_user()} applied £{entry3.get()} {entry2.get().capitalize()} to {entry1.get().upper()}")
     
             # Clear the fields after successful submission
             entry1.delete(0, tk.END)
@@ -488,11 +488,11 @@ class ClientWizard:
         }
     
         def load_data():
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'Monitor', 'data.json'), 'r') as f:
+            with open(os.path.join(NETWORK_PATH_PREFIX, 'data.json'), 'r') as f:
                 return json.load(f)
     
         def save_data(data):
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'Monitor', 'data.json'), 'w') as f:
+            with open(os.path.join(NETWORK_PATH_PREFIX, 'data.json'), 'w') as f:
                 json.dump(data, f, indent=4)
     
         def handle_request(request):
@@ -500,7 +500,7 @@ class ClientWizard:
             for widget in self.left_frame.winfo_children():
                 widget.destroy()
     
-            log_notification(f"{get_user()} Handling {request['type']} request for {request['username']} ")
+            notification.log_notification(f"{user.get_user()} Handling {request['type']} request for {request['username']} ")
     
             request['type'] = restriction_mapping.get(request['type'], request['type'])
     
@@ -535,7 +535,7 @@ class ClientWizard:
             if request['type'] in ['Take-A-Break', 'Self Exclusion']:
                 copy_string += f" (CAN REOPEN {reopen_date.strftime('%d/%m/%Y')})"
     
-            copy_string += f" {get_user()}"
+            copy_string += f" {user.get_user()}"
     
             pyperclip.copy(copy_string)
     

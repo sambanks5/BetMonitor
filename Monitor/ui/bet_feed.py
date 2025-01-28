@@ -9,8 +9,7 @@ import time
 import json
 from tkinter import ttk
 from tkcalendar import DateEntry
-from utils import access_data
-from config import USER_NAMES, get_user, set_user
+from utils import access_data, user
 
 class BetFeed:
     def __init__(self, root, database_manager):
@@ -377,7 +376,7 @@ class BetFeed:
             daily_turnover = reporting_data.get('daily_turnover', 'N/A')
             daily_profit = reporting_data.get('daily_profit', 'N/A')
             daily_profit_percentage = reporting_data.get('daily_profit_percentage', 'N/A')
-            full_name = USER_NAMES.get(get_user(), get_user())
+            full_name = user.USER_NAMES.get(user.get_user(), user.get_user())
     
             bet_change_indicator = "↑" if current_bets > previous_bets else "↓" if current_bets < previous_bets else "→"
             knockback_change_indicator = "↑" if current_knockbacks > previous_knockbacks else "↓" if current_knockbacks < previous_knockbacks else "→"
@@ -394,7 +393,7 @@ class BetFeed:
             self.activity_text.delete('1.0', tk.END)
     
             # Line 1: Date and User
-            self.activity_text.insert(tk.END, f"{current_day_name} {selected_date_str} {'  |  ' + full_name if get_user() else ''}\n", 'bold')
+            self.activity_text.insert(tk.END, f"{current_day_name} {selected_date_str} {'  |  ' + full_name if user.get_user() else ''}\n", 'bold')
 
             # Line 2: Bets
             self.activity_text.insert(tk.END, f"Bets: {current_bets:,} ")

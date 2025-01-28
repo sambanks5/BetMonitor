@@ -8,8 +8,8 @@ from tkinter import ttk, messagebox
 from datetime import datetime
 from PIL import Image, ImageTk
 import pyperclip
-from config import NETWORK_PATH_PREFIX, get_user
-from utils.log_notification import log_notification
+from config import NETWORK_PATH_PREFIX
+from utils import notification, user
 
 
 class Settings:
@@ -36,8 +36,8 @@ class Settings:
         self.current_user_label = ttk.Label(self.settings_frame, text="", font=("Helvetica", 10))
         self.current_user_label.pack()
 
-        if get_user():
-            self.current_user_label.config(text=f"Logged in as: {get_user()}")
+        if user.get_user():
+            self.current_user_label.config(text=f"Logged in as: {user.get_user()}")
 
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
         self.separator.pack(fill='x', pady=5)
@@ -154,12 +154,12 @@ class Settings:
                             else:
                                 original_last_update = None
                             event['lastUpdate'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-                            event['user'] = get_user()
+                            event['user'] = user.get_user()
                             if event['Meetings'][0]['EventCode'][3:5].lower() == 'ap':
                                 antepost = True
                             else:
                                 antepost = False
-                            threading.Thread(target=self.log_update, args=(event_name, markets, antepost, original_last_update, get_user()), daemon=True).start()
+                            threading.Thread(target=self.log_update, args=(event_name, markets, antepost, original_last_update, user.get_user()), daemon=True).start()
                             break
             
                 with open(filename, 'w') as f:
@@ -231,7 +231,7 @@ class Settings:
     
         update = f"{log_time} - {user} - {score}\n"
     
-        log_notification(f"{user} updated {event_name} ({score:.2f})")
+        notification.log_notification(f"{user} updated {event_name} ({score:.2f})")
     
         course_index = None
         for i, line in enumerate(data):

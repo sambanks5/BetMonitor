@@ -15,26 +15,3 @@ DATABASE_PATH = './wager_database.sqlite'
 NETWORK_PATH_PREFIX = ''
 
 CACHE_UPDATE_INTERVAL = 80 * 1
-
-_user = ""
-
-USER_NAMES = {
-    'GB': 'George B',
-    'GM': 'George M',
-    'JP': 'Jon',
-    'DF': 'Dave',
-    'SB': 'Sam',
-    'JJ': 'Joji',
-    'AE': 'Arch',
-    'EK': 'Ed',
-    'VO': 'Victor',
-    'MF': 'Mark'
-}
-
-def get_user():
-    global _user
-    return _user
-
-def set_user(value):
-    global _user
-    _user = value
