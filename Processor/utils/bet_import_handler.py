@@ -11,9 +11,10 @@ from tkinter import filedialog
 
 
 class FileHandler(FileSystemEventHandler):
-    def on_created(self, event, app):
-        global last_processed_time
+    def __init__(self, app):
         self.app = app
+
+    def on_created(self, event):
         file_path = os.path.normpath(event.src_path)
         
         if not os.path.isdir(file_path):
@@ -23,7 +24,7 @@ class FileHandler(FileSystemEventHandler):
                     print("Loading database")
                     if os.access(file_path, os.R_OK):
                         process_file(file_path, self.app)
-                        last_processed_time = datetime.now()
+                        set_last_processed_time(datetime.now())
                         break
                     else:
                         raise PermissionError(f"Permission denied: '{file_path}'")
@@ -198,7 +199,7 @@ def reprocess_bets(days_back, bet_path, app):
     database.close()
 
 def process_file(file_path, app):
-    conn = get_db_connection()
+    conn = get_db_connection.load_database()
     bet_data = parse_file(file_path, app)
     add_bet(conn, bet_data, app)
     conn.close()
