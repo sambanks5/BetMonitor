@@ -12,13 +12,13 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Bet Monitor Installer')
-        self.geometry('500x350')  # Increased height to accommodate the new checkbox
+        self.geometry('500x350') 
 
         self.iconbitmap('src/splash.ico')
         self.tk.call('source', 'src/Forest-ttk-theme-master/forest-light.tcl')
         ttk.Style().theme_use('forest-light')
 
-        self.update_folder = 'F:\\GB Bet Monitor\\Update'
+        self.update_folder = 'Update'
         self.local_folder = 'C:\\Users\\Public\\Documents\\betmonitor'
 
         self.title_frame = ttk.Frame(self)
@@ -42,10 +42,6 @@ class Application(tk.Tk):
         self.clean_reinstall_var = tk.BooleanVar()
         self.clean_reinstall_checkbox = ttk.Checkbutton(self.checkbox_frame, text='Clean Reinstall', variable=self.clean_reinstall_var)
         self.clean_reinstall_checkbox.pack(side='left', padx=10)
-
-        self.manager_terminal_var = tk.BooleanVar()
-        self.manager_terminal_checkbox = ttk.Checkbutton(self.checkbox_frame, text='Manager Terminal', variable=self.manager_terminal_var)
-        self.manager_terminal_checkbox.pack(side='left', padx=10)
 
         self.check_for_updates_button = ttk.Button(self, text='Check for Updates', command=self.check_for_updates)
         self.check_for_updates_button.pack(pady=10)
@@ -74,13 +70,9 @@ class Application(tk.Tk):
         update_successful = True  # Flag to track the success of the update process
 
         try:
-            # Check if manager terminal is selected
-            if self.manager_terminal_var.get():
-                self.update_folder = 'C:\\GB Bet Monitor\\Update'
-                beta_exe_filename = 'BetMonitorBETAMGR.exe'
-                print(f"Manager terminal selected: Update folder changed to {self.update_folder}")
-            else:
-                beta_exe_filename = 'BetMonitorBETA.exe'
+            beta_exe_filename = 'BetMonitor.exe'
+            internal_folder_name = '_internal'
+            env_file_name = '.env'
 
             # Check if clean reinstall is selected
             if self.clean_reinstall_var.get():
@@ -94,7 +86,7 @@ class Application(tk.Tk):
                 print(f"Creating local folder: {self.local_folder}")
                 os.makedirs(self.local_folder)
 
-            # Copy BetMonitorBETA.exe or BetMonitorBETAMGR.exe to local folder
+            # Copy BetMonitorBETA.exe to local folder
             beta_exe_path = os.path.normpath(os.path.join(self.update_folder, beta_exe_filename))
             local_exe_path = os.path.normpath(os.path.join(self.local_folder, 'BetMonitor.exe'))
             print(f"Source path: {beta_exe_path}")
@@ -103,75 +95,42 @@ class Application(tk.Tk):
             if os.path.exists(beta_exe_path):
                 print(f"Copying {beta_exe_path} to {local_exe_path}")
                 shutil.copy(beta_exe_path, local_exe_path)
-                if os.path.exists(local_exe_path):
-                    print(f"File successfully copied to {local_exe_path}")
-                else:
-                    print(f"Failed to copy file to {local_exe_path}")
-                    update_successful = False
-            else:
-                print(f"Source file {beta_exe_path} does not exist")
-                update_successful = False
 
-            # Check for presence of _internal and src folders
-            folders_to_check = ['_internal', 'src']
-            total_files = 0
+            # Copy _internal folder to local folder
+            internal_src_path = os.path.normpath(os.path.join(self.update_folder, internal_folder_name))
+            internal_dst_path = os.path.normpath(os.path.join(self.local_folder, internal_folder_name))
+            print(f"Copying {internal_src_path} to {internal_dst_path}")
+            self.copy_tree_with_progress(internal_src_path, internal_dst_path)
 
-            for folder in folders_to_check:
-                local_folder_path = os.path.normpath(os.path.join(self.local_folder, folder))
-                update_folder_path = os.path.normpath(os.path.join(self.update_folder, folder))
+            # Copy .env file to local folder
+            env_src_path = os.path.normpath(os.path.join(self.update_folder, env_file_name))
+            env_dst_path = os.path.normpath(os.path.join(self.local_folder, env_file_name))
+            print(f"Copying {env_src_path} to {env_dst_path}")
+            shutil.copy(env_src_path, env_dst_path)
 
-                if not os.path.exists(local_folder_path) or self.clean_reinstall_var.get():
-                    # Count total files to copy
-                    for root, dirs, files in os.walk(update_folder_path):
-                        total_files += len(files)
-
-            # Set progress bar maximum value
-            self.progress.config(maximum=total_files)
-            print(f"Total files to copy: {total_files}")
-
-            # Copy missing folders and track progress
-            for folder in folders_to_check:
-                local_folder_path = os.path.normpath(os.path.join(self.local_folder, folder))
-                update_folder_path = os.path.normpath(os.path.join(self.update_folder, folder))
-
-                if not os.path.exists(local_folder_path) or self.clean_reinstall_var.get():
-                    print(f"Copying folder {update_folder_path} to {local_folder_path}")
-                    self.copy_tree_with_progress(update_folder_path, local_folder_path)
-
-            # Create desktop shortcut
-            self.create_desktop_shortcut(local_exe_path)
 
         except Exception as e:
-            self.update_label.config(text=f'Error: {e}')
-            print(f"Error during update: {e}")
             update_successful = False
+            print(f"Update failed: {e}")
+
         finally:
             self.progress.stop()
-            # Re-enable buttons
+            self.update_label.config(text='Update complete.\n' if update_successful else 'Update failed.\n')
             self.check_for_updates_button.config(state='normal')
             self.update_button.config(state='normal')
-
-            # Update the label based on the success of the update process
-            if update_successful:
-                self.update_label.config(text='Update completed successfully.')
-            else:
-                self.update_label.config(text='Update failed!')
 
     def copy_tree_with_progress(self, src, dst):
         if not os.path.exists(dst):
             os.makedirs(dst)
         for root, dirs, files in os.walk(src):
-            for dir in dirs:
-                dst_dir = os.path.join(dst, os.path.relpath(os.path.join(root, dir), src))
-                if not os.path.exists(dst_dir):
-                    os.makedirs(dst_dir)
             for file in files:
                 src_file = os.path.join(root, file)
                 dst_file = os.path.join(dst, os.path.relpath(src_file, src))
-                print(f"Copying file {src_file} to {dst_file}")
+                dst_dir = os.path.dirname(dst_file)
+                if not os.path.exists(dst_dir):
+                    os.makedirs(dst_dir)
                 shutil.copy2(src_file, dst_file)
-                self.progress.step(1)
-                self.update_idletasks()
+                print(f"Copied {src_file} to {dst_file}")
 
     def create_desktop_shortcut(self, target_path):
         desktop = winshell.desktop()
@@ -196,7 +155,7 @@ class Application(tk.Tk):
         self.progress.start(10)
         try:
             if os.path.exists(self.update_folder):
-                beta_file_location = os.path.normpath(os.path.join(self.update_folder, 'BetMonitorBETA.exe'))
+                beta_file_location = os.path.normpath(os.path.join(self.update_folder, 'BetMonitor.exe'))
                 if os.path.exists(beta_file_location):
                     self.update_label.config(text='Update available. Click Update to install.\nPlease make sure any instances of Bet Monitor are closed.')
                     self.update_button.config(state='normal')

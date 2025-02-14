@@ -5,7 +5,7 @@ import tkinter as tk
 import time
 import schedule
 from watchdog.observers import Observer
-from utils import notification, bet_import_handler, data_fetcher
+from utils import notification, bet_import_handler, data_fetcher, evt_gen
 from config import ARCHIVE_DATABASE_PATH, executor, get_path, set_path, get_last_processed_time, set_last_processed_time
 from datetime import datetime, timedelta
 from tkinter import Toplevel, filedialog, scrolledtext, ttk
@@ -39,7 +39,7 @@ class Application(tk.Tk):
 
         self.text_area = scrolledtext.ScrolledText(self, undo=True)
         self.text_area['font'] = ('helvetica', '12')
-        self.text_area.grid(row=0, column=0, rowspan=6, sticky='nsew')
+        self.text_area.grid(row=0, column=0, rowspan=7, sticky='nsew')
 
         image = Image.open(icon_path)
         image = image.resize((70, 70)) 
@@ -59,8 +59,11 @@ class Application(tk.Tk):
         self.set_path_button = ttk.Button(self, text="BWW Folder", command=self.set_bet_path, style='TButton', width=20)
         self.set_path_button.grid(row=4, column=1, padx=5, pady=5, sticky='ew')
 
+        self.evt_gen_button = ttk.Button(self, text="Event Generator", command=lambda: evt_gen.EventGenerator(self), style='TButton', width=20)
+        self.evt_gen_button.grid(row=5, column=1, padx=5, pady=5, sticky='ew')
+
         self.progress_bar = ttk.Progressbar(self, mode='indeterminate')
-        self.progress_bar.grid(row=5, column=1, padx=5, pady=5)
+        self.progress_bar.grid(row=6, column=1, padx=5, pady=5)
 
         self.bind('<Destroy>', self.on_destroy)
 
@@ -201,7 +204,7 @@ class Application(tk.Tk):
         self.stop_main_loop = True
 
 def main(app):
-    event_handler = bet_import_handler.FileHandler()
+    event_handler = bet_import_handler.FileHandler(app)
     observer = None
     observer_started = False
     app.log_message('Bet Processor - import, parse and store daily bet data.\n')
