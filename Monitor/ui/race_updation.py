@@ -333,10 +333,10 @@ class RaceUpdaton:
                                     else:
                                         for race in meeting['events']:
                                             if race['status'] == '':
-                                                score += 0.2
+                                                score += 0.1
                                         if score == 0.0:
                                             messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
-                                            score = 0.2
+                                            score = 0.1
                                     break
                             if morning_finished:
                                 print("breaking")
@@ -349,16 +349,11 @@ class RaceUpdaton:
                                     if search_course == meeting['meetinName']:
                                         for race in meeting['events']:
                                             if race['status'] == '':
-                                                score += 0.2
+                                                score += 0.1
                                         if score == 0.0:
                                             messagebox.showerror("Error", f"Course {course} not found or meeting has finished. You will be allocated 0.2 base score for this update.\n")
-                                            score = 0.2
+                                            score = 0.1
                                         break
-    
-            surge_start = datetime.strptime('13:00', '%H:%M').time()
-            surge_end = datetime.strptime('16:00', '%H:%M').time()
-            if surge_start <= now.time() <= surge_end:
-                score += 0.1
     
             score = round(score, 2)
             print(f"Score: {score}")

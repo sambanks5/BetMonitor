@@ -96,11 +96,11 @@ class Application(tk.Tk):
                 print(f"Copying {beta_exe_path} to {local_exe_path}")
                 shutil.copy(beta_exe_path, local_exe_path)
 
-            # Copy _internal folder to local folder
-            internal_src_path = os.path.normpath(os.path.join(self.update_folder, internal_folder_name))
-            internal_dst_path = os.path.normpath(os.path.join(self.local_folder, internal_folder_name))
-            print(f"Copying {internal_src_path} to {internal_dst_path}")
-            self.copy_tree_with_progress(internal_src_path, internal_dst_path)
+            # # Copy _internal folder to local folder
+            # internal_src_path = os.path.normpath(os.path.join(self.update_folder, internal_folder_name))
+            # internal_dst_path = os.path.normpath(os.path.join(self.local_folder, internal_folder_name))
+            # print(f"Copying {internal_src_path} to {internal_dst_path}")
+            # self.copy_tree_with_progress(internal_src_path, internal_dst_path)
 
             # Copy .env file to local folder
             env_src_path = os.path.normpath(os.path.join(self.update_folder, env_file_name))

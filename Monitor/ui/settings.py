@@ -19,7 +19,7 @@ class Settings:
     
     def initialize_ui(self):        
         self.settings_frame = ttk.Frame(self.root, style='Card')
-        self.settings_frame.place(x=714, y=655, width=180, height=265)
+        self.settings_frame.place(x=744, y=655, width=150, height=265)
 
         logo_image = Image.open(resource_path.get_resource_path('splash.ico'))
         logo_image = logo_image.resize((60, 60))
@@ -27,7 +27,7 @@ class Settings:
         self.logo_label = ttk.Label(self.settings_frame, image=self.company_logo)
         self.logo_label.pack(pady=(10, 2))
 
-        self.version_label = ttk.Label(self.settings_frame, text="v12.0", font=("Helvetica", 10))
+        self.version_label = ttk.Label(self.settings_frame, text="v12.2", font=("Helvetica", 10))
         self.version_label.pack(pady=(0, 7))
         
         self.separator = ttk.Separator(self.settings_frame, orient='horizontal')
