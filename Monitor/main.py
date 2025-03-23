@@ -1,12 +1,13 @@
 import os
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
 from PIL import Image, ImageTk
 from ui import BetFeed, RaceUpdaton, Next3Panel, BetRuns, Notebook, Settings, ClientWizard
-from utils import schedule_data_updates, notification, user_notification, import_reporting, user, login, resource_path
+from utils import schedule_data_updates, notification, user_notification, import_reporting, user, login, resource_path, evt_gen
 from config import NETWORK_PATH_PREFIX
 from utils.db_manager import DatabaseManager
 
@@ -18,6 +19,7 @@ class BetViewerApp:
         self.initialize_ui()
         login.user_login()
         self.start_background_tasks()
+        time.sleep(1)
         self.initialize_modules()
 
     def initialize_ui(self):
@@ -53,6 +55,7 @@ class BetViewerApp:
         
         utils_menu = tk.Menu(menu_bar, tearoff=0)
         utils_menu.add_command(label="Import Reporting Data", command=self.import_reporting_data, foreground="#000000", background="#ffffff")
+        utils_menu.add_command(label="Event Generator", command=self.event_generator, foreground="#000000", background="#ffffff")
         menu_bar.add_cascade(label="Utilities", menu=utils_menu)
 
         menu_bar.add_command(label="Client", command=lambda: self.open_client_wizard("Factoring"), foreground="#000000", background="#ffffff")
@@ -65,10 +68,11 @@ class BetViewerApp:
         threading.Thread(target=self.database_manager.periodic_cache_update, daemon=True).start()
 
     def initialize_modules(self):
+
         self.bet_feed = BetFeed(self.root, self.database_manager)
+        self.bet_runs = BetRuns(self.root, self.database_manager)
         self.race_updation = RaceUpdaton(self.root)
         self.next3_panel = Next3Panel(self.root)
-        self.bet_runs = BetRuns(self.root, self.database_manager)
         self.notebook = Notebook(self.root, self.database_manager)
         self.settings = Settings(self.root)
 
@@ -77,6 +81,9 @@ class BetViewerApp:
 
     def user_login(self):
         login.user_login()
+
+    def event_generator(self):
+        evt_gen.EventGenerator(self.root)
 
     def import_reporting_data(self):
         import_reporting_window = tk.Toplevel(self.root)
