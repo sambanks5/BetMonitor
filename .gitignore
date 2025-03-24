@@ -48,3 +48,9 @@ BetViewerBETA.py
 /Monitor/build
 /Monitor/dist/main
 /Update
+/MonitorQT/__pycache__
+/MonitorQT/ui/__pycache__
+/MonitorQT/utils/__pycache__
+/venv
+/venv
+/venv/bin
