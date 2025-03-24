@@ -16,7 +16,7 @@ NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 #     DATABASE_PATH = 'C:\\GB Bet Monitor\\wager_database.sqlite'
 #     NETWORK_PATH_PREFIX = 'C:\\GB Bet Monitor\\'
 
-# DATABASE_PATH = '../wager_database.sqlite'
-# NETWORK_PATH_PREFIX = '../'
+DATABASE_PATH = '../wager_database.sqlite'
+NETWORK_PATH_PREFIX = '../'
 
 CACHE_UPDATE_INTERVAL = 80 * 1

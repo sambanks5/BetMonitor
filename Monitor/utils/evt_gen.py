@@ -88,7 +88,6 @@ class EventGenerator:
                 self.leagues_data = []
         except requests.exceptions.ConnectionError:
             messagebox.showerror("Connection Error", "Failed to connect to the server. Please click the 'Reboot Service' button.")
-            print("Connection Error: ", e)
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Error", f"Failed to fetch leagues data: {e}")
         finally:

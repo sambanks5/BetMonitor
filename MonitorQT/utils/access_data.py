@@ -15,8 +15,21 @@ class BetDataFetcher:
 
     def update_data(self):
         with self.lock:
-            with open(os.path.join(NETWORK_PATH_PREFIX, 'data.json'), 'r') as file:
-                self.data = json.load(file)
+            try:
+                data_path = os.path.join(NETWORK_PATH_PREFIX, 'data.json')
+                print(f"Loading data from: {data_path}")
+                
+                if not os.path.exists(data_path):
+                    print(f"ERROR: Data file not found at {data_path}")
+                    return
+                    
+                with open(os.path.join(NETWORK_PATH_PREFIX, 'data.json'), 'r') as file:
+                    self.data = json.load(file)
+                    print("Data loaded successfully")
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Invalid JSON in data file: {e}")
+            except Exception as e:
+                print(f"ERROR: Failed to load data: {e}")
 
     def get_data(self):
         with self.lock:
@@ -44,7 +57,7 @@ class BetDataFetcher:
 
     def get_todays_oddsmonkey_selections(self):
         with self.lock:
-            return self.data.get('todays_oddsmonkey_selections', [])
+            return self.data.get('todays_oddsmonkey_selections', {})
 
 def schedule_data_updates():
     fetcher = BetDataFetcher()
@@ -55,8 +68,18 @@ def schedule_data_updates():
 
 def access_data():
     fetcher = BetDataFetcher()
+    
+    # Check if data loaded yet
+    if not fetcher.data:
+        print("Initial data load...")
+        try:
+            fetcher.update_data()
+        except Exception as e:
+            print(f"Error loading data: {e}")
+    
     vip_clients = fetcher.get_vip_clients()
     newreg_clients = fetcher.get_newreg_clients()
     today_oddsmonkey_selections = fetcher.get_todays_oddsmonkey_selections()
     reporting_data = fetcher.get_reporting_data()
+    print(f"Data sizes: VIP clients: {len(vip_clients)}, New reg: {len(newreg_clients)}, OM selections: {len(today_oddsmonkey_selections)}")
     return vip_clients, newreg_clients, today_oddsmonkey_selections, reporting_data
