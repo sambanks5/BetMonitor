@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QApplication, QStyle
-from PySide6.QtCore import Qt, QRect, QSize, Signal, QPoint
-from PySide6.QtGui import QPainter, QColor, QFont, QBrush, QPen, QPainterPath, QLinearGradient
+from PySide6.QtCore import Qt, QRect, QSize, Signal, QPoint, QEvent
+from PySide6.QtGui import QPainter, QColor, QFont, QBrush, QPen, QPainterPath, QLinearGradient, QCursor
 
 class BetDelegate(QStyledItemDelegate):
     customerClicked = Signal(str)  # Signal when customer reference is clicked
@@ -8,8 +8,6 @@ class BetDelegate(QStyledItemDelegate):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.hovered_item = None
-        self.hovered_element = None
         self.clickable_areas = {}  # Store clickable regions
         
     def paint(self, painter, option, index):
@@ -170,6 +168,17 @@ class BetDelegate(QStyledItemDelegate):
         painter.setPen(highlight_text_color)
         painter.drawText(customer_rect, Qt.AlignLeft | Qt.AlignVCenter, customer_text)
         
+        # Draw dotted underline for customer reference to indicate it's clickable
+        underline_pen = QPen(QColor(255, 255, 255, 120), 1)  # Semi-transparent white
+        underline_pen.setStyle(Qt.DotLine)  # Dotted line
+        painter.setPen(underline_pen)
+        painter.drawLine(
+            customer_rect.left(),
+            customer_rect.bottom(),
+            customer_rect.right(),
+            customer_rect.bottom()
+        )
+        
         # Draw timestamp and bet ID
         painter.setPen(regular_text_color)
         timestamp_text = f"{timestamp} - {bet_no}"
@@ -208,16 +217,24 @@ class BetDelegate(QStyledItemDelegate):
             }
             
             # Draw selection text (clickable)
-            painter.setPen(QColor("#0066cc"))
+            painter.setPen(link_color)
             painter.drawText(selection_rect, Qt.AlignLeft | Qt.AlignVCenter, selection_text)
             
-            # Draw underline for clickable selection
-            # painter.drawLine(
-            #     selection_rect.left(),
-            #     selection_rect.bottom(),
-            #     selection_rect.left() + painter.fontMetrics().horizontalAdvance(selection[0]) + 2,
-            #     selection_rect.bottom()
-            # )
+            # Draw dotted underline for selection to indicate it's clickable
+            # Calculate position after "X - " prefix
+            prefix_width = painter.fontMetrics().horizontalAdvance(f"{i+1} - ")
+            selection_width = painter.fontMetrics().horizontalAdvance(selection[0])
+            selection_x = selection_rect.left() + prefix_width
+            
+            dotted_pen = QPen(link_color, 1)
+            dotted_pen.setStyle(Qt.DotLine)
+            painter.setPen(dotted_pen)
+            painter.drawLine(
+                selection_x,
+                selection_rect.bottom() - 1,
+                selection_x + selection_width,
+                selection_rect.bottom() - 1
+            )
             
             y_offset += 20
     
@@ -259,6 +276,16 @@ class BetDelegate(QStyledItemDelegate):
         painter.setPen(highlight_text_color)
         painter.drawText(customer_rect, Qt.AlignLeft | Qt.AlignVCenter, customer_text)
         
+        # Draw dotted underline for customer reference to indicate it's clickable
+        underline_pen = QPen(QColor(255, 255, 255, 120), 1)  # Semi-transparent white
+        underline_pen.setStyle(Qt.DotLine)  # Dotted line
+        painter.setPen(underline_pen)
+        painter.drawLine(
+            customer_rect.left(),
+            customer_rect.bottom(),
+            customer_rect.right(),
+            customer_rect.bottom()
+        )
         # Draw timestamp and bet ID
         painter.setPen(regular_text_color)
         timestamp_text = f"{timestamp} - {bet_no}"
@@ -320,6 +347,17 @@ class BetDelegate(QStyledItemDelegate):
         painter.setPen(highlight_text_color)
         painter.drawText(customer_rect, Qt.AlignLeft | Qt.AlignVCenter, customer_text)
         
+        # Draw dotted underline for customer reference to indicate it's clickable
+        underline_pen = QPen(QColor(255, 255, 255, 120), 1)  # Semi-transparent white
+        underline_pen.setStyle(Qt.DotLine)  # Dotted line
+        painter.setPen(underline_pen)
+        painter.drawLine(
+            customer_rect.left(),
+            customer_rect.bottom(),
+            customer_rect.right(),
+            customer_rect.bottom()
+        )
+
         # Draw timestamp and bet ID
         painter.setPen(regular_text_color)
         timestamp_text = f"{timestamp} - {knockback_id}"
@@ -412,15 +450,49 @@ class BetDelegate(QStyledItemDelegate):
             if not selection_name:
                 continue
             
-            # Create clickable area for this selection
-            selection_rect = QRect(rect.left() + 15, y_offset, rect.width() - 30, 20)
+            # Create a more precise clickable area for just the selection name
+            selection_text = f" - {selection_name}"  # Format to match display
+            
+            # Calculate the text position
+            text_start_x = rect.left() + 15  # Left margin
+            text_width = painter.fontMetrics().horizontalAdvance(selection_name)
+            
+            # Create a tighter clickable area around just the selection name text
+            selection_rect = QRect(
+                text_start_x, 
+                y_offset, 
+                text_width, 
+                painter.fontMetrics().height()
+            )
+            
+            # Store this clickable area
             self.clickable_areas[f"selection_{row}_{i}"] = {
                 "rect": selection_rect,
                 "data": selection_name
             }
             
+            # Draw the selection name in link color with dotted underline
+            painter.setPen(link_color)
+            painter.drawText(selection_rect, Qt.AlignLeft | Qt.AlignVCenter, selection_name)
+            
+            # Draw dotted underline
+            dotted_pen = QPen(link_color, 1)
+            dotted_pen.setStyle(Qt.DotLine)
+            painter.setPen(dotted_pen)
+            painter.drawLine(
+                selection_rect.left(),
+                selection_rect.bottom() - 1,
+                selection_rect.right(),
+                selection_rect.bottom() - 1
+            )
+            
             y_offset += painter.fontMetrics().height()
             
+    def clearClickableAreas(self):
+        """Clear all clickable areas - call this when model data changes"""
+        self.clickable_areas = {}
+        print("Cleared all clickable areas")
+
     def sizeHint(self, option, index):
         bet_dict = index.data(Qt.DisplayRole)
         if not bet_dict:
@@ -452,19 +524,33 @@ class BetDelegate(QStyledItemDelegate):
         return QSize(option.rect.width(), height + 20)  # Reduced padding
         
     def editorEvent(self, event, model, option, index):
-        # Handle click events on clickable areas
-        if event.type() == event.MouseButtonRelease:
+        """Handle mouse clicks on clickable areas"""
+        # Only handle mouse release events (clicks)
+        if event.type() == QEvent.MouseButtonRelease:
             pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+            row = index.row()
             
-            for key, area in self.clickable_areas.items():
-                if area["rect"].contains(pos):
-                    if key.startswith("customer_"):
-                        self.customerClicked.emit(area["data"])
-                        return True
-                    elif key.startswith("selection_"):
-                        self.selectionClicked.emit(area["data"])
-                        return True
-                        
+            # Debug info
+            print(f"Click on row {row} at position: {pos.x()}, {pos.y()}")
+            
+            # Check customer clickables first (more important)
+            customer_key = f"customer_{row}"
+            if customer_key in self.clickable_areas and self.clickable_areas[customer_key]["rect"].contains(pos):
+                customer_ref = self.clickable_areas[customer_key]["data"]
+                print(f"Customer clicked: {customer_ref}")
+                self.customerClicked.emit(customer_ref)
+                return True
+                
+            # Then check selection clickables
+            for i in range(20):  # Check a reasonable number of potential selections
+                selection_key = f"selection_{row}_{i}"
+                if selection_key in self.clickable_areas and self.clickable_areas[selection_key]["rect"].contains(pos):
+                    selection_name = self.clickable_areas[selection_key]["data"]
+                    print(f"Selection clicked: {selection_name}")
+                    self.selectionClicked.emit(selection_name)
+                    return True
+                    
+        # Pass other events to parent handler
         return super().editorEvent(event, model, option, index)
     
     def set_reference_data(self, oddsmonkey_selections, vip_clients, newreg_clients, reporting_data):

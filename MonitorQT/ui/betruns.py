@@ -155,23 +155,15 @@ class BetRunsWidget(QWidget):
         self.startPeriodicUpdate()
         
     def initUI(self):
+        # Main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
         
-        # Header with title
-        header_layout = QHBoxLayout()
-        title_label = QLabel("Runs on Selections")
-        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: white;")
-        header_layout.addWidget(title_label)
-        main_layout.addLayout(header_layout)
-        
-        # Main content frame
-        content_frame = QFrame()
-        content_frame.setFrameShape(QFrame.Panel)
-        content_frame.setFrameShadow(QFrame.Raised)
-        content_frame.setStyleSheet("background-color: #242424; border-radius: 8px;")
-        content_layout = QVBoxLayout(content_frame)
+        # Feed frame setup - match BetFeedWidget style
+        runs_frame = QFrame()
+        runs_frame.setFrameShape(QFrame.Panel)
+        runs_layout = QVBoxLayout(runs_frame)
         
         # Results text area
         self.results_text = QTextEdit()
@@ -199,7 +191,7 @@ class BetRunsWidget(QWidget):
                 height: 0px;
             }
         """)
-        content_layout.addWidget(self.results_text)
+        runs_layout.addWidget(self.results_text)
         
         # Filter frame - hidden by default
         self.filter_frame = QFrame()
@@ -227,12 +219,12 @@ class BetRunsWidget(QWidget):
         self.bets_combobox.setCurrentIndex(1)  # Default to 50
         filter_layout.addWidget(self.bets_combobox, 0, 3)
         
-        # Apply filters button
-        self.apply_button = QPushButton("✔")
-        self.apply_button.clicked.connect(self.applyFilters)
-        filter_layout.addWidget(self.apply_button, 0, 4)
+        # Apply filters button - match BetFeedWidget style
+        self.tick_button = QPushButton("✔")
+        self.tick_button.clicked.connect(self.applyFilters)
+        filter_layout.addWidget(self.tick_button, 0, 4)
         
-        # Reset filters button
+        # Reset filters button - match BetFeedWidget style
         self.reset_button = QPushButton("✖")
         self.reset_button.clicked.connect(self.resetFilters)
         filter_layout.addWidget(self.reset_button, 0, 5)
@@ -241,9 +233,9 @@ class BetRunsWidget(QWidget):
         
         # Hide filter frame by default
         self.filter_frame.setVisible(False)
-        content_layout.addWidget(self.filter_frame)
+        runs_layout.addWidget(self.filter_frame)
         
-        # Bottom control bar
+        # Bottom control bar - match BetFeedWidget style
         bottom_bar = QHBoxLayout()
         
         # Toggle filter button
@@ -251,20 +243,25 @@ class BetRunsWidget(QWidget):
         self.show_hide_button.clicked.connect(self.toggleFilters)
         bottom_bar.addWidget(self.show_hide_button, 0, Qt.AlignLeft)
         
-        # Date selector
+        # Date display label (replacing editable date picker)
+        self.date_label = QLabel(QDate.currentDate().toString("dd/MM/yyyy"))
+        self.date_label.setAlignment(Qt.AlignCenter)
+        self.date_label.setStyleSheet("background-color: rgba(255, 255, 255, 10); padding: 4px 8px; border-radius: 4px;")
+        bottom_bar.addWidget(self.date_label, 1, Qt.AlignCenter)
+        
+        # Keep date_edit but hide it
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setDisplayFormat("dd/MM/yyyy")
-        self.date_edit.dateChanged.connect(self.manualRefresh)
-        bottom_bar.addWidget(self.date_edit, 1, Qt.AlignCenter)
+        self.date_edit.setVisible(False)
         
-        # Refresh button
+        # Refresh button - match BetFeedWidget style
         self.refresh_button = QPushButton("⟳")
         self.refresh_button.setFixedWidth(30)
         self.refresh_button.clicked.connect(self.manualRefresh)
         bottom_bar.addWidget(self.refresh_button, 0, Qt.AlignRight)
         
-        content_layout.addLayout(bottom_bar)
-        main_layout.addWidget(content_frame)
+        runs_layout.addLayout(bottom_bar)
+        main_layout.addWidget(runs_frame)
         
         # Initialize the text styles
         self.setupTextStyles()
@@ -324,6 +321,19 @@ class BetRunsWidget(QWidget):
         # Display loading message
         self.results_text.setText("Loading bet runs data...")
         
+    def on_global_date_changed(self, new_date):
+        """Handle global date change from ActivityWidget"""
+        # Update our date editor without triggering a refresh
+        self.date_edit.blockSignals(True)
+        self.date_edit.setDate(new_date)
+        self.date_edit.blockSignals(False)
+        
+        # Update the visible date label
+        self.date_label.setText(new_date.toString("dd/MM/yyyy"))
+        
+        # Now refresh data
+        self.manualRefresh()
+
     def startPeriodicUpdate(self):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.checkForUpdate)

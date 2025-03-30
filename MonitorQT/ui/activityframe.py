@@ -1,7 +1,9 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QFrame, QGridLayout, QSizePolicy, QPushButton)
+                             QFrame, QGridLayout, QSizePolicy, QPushButton,
+                             QDateEdit, QMenu)  
 from PySide6.QtCore import Qt, QDate, Signal, QTimer, QRect, QPoint
-from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QFontMetrics
+from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QFontMetrics, QAction  
+
 import threading
 from datetime import datetime, timedelta
 from utils import access_data, user
@@ -154,7 +156,8 @@ class StatsPanel(QFrame):
 
 class ActivityWidget(QWidget):
     refresh_signal = Signal()
-    
+    date_changed_signal = Signal(QDate)  # Signal to notify date changes
+
     def __init__(self, database_manager):
         super().__init__()
         self.database_manager = database_manager
@@ -174,9 +177,39 @@ class ActivityWidget(QWidget):
         # Header with date and refresh button
         header_layout = QHBoxLayout()
         
+        # Create a date widget container
+        date_container = QWidget()
+        date_container_layout = QHBoxLayout(date_container)
+        date_container_layout.setContentsMargins(0, 0, 0, 0)
+        date_container_layout.setSpacing(5)
+        
+        # Date label now acts as a dropdown trigger
         self.date_label = QLabel("Today's Activity")
-        self.date_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: white;")
-        header_layout.addWidget(self.date_label)
+        self.date_label.setStyleSheet("""
+            font-size: 14pt; 
+            font-weight: bold; 
+            color: white;
+            padding: 2px 5px;
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 10);
+        """)
+        self.date_label.setCursor(Qt.PointingHandCursor)
+        self.date_label.mousePressEvent = self.showDateMenu
+        date_container_layout.addWidget(self.date_label)
+        
+        # Add a small dropdown indicator
+        dropdown_indicator = QLabel("▼")
+        dropdown_indicator.setStyleSheet("color: #aaaaaa; font-size: 8pt;")
+        date_container_layout.addWidget(dropdown_indicator)
+        
+        # Add the date container to the header
+        header_layout.addWidget(date_container)
+        
+        # User indicator (move to right side)
+        self.user_label = QLabel("")
+        self.user_label.setStyleSheet("color: #aaaaaa; font-size: 10pt;")
+        header_layout.addWidget(self.user_label, 0, Qt.AlignRight)
+        
         
         self.refresh_button = QPushButton("⟳")
         self.refresh_button.setStyleSheet("font-size: 14pt;")
@@ -185,6 +218,14 @@ class ActivityWidget(QWidget):
         header_layout.addWidget(self.refresh_button, 0, Qt.AlignRight)
         
         main_layout.addLayout(header_layout)
+        
+
+        # Create a date edit widget (hidden, used in menu)
+        self.date_edit = QDateEdit(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd/MM/yyyy")
+        self.date_edit.dateChanged.connect(self.on_date_changed)
+        self.date_edit.setVisible(False)  # Hidden by default
         
         # Stats panel - top row
         self.bet_stats_panel = StatsPanel()
@@ -424,3 +465,74 @@ class ActivityWidget(QWidget):
         colors = [QColor("#20c997"), QColor("#e67700"), QColor("#c92a2a")]
         
         self.chart.setup(values, labels, colors)
+
+    def showDateMenu(self, event):
+        """Show a menu with date options when the date label is clicked"""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #333333;
+                color: white;
+                border: 1px solid #555555;
+                padding: 5px;
+            }
+            QMenu::item {
+                padding: 5px 10px;
+            }
+            QMenu::item:selected {
+                background-color: #555555;
+            }
+        """)
+        
+        # Add date options
+        today_action = QAction("Today", self)
+        today_action.triggered.connect(self.set_date_to_today)
+        menu.addAction(today_action)
+        
+        yesterday_action = QAction("Yesterday", self)
+        yesterday_action.triggered.connect(self.set_date_to_yesterday)
+        menu.addAction(yesterday_action)
+        
+        menu.addSeparator()
+        
+        # Add option to show date picker
+        pick_date_action = QAction("Pick Date...", self)
+        pick_date_action.triggered.connect(self.show_date_picker)
+        menu.addAction(pick_date_action)
+        
+        # Show the menu
+        menu.exec(self.date_label.mapToGlobal(QPoint(0, self.date_label.height())))
+    
+    def set_date_to_today(self):
+        """Set date to today"""
+        today = QDate.currentDate()
+        if self.date_edit.date() != today:
+            self.date_edit.setDate(today)
+            # Signal will be emitted by date_edit's dateChanged
+    
+    def set_date_to_yesterday(self):
+        """Set date to yesterday"""
+        yesterday = QDate.currentDate().addDays(-1)
+        if self.date_edit.date() != yesterday:
+            self.date_edit.setDate(yesterday)
+            # Signal will be emitted by date_edit's dateChanged
+    
+    def show_date_picker(self):
+        """Show the date picker dialog"""
+        # Position and show the calendar popup
+        self.date_edit.setVisible(True)
+        self.date_edit.calendarWidget().setVisible(True)
+        self.date_edit.calendarPopup().exec()
+        self.date_edit.setVisible(False)
+    
+    def on_date_changed(self, new_date):
+        """Handle date change from the date edit widget"""
+        # Update the date label
+        date_str = new_date.toString("dddd dd/MM/yyyy")
+        self.date_label.setText(date_str)
+        
+        # Emit signal for other components
+        self.date_changed_signal.emit(new_date)
+        
+        # Refresh data for new date
+        self.refresh_data()

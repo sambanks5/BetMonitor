@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListView,
 from PySide6.QtCore import Qt, QTimer, Signal, QDate, QTime
 from ui.models.betmodel import BetListModel
 from ui.delegates.betdelegate import BetDelegate
+from ui.customerdialog import CustomerBetsDialog
+from ui.selectiondialog import SelectionDialog
 from utils import access_data
 import time
 import threading
@@ -17,8 +19,7 @@ class BetFeedWidget(QWidget):
     def __init__(self, database_manager):
         super().__init__()
         self.database_manager = database_manager
-        # Initialize other properties as before
-        self.filters_visible = False  # Track the visibility of the filter frame, set to False to hide by default
+        self.filters_visible = False  
 
         self.update_feed_signal.connect(self.update_feed_ui)
         self.clear_feed_signal.connect(self.clear_feed_ui)
@@ -41,6 +42,122 @@ class BetFeedWidget(QWidget):
         self.initialize_ui()
         self.start_feed_update()
     
+
+    
+    def initialize_ui(self):
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        
+        # Feed frame setup
+        feed_frame = QFrame()
+        feed_frame.setFrameShape(QFrame.Panel)
+        feed_layout = QVBoxLayout(feed_frame)
+        
+        # Replace QTextEdit with QListView
+        self.bet_model = BetListModel()
+        self.feed_view = QListView()
+        self.feed_view.setModel(self.bet_model)
+        
+        # Create and set the delegate
+        self.bet_delegate = BetDelegate(self.feed_view)
+        self.bet_delegate.customerClicked.connect(self.show_customer_details)
+        self.bet_delegate.selectionClicked.connect(self.show_selection_details)
+        self.feed_view.setItemDelegate(self.bet_delegate)
+
+        # Connect model signals to clear clickable areas
+        self.bet_model.modelReset.connect(lambda: self.bet_delegate.clearClickableAreas())
+        self.bet_model.rowsInserted.connect(lambda: self.bet_delegate.clearClickableAreas())
+
+        # Configure the view
+        self.feed_view.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.feed_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.feed_view.setSelectionMode(QListView.SingleSelection)
+        self.feed_view.setUniformItemSizes(False)
+        
+        feed_layout.addWidget(self.feed_view)
+        # Filter frame
+        self.filter_frame = QFrame()
+        filter_layout = QGridLayout(self.filter_frame)
+        
+        # Username filter
+        self.username_filter_entry = QLineEdit()
+        self.username_filter_entry.setPlaceholderText("Client")
+        filter_layout.addWidget(self.username_filter_entry, 0, 0)
+        
+        # Unit stake filter
+        self.unit_stake_filter_entry = QLineEdit()
+        self.unit_stake_filter_entry.setPlaceholderText("£")
+        filter_layout.addWidget(self.unit_stake_filter_entry, 0, 1)
+        
+        # Risk category filter
+        self.risk_category_filter_entry = QComboBox()
+        self.risk_category_filter_entry.addItems(["", "Any", "M", "W", "C"])
+        self.risk_category_filter_entry.setPlaceholderText("Risk")
+        filter_layout.addWidget(self.risk_category_filter_entry, 0, 2)
+        
+        # Type filter
+        self.type_combobox_entry = QComboBox()
+        self.type_combobox_entry.addItems(["", "Bet", "Knockback", "SMS"])
+        self.type_combobox_entry.setPlaceholderText("Type")
+        filter_layout.addWidget(self.type_combobox_entry, 0, 3)
+        
+        # Selection filter
+        self.selection_filter_entry = QLineEdit()
+        self.selection_filter_entry.setPlaceholderText("Selection")
+        filter_layout.addWidget(self.selection_filter_entry, 1, 0, 1, 3)
+        
+        # Sport filter
+        self.sport_combobox_entry = QComboBox()
+        self.sport_combobox_entry.addItems(["", "Horses", "Dogs", "Other"])
+        self.sport_combobox_entry.setPlaceholderText("Sport")
+        filter_layout.addWidget(self.sport_combobox_entry, 1, 3)
+        
+        # Filter buttons
+        self.tick_button = QPushButton("✔")
+        self.tick_button.clicked.connect(self.apply_filters)
+        filter_layout.addWidget(self.tick_button, 0, 5)
+        
+        self.reset_button = QPushButton("✖")
+        self.reset_button.clicked.connect(self.reset_filters)
+        filter_layout.addWidget(self.reset_button, 1, 5)
+        
+        # Limit checkbox
+        self.limit_bets_var = QCheckBox("[:150]")
+        self.limit_bets_var.setChecked(True)
+        filter_layout.addWidget(self.limit_bets_var, 0, 8, 2, 1, Qt.AlignRight)
+        
+        # Hide filter frame by default
+        self.filter_frame.setVisible(False)
+        feed_layout.addWidget(self.filter_frame)
+        
+        # Bottom control bar
+        bottom_bar = QHBoxLayout()
+        
+        # Toggle filter button
+        self.show_hide_button = QPushButton("≡")
+        self.show_hide_button.clicked.connect(self.toggle_filters)
+        bottom_bar.addWidget(self.show_hide_button, 0, Qt.AlignLeft)
+        
+        # Date display label (replacing editable date picker)
+        self.date_label = QLabel(QDate.currentDate().toString("dd/MM/yyyy"))
+        self.date_label.setAlignment(Qt.AlignCenter)
+        self.date_label.setStyleSheet("background-color: rgba(255, 255, 255, 10); padding: 4px 8px; border-radius: 4px;")
+        bottom_bar.addWidget(self.date_label, 1, Qt.AlignCenter)
+        
+        # Keep the date_edit but hide it (we still need it for internal logic)
+        self.date_edit = QDateEdit(QDate.currentDate())
+        self.date_edit.setDisplayFormat("dd/MM/yyyy")
+        self.date_edit.setVisible(False)  # Hide it
+        
+        # Refresh button
+        self.refresh_button = QPushButton("⟳")
+        self.refresh_button.clicked.connect(self.bet_feed)
+        bottom_bar.addWidget(self.refresh_button, 0, Qt.AlignRight)
+
+        feed_layout.addLayout(bottom_bar)
+
+        main_layout.addWidget(feed_frame)
+        
     def bet_feed(self):
         """Fetch bet data and update the model"""
         print("Refreshing feed...")
@@ -177,114 +294,25 @@ class BetFeedWidget(QWidget):
             if hasattr(self, 'feed_lock'):
                 self.feed_lock.release()
 
-    def initialize_ui(self):
-        # Main layout
-        main_layout = QVBoxLayout(self)
+    def on_global_date_changed(self, new_date):
+        """Handle global date change from ActivityWidget"""
+        # Update our date editor without triggering a refresh
+        self.date_edit.blockSignals(True)
+        self.date_edit.setDate(new_date)
+        self.date_edit.blockSignals(False)
         
-        # Feed frame setup
-        feed_frame = QFrame()
-        feed_frame.setFrameShape(QFrame.Panel)
-        feed_frame.setFrameShadow(QFrame.Raised)
-        feed_layout = QVBoxLayout(feed_frame)
+        # Update the visible date label
+        self.date_label.setText(new_date.toString("dd/MM/yyyy"))
         
-        # Replace QTextEdit with QListView
-        self.bet_model = BetListModel()
-        self.feed_view = QListView()
-        self.feed_view.setModel(self.bet_model)
-        
-        # Create and set the delegate
-        self.bet_delegate = BetDelegate()
-        self.bet_delegate.customerClicked.connect(self.show_customer_details)
-        self.bet_delegate.selectionClicked.connect(self.show_selection_details)
-        self.feed_view.setItemDelegate(self.bet_delegate)
-        
-        # Configure the view
-        self.feed_view.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.feed_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.feed_view.setSelectionMode(QListView.SingleSelection)
-        self.feed_view.setUniformItemSizes(False)
-        
-        feed_layout.addWidget(self.feed_view)
-        # Filter frame
-        self.filter_frame = QFrame()
-        filter_layout = QGridLayout(self.filter_frame)
-        
-        # Username filter
-        self.username_filter_entry = QLineEdit()
-        self.username_filter_entry.setPlaceholderText("Client")
-        filter_layout.addWidget(self.username_filter_entry, 0, 0)
-        
-        # Unit stake filter
-        self.unit_stake_filter_entry = QLineEdit()
-        self.unit_stake_filter_entry.setPlaceholderText("£")
-        filter_layout.addWidget(self.unit_stake_filter_entry, 0, 1)
-        
-        # Risk category filter
-        self.risk_category_filter_entry = QComboBox()
-        self.risk_category_filter_entry.addItems(["", "Any", "M", "W", "C"])
-        self.risk_category_filter_entry.setPlaceholderText("Risk")
-        filter_layout.addWidget(self.risk_category_filter_entry, 0, 2)
-        
-        # Type filter
-        self.type_combobox_entry = QComboBox()
-        self.type_combobox_entry.addItems(["", "Bet", "Knockback", "SMS"])
-        self.type_combobox_entry.setPlaceholderText("Type")
-        filter_layout.addWidget(self.type_combobox_entry, 0, 3)
-        
-        # Selection filter
-        self.selection_filter_entry = QLineEdit()
-        self.selection_filter_entry.setPlaceholderText("Selection")
-        filter_layout.addWidget(self.selection_filter_entry, 1, 0, 1, 3)
-        
-        # Sport filter
-        self.sport_combobox_entry = QComboBox()
-        self.sport_combobox_entry.addItems(["", "Horses", "Dogs", "Other"])
-        self.sport_combobox_entry.setPlaceholderText("Sport")
-        filter_layout.addWidget(self.sport_combobox_entry, 1, 3)
-        
-        # Filter buttons
-        self.tick_button = QPushButton("✔")
-        self.tick_button.clicked.connect(self.apply_filters)
-        filter_layout.addWidget(self.tick_button, 0, 5)
-        
-        self.reset_button = QPushButton("✖")
-        self.reset_button.clicked.connect(self.reset_filters)
-        filter_layout.addWidget(self.reset_button, 1, 5)
-        
-        # Limit checkbox
-        self.limit_bets_var = QCheckBox("[:150]")
-        self.limit_bets_var.setChecked(True)
-        filter_layout.addWidget(self.limit_bets_var, 0, 8, 2, 1, Qt.AlignRight)
-        
-        # Hide filter frame by default
-        self.filter_frame.setVisible(False)
-        feed_layout.addWidget(self.filter_frame)
-        
-        # Bottom control bar
-        bottom_bar = QHBoxLayout()
-        
-        # Toggle filter button
-        self.show_hide_button = QPushButton("≡")
-        self.show_hide_button.clicked.connect(self.toggle_filters)
-        bottom_bar.addWidget(self.show_hide_button, 0, Qt.AlignLeft)
-        
-        # Date selector
-        self.date_edit = QDateEdit(QDate.currentDate())
-        self.date_edit.setDisplayFormat("dd/MM/yyyy")
-        self.date_edit.dateChanged.connect(self.bet_feed)
-        bottom_bar.addWidget(self.date_edit, 1, Qt.AlignCenter)
-        
-        # Refresh button
-        self.refresh_button = QPushButton("⟳")
-        self.refresh_button.clicked.connect(self.bet_feed)
-        bottom_bar.addWidget(self.refresh_button, 0, Qt.AlignRight)
+        # Now refresh data
+        self.fetch_and_display_bets()
 
-        feed_layout.addLayout(bottom_bar)
-
-        main_layout.addWidget(feed_frame)
-        
     def update_feed_ui(self, filtered_bets, column_names, data_lists, reporting_data, selected_date):
         """Update the model with new data instead of formatting text"""
+        # Clear clickable areas before updating the model data
+        if hasattr(self, 'bet_delegate'):
+            self.bet_delegate.clearClickableAreas()
+            
         # Update the model with new data
         self.bet_model.setBets(filtered_bets, column_names)
         
@@ -300,10 +328,18 @@ class BetFeedWidget(QWidget):
         )
 
     def clear_feed_ui(self):
+        # Clear clickable areas before clearing the model data
+        if hasattr(self, 'bet_delegate'):
+            self.bet_delegate.clearClickableAreas()
+            
         # Clear the model
         self.bet_model.setBets([], [])
         
     def show_error_ui(self, message):
+        # Clear clickable areas before showing error
+        if hasattr(self, 'bet_delegate'):
+            self.bet_delegate.clearClickableAreas()
+            
         # Clear the model and show error
         self.bet_model.setBets([], [])
         
@@ -314,73 +350,23 @@ class BetFeedWidget(QWidget):
     def toggle_filters(self):
         self.filters_visible = not self.filters_visible
         self.filter_frame.setVisible(self.filters_visible)
-
-    # Add methods to handle clickable elements
+    
     def show_customer_details(self, customer_ref):
-        # Create and show a dialog with customer details
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Customer: {customer_ref}")
-        dialog.setMinimumSize(500, 400)
+        """Show customer details when clicking on a customer reference"""
+        print(f"Showing details for customer: {customer_ref}")
         
-        layout = QVBoxLayout(dialog)
-        
-        # Create content - fetch customer details from database
-        content = QTextBrowser()
-        content.setOpenExternalLinks(True)
-        
-        # Fetch customer data - pseudocode, replace with actual queries
-        conn, cursor = self.database_manager.get_connection()
-        try:
-            # Get customer info
-            cursor.execute("SELECT * FROM customers WHERE customer_ref = ?", (customer_ref,))
-            customer_data = cursor.fetchone()
-            
-            # Get recent bets
-            cursor.execute(
-                "SELECT * FROM database WHERE customer_ref = ? ORDER BY date DESC, time DESC LIMIT 20", 
-                (customer_ref,)
-            )
-            recent_bets = cursor.fetchall()
-            
-            # Format HTML content
-            html = f"<h2>Customer: {customer_ref}</h2>"
-            
-            if customer_data:
-                html += "<h3>Customer Details</h3>"
-                html += "<table>"
-                for key, value in customer_data.items():
-                    html += f"<tr><td><b>{key}</b></td><td>{value}</td></tr>"
-                html += "</table>"
-            
-            html += f"<h3>Recent Activity ({len(recent_bets)} bets)</h3>"
-            html += "<table border='1' cellpadding='4'>"
-            html += "<tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Details</th></tr>"
-            
-            for bet in recent_bets:
-                html += f"<tr>"
-                html += f"<td>{bet['date']}</td>"
-                html += f"<td>{bet['time']}</td>"
-                html += f"<td>{bet['type']}</td>"
-                html += f"<td>£{bet.get('unit_stake', 0)}</td>"
-                html += f"<td>{bet.get('bet_details', '')}</td>"
-                html += "</tr>"
-            
-            html += "</table>"
-            
-            content.setHtml(html)
-            
-        finally:
-            conn.close()
-        
-        layout.addWidget(content)
-        
-        # Add close button
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-        
+        # Create and show the customer details dialog
+        dialog = CustomerBetsDialog(customer_ref, self.database_manager, self)
         dialog.exec()
+    
+    def show_selection_details(self, selection_name):
+        """Show details for a selection when clicked"""
+        print(f"Showing details for selection: {selection_name}")
         
+        # Create and show the selection details dialog
+        dialog = SelectionDialog(selection_name, self.database_manager, self)
+        dialog.exec()
+
     def start_feed_update(self):
         # Update to use feed_view instead of feed_text
         scroll_value = self.feed_view.verticalScrollBar().value()
@@ -441,8 +427,3 @@ class BetFeedWidget(QWidget):
         
         # Update the feed
         self.bet_feed()
-
-    def show_selection_details(self, selection):
-        # Similar to customer details, but for selections
-        # You can show odds history, related bets, etc.
-        pass

@@ -2,9 +2,9 @@ from PySide6.QtWidgets import (QMainWindow, QVBoxLayout, QWidget, QSplitter,
                               QDockWidget, QTabWidget, QApplication, QHBoxLayout)
 from PySide6.QtCore import Qt, QSize
 from ui.betfeed import BetFeedWidget
-from ui.activityframe import ActivityWidget  # You'll create this
-from ui.betruns import BetRunsWidget    # You'll create this
-from ui.tools import ToolsWidget        # Optional additional widget
+from ui.activityframe import ActivityWidget 
+from ui.betruns import BetRunsWidget 
+from ui.tools import ToolsWidget     
 from utils.db_manager import DatabaseManager
 
 class MainWindow(QMainWindow):
@@ -62,14 +62,19 @@ class MainWindow(QMainWindow):
         self.right_layout = QVBoxLayout(self.right_panel)
         self.right_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create right panel widgets
+        # Create widgets
         self.activity_widget = ActivityWidget(self.database_manager)
-        self.betruns_widget = BetRunsWidget(self.database_manager)
+        self.bet_feed_widget = BetFeedWidget(self.database_manager)
+        self.bet_runs_widget = BetRunsWidget(self.database_manager)
+        
+        # Connect the date_changed_signal from ActivityWidget to both widgets
+        self.activity_widget.date_changed_signal.connect(self.bet_feed_widget.on_global_date_changed)
+        self.activity_widget.date_changed_signal.connect(self.bet_runs_widget.on_global_date_changed)
         
         # Create a splitter for the right side
         self.right_splitter = QSplitter(Qt.Vertical)
         self.right_splitter.addWidget(self.activity_widget)
-        self.right_splitter.addWidget(self.betruns_widget)
+        self.right_splitter.addWidget(self.bet_runs_widget)
         
         # Set initial sizes for right panel splits (30% activity, 70% bet runs)
         self.right_splitter.setSizes([420, 580])

@@ -4,7 +4,6 @@ import threading
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from ui.appcontroller import AppController
-from utils import schedule_data_updates
 from utils.db_manager import DatabaseManager
 
 
