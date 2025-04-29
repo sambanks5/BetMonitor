@@ -1,5 +1,5 @@
 USER_NAMES = {
-    'GB': 'George B',
+    'GB': 'Geoff B',
     'GM': 'George M',
     'JP': 'Jon',
     'DF': 'Dave',
@@ -8,7 +8,9 @@ USER_NAMES = {
     'AE': 'Arch',
     'EK': 'Ed',
     'VO': 'Victor',
-    'MF': 'Mark'
+    'MF': 'Mark',
+    'GHB': 'George B',
+    'RE': 'Rodney E',
 }
 
 _user = ""

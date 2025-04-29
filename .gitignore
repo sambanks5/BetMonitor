@@ -48,3 +48,5 @@ BetViewerBETA.py
 /Monitor/build
 /Monitor/dist/main
 /Update
+/venv
+/Forest-ttk-theme-master
