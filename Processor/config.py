@@ -4,7 +4,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 USER_NAMES = {
-    'GB': 'George B',
+    'G': 'Geoff',
     'GM': 'George M',
     'JP': 'Jon',
     'DF': 'Dave',
@@ -13,8 +13,11 @@ USER_NAMES = {
     'AE': 'Arch',
     'EK': 'Ed',
     'VO': 'Victor',
-    'MF': 'Mark'
+    'MF': 'Mark',
+    'GB': 'George B',
+    'RE': 'Rodney',
 }
+
 ARCHIVE_DATABASE_PATH = 'archive_database.sqlite'
 LOCK_FILE_PATH = 'database.lock'
 last_processed_time = datetime.now()

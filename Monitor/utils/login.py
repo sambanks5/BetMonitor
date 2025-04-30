@@ -6,7 +6,7 @@ from utils import notification
 def user_login():
     while True:
         user_input = simpledialog.askstring("Input", "Please enter your initials:")
-        if user_input and len(user_input) <= 3:
+        if user_input:
             user_input = user_input.upper()
             if user_input in user.USER_NAMES:
                 user.set_user(user_input)
@@ -16,4 +16,5 @@ def user_login():
             else:
                 messagebox.showerror("Error", "Could not find staff member! Please try again.")
         else:
-            messagebox.showerror("Error", "Maximum of 3 characters.")
+            messagebox.showerror("Error", "No initials provided. Closing.")
+            os._exit(0)
