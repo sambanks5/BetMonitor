@@ -3,12 +3,15 @@ import time
 import sqlite3
 import json
 import re
+import requests
 from utils import get_db_connection
 from config import LOCK_FILE_PATH, get_last_processed_time, set_last_processed_time, get_path, set_path 
 from datetime import datetime, timedelta
 from watchdog.events import FileSystemEventHandler
 from tkinter import filedialog
 
+from dotenv import load_dotenv
+load_dotenv()
 
 class FileHandler(FileSystemEventHandler):
     def __init__(self, app):
@@ -20,21 +23,40 @@ class FileHandler(FileSystemEventHandler):
         if not os.path.isdir(file_path):
             max_retries = 6  
             for attempt in range(max_retries):
-                try:
-                    print("Loading database")
-                    if os.access(file_path, os.R_OK):
-                        process_file(file_path, self.app)
-                        set_last_processed_time(datetime.now())
-                        break
-                    else:
-                        raise PermissionError(f"Permission denied: '{file_path}'")
-                except Exception as e:
-                    print(f"Attempt {attempt + 1} - An error occurred while processing the file {file_path}: {e}")
-                    time.sleep(2)  
+                print("Loading database")
+                if os.access(file_path, os.R_OK):
+                    send_to_api(file_path, datetime.fromtimestamp(os.path.getctime(file_path)))
+
+                    process_file(file_path, self.app)
+                    set_last_processed_time(datetime.now())
+                    break
+                else:
+                    raise PermissionError(f"Permission denied: '{file_path}'")
             else:
                 print(f"Failed to process the file {file_path} after {max_retries} attempts.")
         else:
             print(f"Directory created: {file_path}, skipping processing.")
+
+def send_to_api(file_path, file_creation_time):
+    with open(file_path, 'r', encoding='latin-1') as file:
+        bet_text = file.read()
+    headers = {
+        'Authorization': f'Token {os.getenv("API_TOKEN")}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'wager_text': bet_text,
+        'file_timestamp': file_creation_time.isoformat()
+    }
+    
+    response = requests.post(os.getenv("API_URL"), json=data, headers=headers)
+    
+    if response.status_code in (200, 201):
+        print(f"Successfully sent bet to API: {os.path.basename(file_path)}")
+        file.close()
+    else:
+        error_msg = response.text
+        raise Exception(f"API returned error {response.status_code}: {error_msg}")
 
 def parse_file(file_path, app):
     try:
@@ -44,7 +66,7 @@ def parse_file(file_path, app):
         print(f"Error getting file creation date: {e}")
         creation_date_str = datetime.today().strftime('%d/%m/%Y')
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='latin-1') as file:
         bet_text = file.read()
         bet_text_lower = bet_text.lower()
         is_sms = 'sms' in bet_text_lower
